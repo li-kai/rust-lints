@@ -19,3 +19,15 @@ dylint_testing = "5.0.0"
 
 [package.metadata.rust-analyzer]
 rustc_private = true
+
+[[example]]
+name = "suggest_builder"
+path = "ui/suggest_builder/main.rs"
+
+[[example]]
+name = "needless_builder"
+path = "ui/needless_builder/main.rs"
+
+[[example]]
+name = "large_struct"
+path = "ui/large_struct/main.rs"
