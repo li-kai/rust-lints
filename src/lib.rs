@@ -33,18 +33,26 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
 
 #[cfg(test)]
 mod tests {
+    use dylint_testing::ui;
+
     #[test]
     fn ui_suggest_builder() {
-        dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "suggest_builder");
+        ui::Test::example(env!("CARGO_PKG_NAME"), "suggest_builder")
+            .dylint_toml("[suggest_builder]\nthreshold = 4\n[needless_builder]\nthreshold = 0\n[large_struct]\nthreshold = 999\n")
+            .run();
     }
 
     #[test]
     fn ui_needless_builder() {
-        dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "needless_builder");
+        ui::Test::example(env!("CARGO_PKG_NAME"), "needless_builder")
+            .dylint_toml("[suggest_builder]\nthreshold = 999\n[needless_builder]\nthreshold = 2\n[large_struct]\nthreshold = 999\n")
+            .run();
     }
 
     #[test]
     fn ui_large_struct() {
-        dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "large_struct");
+        ui::Test::example(env!("CARGO_PKG_NAME"), "large_struct")
+            .dylint_toml("[suggest_builder]\nthreshold = 999\n[needless_builder]\nthreshold = 999\n[large_struct]\nthreshold = 12\n")
+            .run();
     }
 }
