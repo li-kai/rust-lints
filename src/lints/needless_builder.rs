@@ -33,7 +33,7 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessBuilder {
         if item.span.from_expansion() {
             return;
         }
-        let ItemKind::Struct(variant_data, _) = &item.kind else {
+        let ItemKind::Struct(ident, _, variant_data) = &item.kind else {
             return;
         };
         let VariantData::Struct { fields, .. } = variant_data else {
@@ -53,7 +53,7 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessBuilder {
             item.span,
             format!(
                 "struct `{}` has only {field_count} fields; `bon::Builder` may be unnecessary",
-                item.ident,
+                ident,
             ),
             None,
             "consider using a plain constructor or struct literal instead",

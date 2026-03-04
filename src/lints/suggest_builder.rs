@@ -33,7 +33,7 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
         if item.span.from_expansion() {
             return;
         }
-        let ItemKind::Struct(variant_data, _) = &item.kind else {
+        let ItemKind::Struct(ident, _, variant_data) = &item.kind else {
             return;
         };
         let VariantData::Struct { fields, .. } = variant_data else {
@@ -53,7 +53,7 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
             item.span,
             format!(
                 "struct `{}` has {field_count} fields but does not derive `bon::Builder`",
-                item.ident,
+                ident,
             ),
             None,
             "add `#[derive(bon::Builder)]` to enable the builder pattern",

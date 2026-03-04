@@ -32,7 +32,7 @@ impl<'tcx> LateLintPass<'tcx> for LargeStruct {
         if item.span.from_expansion() {
             return;
         }
-        let ItemKind::Struct(variant_data, _) = &item.kind else {
+        let ItemKind::Struct(ident, _, variant_data) = &item.kind else {
             return;
         };
         let VariantData::Struct { fields, .. } = variant_data else {
@@ -48,7 +48,7 @@ impl<'tcx> LateLintPass<'tcx> for LargeStruct {
             item.span,
             format!(
                 "struct `{}` has {field_count} fields, consider splitting into smaller types",
-                item.ident,
+                ident,
             ),
             None,
             "group related fields into separate structs to improve readability",
