@@ -19,7 +19,7 @@ pub struct NeedlessBuilder {
 impl NeedlessBuilder {
     pub fn new() -> Self {
         let config: NeedlessBuilderConfig =
-            dylint_linting::config_or_default(env!("CARGO_PKG_NAME"));
+            dylint_linting::config_or_default("needless_builder");
         Self {
             threshold: config.threshold,
         }

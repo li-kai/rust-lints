@@ -18,7 +18,7 @@ pub struct LargeStruct {
 impl LargeStruct {
     pub fn new() -> Self {
         let config: LargeStructConfig =
-            dylint_linting::config_or_default(env!("CARGO_PKG_NAME"));
+            dylint_linting::config_or_default("large_struct");
         Self {
             threshold: config.threshold,
         }
