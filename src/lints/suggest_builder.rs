@@ -3,7 +3,6 @@ use rustc_hir::{Item, ItemKind, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
 
 use crate::config::SuggestBuilderConfig;
-use super::has_bon_builder_derive;
 
 rustc_session::declare_lint! {
     /// Suggests adding `#[derive(bon::Builder)]` to structs with many named fields.
@@ -43,8 +42,7 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
         if field_count < self.threshold {
             return;
         }
-        let attrs = cx.tcx.hir_attrs(item.hir_id());
-        if has_bon_builder_derive(attrs) {
+        if super::has_bon_builder(ident.name) {
             return;
         }
         span_lint_and_help(
