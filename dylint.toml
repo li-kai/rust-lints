@@ -1,0 +1,8 @@
+[suggest_builder]
+threshold = 4
+
+[needless_builder]
+threshold = 2
+
+[large_struct]
+threshold = 12
