@@ -1,0 +1,30 @@
+warning: struct `Config` has 4 fields but does not derive `bon::Builder`
+  --> $DIR/main.rs:6:1
+   |
+LL | / struct Config {
+LL | |     host: String,
+LL | |     port: u16,
+LL | |     timeout: u32,
+LL | |     retries: u8,
+LL | | }
+   | |_^
+   |
+   = help: add `#[derive(bon::Builder)]` to enable the builder pattern
+   = note: `#[warn(suggest_builder)]` on by default
+
+warning: struct `LargerConfig` has 5 fields but does not derive `bon::Builder`
+  --> $DIR/main.rs:14:1
+   |
+LL | / struct LargerConfig {
+LL | |     host: String,
+LL | |     port: u16,
+LL | |     timeout: u32,
+LL | |     retries: u8,
+LL | |     verbose: bool,
+LL | | }
+   | |_^
+   |
+   = help: add `#[derive(bon::Builder)]` to enable the builder pattern
+
+warning: 2 warnings emitted
+

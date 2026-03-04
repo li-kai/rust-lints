@@ -1,0 +1,35 @@
+warning: struct `Singleton` has only 1 fields; `bon::Builder` may be unnecessary
+  --> $DIR/main.rs:7:1
+   |
+LL | / struct Singleton {
+LL | |     value: u32,
+LL | | }
+   | |_^
+   |
+   = help: consider using a plain constructor or struct literal instead
+   = note: `#[warn(needless_builder)]` on by default
+
+warning: struct `Point` has only 2 fields; `bon::Builder` may be unnecessary
+  --> $DIR/main.rs:13:1
+   |
+LL | / struct Point {
+LL | |     x: f64,
+LL | |     y: f64,
+LL | | }
+   | |_^
+   |
+   = help: consider using a plain constructor or struct literal instead
+
+warning: struct `Collider` has only 2 fields; `bon::Builder` may be unnecessary
+  --> $DIR/main.rs:54:1
+   |
+LL | / struct Collider {
+LL | |     x: f64,
+LL | |     y: f64,
+LL | | }
+   | |_^
+   |
+   = help: consider using a plain constructor or struct literal instead
+
+warning: 3 warnings emitted
+
