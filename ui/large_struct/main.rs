@@ -1,3 +1,4 @@
+#![allow(dead_code, unknown_lints)]
 // Tests for the `large_struct` lint.
 // Threshold: 12 (from dylint.toml).
 

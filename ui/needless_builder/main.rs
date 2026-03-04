@@ -1,3 +1,4 @@
+#![allow(dead_code, unknown_lints)]
 // Tests for the `needless_builder` lint.
 // Threshold: 2 (from dylint.toml).
 
