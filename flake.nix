@@ -24,7 +24,7 @@
         # Nightly toolchain pinned via rust-toolchain; rustc-dev required by dylint
         rustToolchain = fenix.packages.${system}.fromToolchainFile {
           file = ./rust-toolchain;
-          sha256 = pkgs.lib.fakeSha256;
+          sha256 = "sha256-5XAIyRQMcynTWJvX5VkqErB0H4Oyg0AjeSefOyKSt7g=";
         };
       in
       {
