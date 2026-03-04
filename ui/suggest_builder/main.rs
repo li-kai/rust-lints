@@ -51,3 +51,24 @@ struct Suppressed {
 }
 
 fn main() {}
+
+// ── Name-collision limitation ──
+// The pre-expansion collector matches by name only.  If *any* struct named
+// `Collider` has `#[derive(bon::Builder)]`, all structs named `Collider`
+// are considered to have it – a known false negative for suggest_builder.
+mod inner {
+    #[derive(bon::Builder)]
+    pub struct Collider {
+        a: u8,
+        b: u8,
+    }
+}
+
+// Known false negative: this `Collider` does NOT derive Builder, but the
+// name-only lookup sees `inner::Collider`'s derive and suppresses the lint.
+struct Collider {
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+}
