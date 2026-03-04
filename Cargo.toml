@@ -14,6 +14,7 @@ dylint_linting = "5.0.0"
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+bon = "3"
 dylint_testing = "5.0.0"
 
 [package.metadata.rust-analyzer]
