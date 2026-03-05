@@ -21,7 +21,7 @@ LL | | }
    = help: consider using a plain constructor or struct literal instead
 
 warning: struct `Collider` has only 2 fields; `bon::Builder` may be unnecessary
-  --> $DIR/main.rs:54:1
+  --> $DIR/main.rs:56:1
    |
 LL | / struct Collider {
 LL | |     x: f64,

@@ -21,20 +21,29 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+
         # Nightly toolchain pinned via rust-toolchain; rustc-dev required by dylint
         rustToolchain = fenix.packages.${system}.fromToolchainFile {
           file = ./rust-toolchain;
           sha256 = "sha256-5XAIyRQMcynTWJvX5VkqErB0H4Oyg0AjeSefOyKSt7g=";
         };
-        toolchainChannel = "nightly-2026-01-22";
+
+        # Target triple for this system, used in RUSTUP_TOOLCHAIN
+        targetTriple = pkgs.stdenv.hostPlatform.rust.rustcTarget;
+
+        # Parse channel from rust-toolchain to avoid duplicating the nightly date
+        toolchainChannel = (builtins.fromTOML (builtins.readFile ./rust-toolchain)).toolchain.channel;
+
         # RUSTUP_TOOLCHAIN must include the target triple for dylint's parse_toolchain()
-        toolchainFull = "nightly-2026-01-22-${
-          if system == "aarch64-darwin" then "aarch64-apple-darwin"
-          else if system == "x86_64-darwin" then "x86_64-apple-darwin"
-          else if system == "x86_64-linux" then "x86_64-unknown-linux-gnu"
-          else if system == "aarch64-linux" then "aarch64-unknown-linux-gnu"
-          else throw "unsupported system: ${system}"
-        }";
+        toolchainFull = "${toolchainChannel}-${targetTriple}";
+
+        # Version of dylint tools to install (derived from Cargo.toml to stay in sync)
+        dylintVersion =
+          let dep = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).dependencies.dylint_linting;
+          in if builtins.isString dep then dep else dep.version;
+
+        # Name of the real dylint-link binary (installed by cargo, renamed so our wrapper takes precedence)
+        dylintLinkReal = ".dylint-link-real";
 
         # Shim that satisfies dylint's `rustup which <tool>` calls using
         # the nix-managed toolchain instead of a real rustup installation.
@@ -45,6 +54,18 @@
               ;;
             show)
               echo "nix-managed: $(rustc --version)"
+              ;;
+            toolchain)
+              echo "${toolchainFull} (nix-managed)"
+              ;;
+            run)
+              # `rustup run <toolchain> <cmd> [args...]` — skip toolchain arg, run cmd
+              if [ $# -lt 3 ]; then
+                echo "rustup shim: 'run' requires a toolchain and command" >&2
+                exit 1
+              fi
+              shift 2
+              exec "$@"
               ;;
             *)
               echo "rustup shim: unsupported command '$*'" >&2
@@ -57,7 +78,7 @@
         # even when dylint's sanitize_environment() strips it.
         dylintLinkWrapper = pkgs.writeShellScriptBin "dylint-link" ''
           export RUSTUP_TOOLCHAIN="''${RUSTUP_TOOLCHAIN:-${toolchainFull}}"
-          exec "$HOME/.cargo/bin/.dylint-link-real" "$@"
+          exec "$HOME/.cargo/bin/${dylintLinkReal}" "$@"
         '';
 
         # Cargo wrapper that re-injects RUSTUP_TOOLCHAIN after dylint strips it.
@@ -99,6 +120,8 @@
 
             # Wrapper for dylint-link that injects RUSTUP_TOOLCHAIN
             dylintLinkWrapper
+          ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.libiconv
           ];
 
           # Environment variables
@@ -108,11 +131,23 @@
 
           shellHook = ''
             echo "Rust toolchain: $(rustc --version)"
-            # Install the real dylint-link binary, renamed so our wrapper can call it
-            if [ ! -f "$HOME/.cargo/bin/.dylint-link-real" ]; then
-              echo "Installing dylint-link..."
-              cargo install dylint-link --quiet
-              mv "$HOME/.cargo/bin/dylint-link" "$HOME/.cargo/bin/.dylint-link-real"
+
+            # Install dylint-link if missing or version has changed.
+            # Uses the real cargo binary directly to avoid the wrapper.
+            _dylint_marker="$HOME/.cargo/bin/.dylint-link-version"
+            if [ "$(cat "$_dylint_marker" 2>/dev/null)" != "${dylintVersion}" ]; then
+              echo "Installing dylint-link v${dylintVersion}..."
+              "${rustToolchain}/bin/cargo" install dylint-link --version "${dylintVersion}" --quiet
+              mv "$HOME/.cargo/bin/dylint-link" "$HOME/.cargo/bin/${dylintLinkReal}"
+              echo "${dylintVersion}" > "$_dylint_marker"
+            fi
+
+            # Install cargo-dylint if missing or version has changed.
+            _cargo_dylint_marker="$HOME/.cargo/bin/.cargo-dylint-version"
+            if [ "$(cat "$_cargo_dylint_marker" 2>/dev/null)" != "${dylintVersion}" ]; then
+              echo "Installing cargo-dylint v${dylintVersion}..."
+              "${rustToolchain}/bin/cargo" install cargo-dylint --version "${dylintVersion}" --quiet
+              echo "${dylintVersion}" > "$_cargo_dylint_marker"
             fi
           '';
         };
