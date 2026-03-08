@@ -535,7 +535,7 @@ dbg_macro        = "deny"
 
 ```toml
 # dylint.toml — graduated denies
-[stringly_typed_errors]
+[proper_error_type]
 level = "deny"
 
 [unbounded_channel]

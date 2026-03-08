@@ -8,7 +8,6 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 |------|-------|-------------|
 | [`suggest_builder`](#suggest_builder) | warn | Structs with ≥ 4 named fields that don't derive `bon::Builder` |
 | [`needless_builder`](#needless_builder) | warn | Structs with ≤ 2 named fields that unnecessarily derive `bon::Builder` |
-| [`large_struct`](#large_struct) | warn | Structs with ≥ 12 named fields that should be split |
 
 ### `suggest_builder`
 
@@ -30,16 +29,6 @@ warning: struct `Point` has only 2 fields; `bon::Builder` may be unnecessary
    = help: consider using a plain constructor or struct literal instead
 ```
 
-### `large_struct`
-
-Warns when a struct has an excessive number of fields.
-
-```
-warning: struct `MegaConfig` has 15 fields, consider splitting into smaller types
-  --> src/lib.rs:20:1
-   = help: group related fields into separate structs to improve readability
-```
-
 ## Usage
 
 Add to your workspace `Cargo.toml`:
@@ -47,7 +36,7 @@ Add to your workspace `Cargo.toml`:
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-    { git = "https://github.com/yourorg/rust-lints" },
+    { git = "https://github.com/li-kai/rust-lints" },
 ]
 ```
 
@@ -60,8 +49,6 @@ threshold = 4
 [needless_builder]
 threshold = 2
 
-[large_struct]
-threshold = 12
 ```
 
 ## Development
