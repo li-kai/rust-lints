@@ -104,17 +104,8 @@ def emit_cargo_toml_snippet(data: dict) -> str:
     """
     lines = [
         "# Auto-generated — do not edit manually.",
-        "# These MachineApplicable lints are allowed during development",
-        "# and auto-fixed at commit time by the pre-commit hook.",
-        "#",
-        "# Re-enable in pre-commit with:",
-        "#   cargo clippy --fix --allow-dirty --allow-staged -- \\",
+        "# MachineApplicable lints: silent during dev, auto-fixed at commit time.",
     ]
-    all_lints = data["all"]
-    for i, lint in enumerate(all_lints):
-        sep = " \\" if i < len(all_lints) - 1 else ""
-        lines.append(f"#     -W clippy::{lint}{sep}")
-    lines.append("")
 
     for group, group_lints in data["by_group"].items():
         lines.append(f"# {group} ({len(group_lints)} lints)")
@@ -126,20 +117,20 @@ def emit_cargo_toml_snippet(data: dict) -> str:
 
 
 def emit_pre_commit_flags(data: dict) -> str:
-    """Emit the -W flags for the pre-commit hook."""
-    lines = [
+    """Emit a pre-commit hook that auto-fixes MachineApplicable lints."""
+    return "\n".join([
         "#!/usr/bin/env bash",
+        "set -euo pipefail",
         "# Auto-generated — do not edit manually.",
-        "# Re-enable MachineApplicable lints and auto-fix them.",
+        "# --fix only applies MachineApplicable suggestions, so enabling",
+        "# entire groups is safe — unfixable lints produce no code changes.",
         "",
         "cargo clippy --fix --allow-dirty --allow-staged -- \\",
-    ]
-    all_lints = data["all"]
-    for i, lint in enumerate(all_lints):
-        sep = " \\" if i < len(all_lints) - 1 else ""
-        lines.append(f"  -W clippy::{lint}{sep}")
-    lines.append("")
-    return "\n".join(lines)
+        "  -W clippy::all \\",
+        "  -W clippy::pedantic \\",
+        "  -W clippy::nursery 2>/dev/null",
+        "",
+    ])
 
 
 def main() -> None:
