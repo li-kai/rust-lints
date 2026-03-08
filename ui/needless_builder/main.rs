@@ -1,4 +1,4 @@
-#![allow(dead_code, unknown_lints)]
+#![allow(dead_code, unknown_lints, clippy::allow_attributes_without_reason)]
 // Tests for the `needless_builder` lint.
 // Threshold: 2 (from dylint.toml).
 

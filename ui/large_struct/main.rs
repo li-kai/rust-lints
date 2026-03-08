@@ -1,4 +1,4 @@
-#![allow(dead_code, unknown_lints)]
+#![allow(dead_code, unknown_lints, clippy::allow_attributes_without_reason)]
 // Tests for the `large_struct` lint.
 // Threshold: 12 (from dylint.toml).
 
@@ -53,8 +53,19 @@ struct JustBelow {
 // Should NOT trigger: suppressed with `#[allow]`.
 #[allow(large_struct)]
 struct Suppressed {
-    a: u8, b: u8, c: u8, d: u8, e: u8, f: u8,
-    g: u8, h: u8, i: u8, j: u8, k: u8, l: u8, m: u8,
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+    e: u8,
+    f: u8,
+    g: u8,
+    h: u8,
+    i: u8,
+    j: u8,
+    k: u8,
+    l: u8,
+    m: u8,
 }
 
 fn main() {}
