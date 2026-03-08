@@ -1,0 +1,37 @@
+name: Update fixable lint list
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC — Clippy ships with each Rust release (6-week cycle)
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scrape MachineApplicable lints
+        run: |
+          python3 scripts/scrape-clippy-applicability.py --format json > fixable-lints.json
+          python3 scripts/scrape-clippy-applicability.py --format cargo-toml > fixable-lints.cargo.toml
+          python3 scripts/scrape-clippy-applicability.py --format pre-commit > fixable-lints.pre-commit.sh
+          chmod +x fixable-lints.pre-commit.sh
+
+      - name: Commit and push if changed
+        run: |
+          git diff --quiet fixable-lints.json && exit 0
+          LINT_COUNT=$(python3 -c "import json; print(json.load(open('fixable-lints.json'))['machine_applicable_count'])")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fixable-lints.json fixable-lints.cargo.toml fixable-lints.pre-commit.sh
+          git commit -m "Update fixable lint list (${LINT_COUNT} MachineApplicable lints)"
+          git push
