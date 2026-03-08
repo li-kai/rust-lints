@@ -17,8 +17,7 @@ pub struct LargeStruct {
 
 impl LargeStruct {
     pub fn new() -> Self {
-        let config: LargeStructConfig =
-            dylint_linting::config_or_default("large_struct");
+        let config: LargeStructConfig = dylint_linting::config_or_default("large_struct");
         Self {
             threshold: config.threshold,
         }
@@ -47,8 +46,7 @@ impl<'tcx> LateLintPass<'tcx> for LargeStruct {
             LARGE_STRUCT,
             item.span,
             format!(
-                "struct `{}` has {field_count} fields, consider splitting into smaller types",
-                ident,
+                "struct `{ident}` has {field_count} fields, consider splitting into smaller types",
             ),
             None,
             "group related fields into separate structs to improve readability",

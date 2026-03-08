@@ -3,7 +3,7 @@ pub mod large_struct;
 pub mod needless_builder;
 pub mod suggest_builder;
 
-use std::cell::RefCell;
+use core::cell::RefCell;
 use std::collections::HashSet;
 
 use rustc_span::Symbol;

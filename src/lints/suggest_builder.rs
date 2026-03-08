@@ -17,8 +17,7 @@ pub struct SuggestBuilder {
 
 impl SuggestBuilder {
     pub fn new() -> Self {
-        let config: SuggestBuilderConfig =
-            dylint_linting::config_or_default("suggest_builder");
+        let config: SuggestBuilderConfig = dylint_linting::config_or_default("suggest_builder");
         Self {
             threshold: config.threshold,
         }
@@ -49,10 +48,7 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
             cx,
             SUGGEST_BUILDER,
             item.span,
-            format!(
-                "struct `{}` has {field_count} fields but does not derive `bon::Builder`",
-                ident,
-            ),
+            format!("struct `{ident}` has {field_count} fields but does not derive `bon::Builder`",),
             None,
             "add `#[derive(bon::Builder)]` to enable the builder pattern",
         );

@@ -17,8 +17,7 @@ pub struct NeedlessBuilder {
 
 impl NeedlessBuilder {
     pub fn new() -> Self {
-        let config: NeedlessBuilderConfig =
-            dylint_linting::config_or_default("needless_builder");
+        let config: NeedlessBuilderConfig = dylint_linting::config_or_default("needless_builder");
         Self {
             threshold: config.threshold,
         }
@@ -50,8 +49,7 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessBuilder {
             NEEDLESS_BUILDER,
             item.span,
             format!(
-                "struct `{}` has only {field_count} fields; `bon::Builder` may be unnecessary",
-                ident,
+                "struct `{ident}` has only {field_count} fields; `bon::Builder` may be unnecessary",
             ),
             None,
             "consider using a plain constructor or struct literal instead",
