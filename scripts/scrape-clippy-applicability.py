@@ -7,7 +7,7 @@ machine-accessible source of that information. This script parses it and
 produces JSON and TOML outputs grouped by lint category.
 
 Usage:
-    python3 scrape-clippy-applicability.py [--channel master|stable|nightly]
+    python3 scrape-clippy-applicability.py [--channel master|stable|nightly|rust-1.85.0]
 """
 
 from __future__ import annotations
@@ -146,9 +146,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--channel",
-        default="master",
-        choices=["master", "stable", "nightly"],
-        help="Clippy release channel to scrape (default: master)",
+        default="stable",
+        help="Clippy release channel or version to scrape (e.g. master, stable, nightly, rust-1.85.0)",
     )
     parser.add_argument(
         "--format",
