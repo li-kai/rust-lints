@@ -1,5 +1,4 @@
 pub mod bon_builder_collector;
-pub mod large_struct;
 pub mod needless_builder;
 pub mod suggest_builder;
 

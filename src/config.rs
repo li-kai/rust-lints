@@ -23,15 +23,3 @@ impl Default for NeedlessBuilderConfig {
         Self { threshold: 2 }
     }
 }
-
-#[derive(Deserialize)]
-#[serde(default)]
-pub struct LargeStructConfig {
-    pub threshold: usize,
-}
-
-impl Default for LargeStructConfig {
-    fn default() -> Self {
-        Self { threshold: 12 }
-    }
-}
