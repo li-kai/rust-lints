@@ -1,0 +1,555 @@
+# Recommended Lint Configuration
+
+A complete Clippy and dylint setup for production Rust codebases with multiple contributors. Copy the configurations in [Setup](#setup), then use the [Lint Reference](#lint-reference) to calibrate levels for your team's context.
+
+## Setup
+
+**1. Add workspace lints to `Cargo.toml`:**
+
+```toml
+[workspace.lints.rust]
+unsafe_code     = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+# --- Deny: always wrong in production ---
+await_holding_lock            = "deny"
+await_holding_refcell_ref     = "deny"
+let_underscore_future         = "deny"
+rc_mutex                      = "deny"
+exit                          = "deny"
+todo                          = "deny"
+unimplemented                 = "deny"
+undocumented_unsafe_blocks    = "deny"
+multiple_unsafe_ops_per_block = "deny"
+
+# --- Warn: usually wrong; suppression requires a documented reason ---
+
+# Error handling discipline
+unwrap_used               = "warn"
+expect_used               = "warn"
+panic_in_result_fn        = "warn"
+unwrap_in_result          = "warn"
+map_err_ignore            = "warn"
+
+# Type safety & correctness
+indexing_slicing          = "warn"
+panic                     = "warn"
+option_option             = "warn"
+cast_possible_truncation  = "warn"
+cast_sign_loss            = "warn"
+cast_possible_wrap        = "warn"
+float_cmp                 = "warn"
+
+# Async & concurrency
+large_futures             = "warn"
+mutex_atomic              = "warn"
+
+# Code quality & maintainability
+wildcard_enum_match_arm   = "warn"
+clone_on_ref_ptr          = "warn"
+unused_result_ok          = "warn"
+let_underscore_must_use   = "warn"
+fn_params_excessive_bools = "warn"
+match_same_arms           = "warn"
+match_wildcard_for_single_variants = "warn"
+
+# Documentation & design
+missing_errors_doc        = "warn"
+missing_panics_doc        = "warn"
+missing_fields_in_debug   = "warn"
+return_self_not_must_use  = "warn"
+should_panic_without_expect = "warn"
+allow_attributes_without_reason = "warn"
+ignore_without_reason     = "warn"
+
+# Performance & idioms
+unnecessary_wraps         = "warn"
+manual_let_else           = "warn"
+default_trait_access      = "warn"
+format_push_string        = "warn"
+unreadable_literal        = "warn"
+
+# Unsafe code discipline
+dbg_macro                 = "warn"
+print_stdout              = "warn"
+print_stderr              = "warn"
+
+# File & I/O operations
+create_dir                = "warn"
+verbose_file_reads        = "warn"
+pathbuf_init_then_push    = "warn"
+
+# Resource management
+mem_forget                = "warn"
+rc_buffer                 = "warn"
+large_include_file        = "warn"
+
+# Miscellaneous
+error_impl_error          = "warn"
+cfg_not_test              = "warn"
+missing_assert_message    = "warn"
+tests_outside_test_module = "warn"
+ref_option                = "warn"
+large_types_passed_by_value = "warn"
+unsafe_derive_deserialize = "warn"
+large_stack_arrays        = "warn"
+doc_link_with_quotes      = "warn"
+copy_iterator             = "warn"
+macro_use_imports         = "warn"
+```
+
+**2. Add `clippy.toml` to the workspace root:**
+
+```toml
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+```
+
+This permits `.unwrap()` and `.expect()` in `#[test]` functions while keeping them banned in production code.
+
+**3. Each crate inherits with:**
+
+```toml
+# <crate>/Cargo.toml
+[lints]
+workspace = true
+```
+
+---
+
+## Lint Reference
+
+**Deny** means always wrong in production — no valid exception exists. **Warn** means usually wrong and requires a documented reason to suppress (enforced by `allow_attributes_without_reason`).
+
+### `disallowed_types`
+
+Add to `clippy.toml`. Fires when the banned type appears in any position — use declarations, struct fields, function signatures, or local bindings. This complements call-site lints (which catch how a type is constructed) by catching structural choices like what a struct holds or what a function accepts.
+
+**Synchronization**
+
+| Path | Reason | Prerequisite |
+|---|---|---|
+| `std::sync::Mutex` | Poisons on panic; every caller writes `.lock().unwrap()`, defeating the error signal; `parking_lot::Mutex` is faster and non-poisoning | `parking_lot` |
+| `std::sync::RwLock` | Same poisoning problem; also prone to writer starvation on Linux | `parking_lot` |
+| `std::sync::Condvar` | Must be paired with `std::sync::Mutex`; if Mutex is banned, Condvar follows | `parking_lot` |
+| `parking_lot::ReentrantMutex` | Reentrant locking hides recursive-lock bugs; redesign the call graph instead | — |
+
+**Collections**
+
+| Path | Reason | Prerequisite |
+|---|---|---|
+| `std::collections::LinkedList` | Heap-allocates every node; cache-hostile; `VecDeque` covers all practical use cases including O(1) push/pop from both ends | — |
+| `std::collections::HashMap` | Nondeterministic iteration order causes flaky tests and unstable serialized output; default SipHash is slower than team-chosen alternatives for internal keys | team consensus on replacement |
+| `std::collections::HashSet` | Same as `HashMap` | team consensus on replacement |
+| `std::collections::hash_map::RandomState` | Closes the loophole of constructing a banned `HashMap` via `HashMap::with_hasher(RandomState::new())` | ban `HashMap` first |
+
+**Async and channels**
+
+| Path | Reason | Prerequisite |
+|---|---|---|
+| `std::sync::mpsc::Sender` | Single-producer only, always unbounded, historically buggy implementation; crossbeam-channel is strictly better in every dimension | crossbeam or tokio |
+| `std::sync::mpsc::Receiver` | Same as `Sender` | crossbeam or tokio |
+| `futures::lock::Mutex` | Does not integrate with tokio's scheduler; wakeup behavior differs subtly from `tokio::sync::Mutex` | tokio codebase |
+| `futures::channel::mpsc::Sender` | Same scheduler mismatch; use `tokio::sync::mpsc` | tokio codebase |
+| `reqwest::blocking::Client` | Internally creates its own tokio runtime; panics with "cannot start a runtime from within a runtime" when called inside tokio | tokio + reqwest |
+
+**Portability**
+
+| Path | Reason | Prerequisite |
+|---|---|---|
+| `std::sync::atomic::AtomicU64` | Not available on all 32-bit targets; use `AtomicU32` or `Mutex<u64>` | targets include 32-bit |
+| `std::sync::atomic::AtomicU128` | Same as `AtomicU64` | targets include 32-bit |
+
+**Time**
+
+| Path | Reason | Prerequisite |
+|---|---|---|
+| `std::time::Instant` | In async code, bypasses tokio's clock — `tokio::time::pause()` and `advance()` do not affect it; use `tokio::time::Instant` for testable timeouts and expiry logic | tokio codebase |
+
+**Filesystem**
+
+`std::fs` errors omit the file path. `fs-err` wraps every error with the path and operation, turning `"No such file or directory (os error 2)"` into `"failed to open 'config.toml': No such file or directory (os error 2)"`. Same applies to `tokio::fs`.
+
+| Path | Replacement | Prerequisite |
+|---|---|---|
+| `std::fs::File` | `fs_err::File` | `fs-err` |
+| `std::fs::OpenOptions` | `fs_err::OpenOptions` | `fs-err` |
+| `std::fs::DirEntry` | `fs_err::DirEntry` | `fs-err` |
+| `std::fs::ReadDir` | `fs_err::ReadDir` | `fs-err` |
+| `tokio::fs::File` | `fs_err::tokio::File` | `fs-err` + tokio feature |
+| `tokio::fs::OpenOptions` | `fs_err::tokio::OpenOptions` | `fs-err` + tokio feature |
+
+**Randomness**
+
+| Path | Reason | Prerequisite |
+|---|---|---|
+| `rand::rngs::ThreadRng` | Holding `ThreadRng` in a struct makes code untestable; the `hardcoded_randomness` lint catches call sites but misses struct fields — this closes that gap | — |
+
+---
+
+### `disallowed_methods`
+
+Add to `clippy.toml`. Unlike `disallowed_types`, these fire only at specific call sites, making them suitable for cases where the type itself is fine but a particular function has a better alternative or a known footgun.
+
+**Environment mutation**
+
+| Path | Reason |
+|---|---|
+| `std::env::set_var` | Process-global; concurrent reads from other threads — including libc DNS lookups inside `ToSocketAddrs` — cause data races; there is no safe use in multi-threaded code |
+| `std::env::remove_var` | Same as `set_var` |
+| `std::env::set_current_dir` | Process-global CWD; parallel tests race on the working directory; use absolute paths instead |
+| `std::env::var` | Direct env reads bypass config layers and cannot be overridden in tests; route through a config struct |
+| `std::env::var_os` | Same as `var` |
+| `std::env::vars` | Same as `var` |
+| `std::env::vars_os` | Same as `var` |
+| `std::env::temp_dir` | Returns the platform temp path with no uniqueness guarantee — concurrent callers collide; use `tempfile::tempdir()` which creates a unique directory and removes it on drop |
+
+**I/O**
+
+| Path | Reason |
+|---|---|
+| `std::io::Write::write` | Permitted to do a partial write, returning `Ok(n)` where `n < buf.len()`; most callers silently discard `n` and lose bytes; use `write_all` which loops until all bytes are written |
+
+**Threading**
+
+| Path | Reason |
+|---|---|
+| `std::thread::spawn` | Spawns an unnamed thread that appears as `<unnamed>` in panic messages and profilers; use `std::thread::Builder::new().name("…").spawn()` |
+| `std::panic::catch_unwind` | Catching panics in application code hides bugs; use `Result` for expected failures; legitimate uses (FFI boundaries, plugin isolation) should carry an explicit `#[expect]` with a reason |
+
+**Numeric**
+
+| Path | Reason |
+|---|---|
+| `f32::abs_sub` | Deprecated; computes `max(0.0, self - other)`, not `(self - other).abs()` — the name actively misleads |
+| `f64::abs_sub` | Same as `f32::abs_sub` |
+
+**Tokio task lifecycle** *(teams using `tokio-console`)*
+
+| Path | Reason |
+|---|---|
+| `tokio::task::spawn` | Unnamed tasks appear as opaque IDs in tokio-console; use `tokio::task::Builder::new().name("…").spawn()` |
+| `tokio::task::spawn_blocking` | Same as `tokio::task::spawn` |
+| `tokio::runtime::Handle::spawn` | Same as `tokio::task::spawn` |
+
+---
+
+## Key lint additions
+
+Beyond the workspace lints above, the configuration includes high-value lints from restriction, pedantic, and nursery categories.
+
+### Unsafe code discipline
+
+| Lint | Level | Why |
+|---|---|---|
+| `undocumented_unsafe_blocks` | deny | Requires `// SAFETY:` comment explaining soundness. Non-negotiable for auditable unsafe code. |
+| `multiple_unsafe_ops_per_block` | deny | One operation per block — each justification must be independent. Pairs with above. |
+
+### Error handling contracts
+
+| Lint | Level | Why |
+|---|---|---|
+| `panic_in_result_fn` | warn | `panic!` inside `-> Result` should return `Err` instead — avoids silent panics in recoverable error contexts. |
+| `unwrap_in_result` | warn | Same principle: `.unwrap()` in Result-returning functions converts recoverable errors to crashes. |
+| `wildcard_enum_match_arm` | warn | Forces explicit variant matching — new enum variants from dependency updates won't silently fall through. |
+| `unused_result_ok` | warn | `.ok()` called solely to silence `#[must_use]` hides that the error is being discarded. |
+| `let_underscore_must_use` | warn | `let _ = must_use_expr` silently discards a value the API marked as important. |
+
+### Type safety
+
+| Lint | Level | Why |
+|---|---|---|
+| `cast_possible_truncation` | warn | `u64 as u8` silently drops bits — forces `u8::try_from()` or explicit `#[expect]`. |
+| `cast_sign_loss` | warn | `-1i32 as u32` wraps to `u32::MAX` — same discipline. |
+| `cast_possible_wrap` | warn | Completes the cast safety trio for production code. |
+| `float_cmp` | warn | `==` on floats almost always wrong — use epsilon comparison or domain-specific equality. |
+| `unsafe_derive_deserialize` | warn | `#[derive(Deserialize)]` on unsafe types can bypass invariants. |
+
+### Code idioms & maintainability
+
+| Lint | Level | Why |
+|---|---|---|
+| `manual_let_else` | warn | `if let Some(x) = ... { } else { return }` → `let Some(x) = ... else { return }` — modern Rust idiom. |
+| `match_same_arms` | warn | Duplicate match arms usually indicate copy-paste errors. |
+| `match_wildcard_for_single_variants` | warn | `_ =>` matching only one variant obscures intent. |
+| `missing_fields_in_debug` | warn | Manual `Debug` implementations that skip fields produce incomplete output after refactoring. |
+| `return_self_not_must_use` | warn | Builder methods returning `Self` without `#[must_use]` let callers silently drop the result. |
+| `unnecessary_wraps` | warn | Private functions always returning `Some`/`Ok` should return the inner type. |
+| `ref_option` | warn | `&Option<T>` in signatures should be `Option<&T>` — better ergonomics, no double indirection. |
+
+### I/O and resource management
+
+| Lint | Level | Why |
+|---|---|---|
+| `create_dir` | warn | `std::fs::create_dir()` fails if any parent is missing — prefer `create_dir_all()`. |
+| `verbose_file_reads` | warn | Prefer `fs::read_to_string()` over manual `File::open()` + `read_to_end()`. |
+| `pathbuf_init_then_push` | warn | `PathBuf::new().push(...)` should be `.join()` or `PathBuf::from()`. |
+| `mem_forget` | warn | `std::mem::forget()` on `Drop` types leaks resources — rarely legitimately needed. |
+| `rc_buffer` | warn | `Arc<String>`/`Arc<Vec<T>>` wastes an indirection — use `Arc<str>`/`Arc<[T]>`. |
+| `large_include_file` | warn | Prevents accidental binary bloat from embedding multi-MB files via `include_bytes!`. |
+
+### Design & testing
+
+| Lint | Level | Why |
+|---|---|---|
+| `error_impl_error` | warn | A type named `Error` implementing `Error` creates ambiguity — force specific names. |
+| `cfg_not_test` | warn | `#[cfg(not(test))]` hides code from tests, creating false coverage confidence. |
+| `missing_assert_message` | warn | Bare `assert!` produces unhelpful panic messages — always include context. |
+| `should_panic_without_expect` | warn | `#[should_panic]` without `expected = "..."` passes on *any* panic, not just the right one. |
+| `tests_outside_test_module` | warn | `#[test]` functions belong in `#[cfg(test)]` modules for organizational clarity. |
+| `ignore_without_reason` | warn | `#[ignore]` tests without rationale accumulate silently — document why. |
+
+### Performance & async
+
+| Lint | Level | Why |
+|---|---|---|
+| `large_types_passed_by_value` | warn | Large `Copy` types passed by value cause unnecessary memcpys. |
+| `format_push_string` | warn | `s.push_str(&format!(...))` allocates twice — use `write!(s, ...)` instead. |
+| `unreadable_literal` | warn | `1000000` → `1_000_000` for readability. |
+| `large_stack_arrays` | warn | Oversized local arrays may overflow the stack. |
+| `clone_on_ref_ptr` | warn | `Arc::clone(&x)` is clearer than `x.clone()` — makes cheap pointer clone visually distinct. |
+
+### Async soundness (dylint)
+
+| Lint | Level | Why |
+|---|---|---|
+| `debug_assert_with_mut_call` | warn | Mutation inside `debug_assert!` disappears in release builds — silent behavioral differences. |
+| `fallible_impl_from` | warn | `From` implementations that panic should be `TryFrom` — enforces the conversion contract. |
+| `significant_drop_in_scrutinee` | warn | `MutexGuard` in match scrutinee stays locked across all arms — easy deadlock. |
+| `significant_drop_tightening` | warn | Locks/resources should drop as soon as no longer needed — reduces contention. |
+| `future_not_send` | warn | Async functions returning non-`Send` futures break on multithreaded runtimes. |
+| `non_send_fields_in_send_ty` | warn | `unsafe impl Send` on types with `Rc` fields — soundness hole and data race risk. |
+| `collection_is_never_read` | warn | A collection built but never read is dead code or a logic bug. |
+| `read_zero_byte_vec` | warn | `Vec::with_capacity(n)` + `read_to_end` reads zero bytes — need `resize` first. |
+| `path_buf_push_overwrite` | warn | `buf.push("/absolute")` silently replaces the entire path. |
+| `coerce_container_to_any` | warn | `&Box<T> as &dyn Any` downcasts to `Box<T>`, not `T` — almost never intended. |
+| `literal_string_with_formatting_args` | warn | `println("hello {name}")` (missing `!`) — format args in non-format functions. |
+| `while_float` | warn | `while x < 1.0 { x += 0.1; }` accumulates precision errors — use special iterators instead. |
+| `branches_sharing_code` | warn | Duplicate code across if/else branches should be hoisted. |
+| `or_fun_call` | warn | `.unwrap_or(expensive_fn())` evaluates eagerly — use `.unwrap_or_else(closure)`. |
+| `unused_peekable` | warn | `.peekable()` iterator where `.peek()` is never called — leftover from refactoring. |
+
+---
+
+## Suppression discipline
+
+`allow_attributes_without_reason` requires every suppression to carry a `reason` field:
+
+```rust
+#[allow(clippy::unwrap_used, reason = "index is bounds-checked by the constructor invariant")]
+let val = self.items[self.cursor];
+```
+
+Prefer `#[expect]` over `#[allow]` where the lint is expected to fire on that specific code. If the expected lint stops firing (because the code was fixed), `#[expect]` becomes a warning itself — stale suppressions do not silently accumulate:
+
+```rust
+#[expect(clippy::too_many_arguments, reason = "mirrors the shape of the external C API")]
+pub fn configure(host: &str, port: u16, timeout: u64, retries: u32, tls: bool) {
+    // ...
+}
+```
+
+---
+
+## Pre-commit setup
+
+Commit a hook script to the repository and point git at it — no external tooling required:
+
+```bash
+# one-time setup per clone
+git config core.hooksPath .githooks
+```
+
+### `.githooks/pre-commit`
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 1. Auto-fix idioms — always-correct machine-applicable fixes applied silently.
+cargo clippy --fix --allow-dirty --allow-staged -- \
+  -W clippy::uninlined_format_args \
+  -W clippy::redundant_closure_for_method_calls \
+  -W clippy::manual_string_new \
+  -W clippy::single_char_pattern \
+  -W clippy::needless_raw_string_hashes \
+  -W clippy::collapsible_else_if \
+  -W clippy::redundant_else \
+  -W clippy::range_plus_one \
+  -W clippy::range_minus_one \
+  -W clippy::semicolon_if_nothing_returned \
+  -W clippy::manual_assert \
+  -W clippy::assign_op_pattern \
+  -W clippy::needless_for_each \
+  -W clippy::manual_instant_elapsed
+
+# 2. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
+# Suppress intentional cases with #[allow(debug_remnants, reason = "intentional CLI output")].
+cargo dylint debug_remnants --warn
+
+# 3. Check for banned crates — catches additions at the point they enter Cargo.toml.
+# Crate name must match exactly as it appears as a key in Cargo.toml.
+declare -A BANNED=(
+  [lazy_static]="use std::sync::LazyLock (Rust 1.80+)"
+  [once_cell]="use std::sync::OnceLock / LazyLock (Rust 1.70+/1.80+)"
+  [failure]="use thiserror for libraries, anyhow for applications"
+  [dashmap]="use RwLock<HashMap> — DashMap deadlocks when a Ref is held across map calls"
+  [openssl]="use rustls"
+  [md5]="MD5 is cryptographically broken; use SHA-256 or SHA-3"
+  [sha1]="SHA-1 collision resistance is broken; use SHA-256 or SHA-3"
+)
+
+rc=0
+while IFS= read -r toml; do
+  for crate in "${!BANNED[@]}"; do
+    if grep -qE "^[[:space:]]*${crate}[[:space:]]*(=|\{)" "$toml"; then
+      echo "banned dependency '${crate}' in ${toml} — ${BANNED[$crate]}"
+      rc=1
+    fi
+  done
+done < <(find . -name "Cargo.toml" -not -path "*/target/*")
+
+exit $rc
+```
+
+Make it executable:
+
+```bash
+chmod +x .githooks/pre-commit
+```
+
+The grep pattern `^[[:space:]]*crate[[:space:]]*(=|\{)` matches both `crate = "1"` and `crate = { version = "1" }` forms without false-positiving on values. It only scans direct dependencies — transitive bans require `cargo-deny`.
+
+---
+
+## Auto-fixable lints
+
+All 350 lints below carry `applicability: MachineApplicable` — `cargo clippy --fix` can apply their fixes with no human review required.
+
+**Recommended workflow:**
+
+| Phase | Action |
+|---|---|
+| Development | Lints are `allow` (not configured) — no noise while writing code |
+| Pre-commit | `cargo clippy --fix` applies all fixes silently before the commit lands |
+| CI | Same lints as `deny` — fails the build if any escaped the pre-commit step |
+
+**Pre-commit fix command** (replace the fix step in `.githooks/pre-commit`):
+
+```bash
+cargo clippy --fix --allow-dirty --allow-staged -- \
+  -W clippy::all \
+  -W clippy::pedantic \
+  -W clippy::nursery
+```
+
+`clippy::all` covers `style`, `complexity`, `perf`, and `suspicious`. `pedantic` and `nursery` require explicit opt-in. For `restriction` lints with machine-applicable fixes, add the ones your team has chosen individually — several come in contradictory pairs (`pub_with_shorthand`/`pub_without_shorthand`, `semicolon_inside_block`/`semicolon_outside_block`) so the whole group cannot be enabled at once.
+
+**CI check command:**
+
+```bash
+cargo clippy -- \
+  -D clippy::all \
+  -D clippy::pedantic \
+  -D clippy::nursery
+```
+
+### Full list
+
+**complexity** (100 lints)
+
+`bind_instead_of_map` · `bool_comparison` · `borrow_deref_ref` · `bytes_count_to_len` · `char_lit_as_u8` · `clone_on_copy` · `default_constructed_unit_structs` · `deprecated_cfg_attr` · `deref_addrof` · `derivable_impls` · `double_comparisons` · `double_parens` · `duration_subsec` · `explicit_auto_deref` · `explicit_write` · `extra_unused_type_parameters` · `filter_map_identity` · `filter_next` · `flat_map_identity` · `get_last_with_len` · `identity_op` · `implied_bounds_in_impls` · `int_plus_one` · `iter_count` · `iter_kv_map` · `let_with_type_underscore` · `manual_abs_diff` · `manual_c_str_literals` · `manual_div_ceil` · `manual_filter` · `manual_filter_map` · `manual_find` · `manual_find_map` · `manual_flatten` · `manual_hash_one` · `manual_inspect` · `manual_is_multiple_of` · `manual_main_separator_str` · `manual_ok_err` · `manual_option_as_slice` · `manual_range_patterns` · `manual_rem_euclid` · `manual_slice_size_calculation` · `manual_split_once` · `manual_strip` · `manual_swap` · `manual_unwrap_or` · `map_all_any_identity` · `map_flatten` · `map_identity` · `match_as_ref` · `match_single_binding` · `needless_arbitrary_self_type` · `needless_as_bytes` · `needless_bool` · `needless_bool_assign` · `needless_borrowed_reference` · `needless_ifs` · `needless_lifetimes` · `needless_match` · `needless_option_as_deref` · `needless_option_take` · `needless_question_mark` · `needless_splitn` · `nonminimal_bool` · `option_as_ref_deref` · `option_filter_map` · `option_map_unit_fn` · `or_then_unwrap` · `precedence` · `ptr_offset_with_cast` · `redundant_as_str` · `redundant_async_block` · `redundant_at_rest_pattern` · `redundant_closure_call` · `redundant_slicing` · `repeat_once` · `result_filter_map` · `result_map_unit_fn` · `seek_from_current` · `seek_to_start_instead_of_rewind` · `short_circuit_statement` · `single_element_loop` · `string_from_utf8_as_bytes` · `swap_with_temporary` · `transmute_ptr_to_ref` · `transmutes_expressible_as_ptr_casts` · `unit_arg` · `unnecessary_cast` · `unnecessary_first_then_check` · `unnecessary_literal_unwrap` · `unnecessary_map_on_constructor` · `unnecessary_min_or_max` · `unnecessary_operation` · `unnecessary_sort_by` · `unneeded_wildcard_pattern` · `useless_asref` · `useless_concat` · `useless_conversion` · `useless_format` · `useless_nonzero_new_unchecked`
+
+**style** (111 lints)
+
+`assign_op_pattern` · `blocks_in_conditions` · `bool_assert_comparison` · `box_default` · `byte_char_slices` · `bytes_nth` · `chars_last_cmp` · `chars_next_cmp` · `cmp_null` · `collapsible_if` · `comparison_to_empty` · `default_instead_of_iter_empty` · `disallowed_methods` · `disallowed_types` · `doc_lazy_continuation` · `err_expect` · `excessive_precision` · `filter_map_bool_then` · `for_kv_map` · `from_over_into` · `get_first` · `implicit_saturating_add` · `implicit_saturating_sub` · `infallible_destructuring_match` · `init_numbered_fields` · `into_iter_on_ref` · `io_other_error` · `is_digit_ascii_radix` · `items_after_test_module` · `iter_cloned_collect` · `iter_next_slice` · `iter_nth` · `iter_nth_zero` · `iter_skip_next` · `len_zero` · `let_and_return` · `let_unit_value` · `manual_async_fn` · `manual_bits` · `manual_dangling_ptr` · `manual_is_ascii_check` · `manual_is_infinite` · `manual_map` · `manual_next_back` · `manual_ok_or` · `manual_pattern_char_comparison` · `manual_range_contains` · `manual_repeat_n` · `manual_rotate` · `manual_saturating_arithmetic` · `manual_while_let_some` · `map_clone` · `map_collect_result_unit` · `match_ref_pats` · `match_result_ok` · `mem_replace_option_with_none` · `mem_replace_option_with_some` · `mem_replace_with_default` · `missing_enforced_import_renames` · `must_use_unit` · `needless_borrow` · `needless_borrows_for_generic_args` · `needless_else` · `needless_late_init` · `needless_parens_on_range_literals` · `needless_pub_self` · `needless_return` · `needless_return_with_question_mark` · `neg_multiply` · `new_without_default` · `obfuscated_if_else` · `ok_expect` · `op_ref` · `partialeq_to_none` · `print_literal` · `print_with_newline` · `println_empty_string` · `ptr_eq` · `question_mark` · `redundant_closure` · `redundant_field_names` · `redundant_pattern` · `redundant_pattern_matching` · `redundant_static_lifetimes` · `result_map_or_into_option` · `single_char_add_str` · `single_component_path_imports` · `single_match` · `string_extend_chars` · `to_digit_is_some` · `toplevel_ref_arg` · `trim_split_whitespace` · `unnecessary_fallible_conversions` · `unnecessary_fold` · `unnecessary_lazy_evaluations` · `unnecessary_map_or` · `unnecessary_mut_passed` · `unnecessary_owned_empty_strings` · `unneeded_struct_pattern` · `unused_unit` · `unwrap_or_default` · `while_let_on_iterator` · `write_literal` · `write_with_newline` · `writeln_empty_string` · `zero_ptr`
+
+**pedantic** (57 lints)
+
+`bool_to_int_with_if` · `borrow_as_ptr` · `cast_lossless` · `checked_conversions` · `cloned_instead_of_copied` · `collapsible_else_if` · `doc_comment_double_space_linebreaks` · `doc_markdown` · `elidable_lifetime_names` · `enum_glob_use` · `explicit_deref_methods` · `explicit_into_iter_loop` · `explicit_iter_loop` · `filter_map_next` · `flat_map_option` · `if_not_else` · `ignored_unit_patterns` · `implicit_clone` · `inconsistent_struct_constructor` · `inefficient_to_string` · `ip_constant` · `manual_assert` · `manual_ilog2` · `manual_instant_elapsed` · `manual_is_power_of_two` · `manual_is_variant_and` · `manual_midpoint` · `manual_string_new` · `map_unwrap_or` · `match_bool` · `must_use_candidate` · `needless_bitwise_bool` · `needless_for_each` · `needless_raw_string_hashes` · `non_std_lazy_statics` · `option_as_ref_cloned` · `ptr_as_ptr` · `ptr_cast_constness` · `ptr_offset_by_literal` · `range_minus_one` · `range_plus_one` · `redundant_closure_for_method_calls` · `redundant_else` · `ref_as_ptr` · `ref_binding_to_reference` · `semicolon_if_nothing_returned` · `single_char_pattern` · `single_match_else` · `stable_sort_primitive` · `unchecked_time_subtraction` · `unicode_not_nfc` · `uninlined_format_args` · `unnecessary_join` · `unnecessary_literal_bound` · `unnecessary_semicolon` · `unnested_or_patterns` · `wildcard_imports`
+
+**perf** (20 lints)
+
+`cmp_owned` · `collapsible_str_replace` · `double_ended_iterator_last` · `drain_collect` · `expect_fun_call` · `iter_overeager_cloned` · `large_const_arrays` · `manual_contains` · `manual_ignore_case_cmp` · `manual_retain` · `manual_str_repeat` · `map_entry` · `missing_const_for_thread_local` · `missing_spin_loop` · `redundant_iter_cloned` · `replace_box` · `to_string_in_format_args` · `unnecessary_to_owned` · `useless_vec` · `waker_clone_wake`
+
+**nursery** (19 lints)
+
+`clear_with_drain` · `derive_partial_eq_without_eq` · `equatable_if_let` · `imprecise_flops` · `missing_const_for_fn` · `needless_collect` · `needless_type_cast` · `nonstandard_macro_braces` · `redundant_clone` · `redundant_pub_crate` · `search_is_some` · `string_lit_as_bytes` · `suboptimal_flops` · `suspicious_operation_groupings` · `too_long_first_doc_paragraph` · `trait_duplication_in_bounds` · `unnecessary_struct_initialization` · `unused_rounding` · `use_self`
+
+**restriction** (29 lints) — enable individually; four contradictory pairs resolved below
+
+`alloc_instead_of_core` · `allow_attributes` · `as_pointer_underscore` · `as_underscore` · `assertions_on_result_states` · `dbg_macro` · `deref_by_slicing` · `doc_include_without_cfg` · `get_unwrap` · `if_then_some_else_none` · `lossy_float_literal` · `missing_asserts_for_indexing` · `needless_raw_strings` · `non_ascii_literal` · `non_zero_suggestions` · `precedence_bits` · `pub_with_shorthand` · `rest_pat_in_fully_bound_structs` · `return_and_then` · `semicolon_outside_block` · `std_instead_of_alloc` · `std_instead_of_core` · `str_to_string` · `string_lit_chars_any` · `try_err` · `unseparated_literal_suffix` · `unnecessary_safety_comment` · `unused_trait_names`
+
+*Contradictory pairs — one from each is omitted:*
+
+- **`needless_return`** (in `clippy::all`) over `implicit_return` — Rust convention is tail expressions without explicit `return`. The `implicit_return` lint forces `return` on every tail expression, fighting `needless_return` which removes them. Idiomatic Rust uses implicit returns; explicit `return` is reserved for early exits.
+- **`pub_with_shorthand`** over `pub_without_shorthand` — `pub(crate)` is the idiomatic form every Rust programmer recognizes. `pub(in crate::path)` is only needed when restricting visibility to a specific submodule, which is a distinct use case, not an alternative spelling.
+- **`semicolon_outside_block`** over `semicolon_inside_block` — `{ expr };` keeps the semicolon at the statement boundary where the reader scans for it. `{ expr; }` buries it inside the braces, forcing you to look inside the block to determine whether it produces a value or discards it. Rustfmt also formats this way.
+- **`unseparated_literal_suffix`** over `separated_literal_suffix` — `1u32` is the conventional form used in the standard library, rustc, and the vast majority of Rust codebases. The `_` separator convention (`1_000_000`) is for digit grouping within large numbers, not for type suffixes.
+
+**suspicious** (12 lints)
+
+`cast_abs_to_unsigned` · `cast_slice_from_raw_parts` · `crate_in_macro_def` · `deprecated_clippy_cfg_attr` · `four_forward_slashes` · `ineffective_open_options` · `manual_unwrap_or_default` · `needless_character_iteration` · `swap_ptr_to_ref` · `unnecessary_clippy_cfg` · `unnecessary_option_map_or_else` · `unnecessary_result_map_or_else`
+
+---
+
+## Adoption in existing codebases
+
+Adding this configuration to an existing codebase will produce warnings across the entire codebase at once. Work through them incrementally:
+
+**Step 1 — Add everything as `warn`.**
+Change all `deny` entries to `warn` initially. This shows the full scope of violations without blocking builds or CI.
+
+**Step 2 — Fix by lint, not by file.**
+Fix one lint category at a time (e.g., all `option_option` warnings, then all `map_err_ignore`). This keeps commits focused and reviewable.
+
+**Step 3 — Promote to `deny` once clean.**
+Once a lint category produces zero warnings, promote it to `deny`. Carry forward any legitimate exceptions as `#[expect]` with a reason.
+
+**Suggested fix order:**
+
+1. `unused_must_use` — mechanical; `let _ = result;` or add `?`
+2. `exit`, `rc_mutex`, `todo`, `unimplemented` — low count, straightforward
+3. `option_option`, `result_large_err`, `map_err_ignore` — error handling improvements
+4. `await_holding_lock`, `let_underscore_future`, `blocking_in_async` — async design changes; may require refactoring
+5. `unwrap_used`, `expect_used` — largest category; replace with `?` or `if let`; use `#[expect]` for invariants that are genuinely guaranteed
+
+---
+
+## Graduation
+
+Once the codebase is clean, promote these warns to deny. This is the target state for a mature production codebase:
+
+```toml
+# Cargo.toml — graduated denies
+unwrap_used      = "deny"
+expect_used      = "deny"
+panic            = "deny"
+indexing_slicing = "deny"
+map_err_ignore   = "deny"
+print_stdout     = "deny"
+print_stderr     = "deny"
+dbg_macro        = "deny"
+```
+
+```toml
+# dylint.toml — graduated denies
+[stringly_typed_errors]
+level = "deny"
+
+[unbounded_channel]
+level = "deny"
+
+[fallible_new]
+level = "deny"
+
+[hardcoded_time]
+level = "deny"
+
+[hardcoded_randomness]
+level = "deny"
+
+[hardcoded_env]
+level = "deny"
+```
