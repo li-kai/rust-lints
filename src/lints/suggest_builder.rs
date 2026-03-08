@@ -54,3 +54,15 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use dylint_testing::ui;
+
+    #[test]
+    fn ui_suggest_builder() {
+        ui::Test::example(env!("CARGO_PKG_NAME"), "suggest_builder")
+            .dylint_toml("[suggest_builder]\nthreshold = 4\n[needless_builder]\nthreshold = 0\n")
+            .run();
+    }
+}
