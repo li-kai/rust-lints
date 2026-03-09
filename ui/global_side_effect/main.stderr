@@ -1,0 +1,43 @@
+warning: direct call to `std::time::Instant::now()`
+  --> $DIR/main.rs:12:15
+   |
+LL |     let now = Instant::now();
+   |               ^^^^^^^^^^^^^^
+   |
+   = help: accept a time parameter or use a clock trait so callers can control the time source in tests
+   = note: `#[warn(global_side_effect_time)]` on by default
+
+warning: direct call to `std::time::SystemTime::now()`
+  --> $DIR/main.rs:17:5
+   |
+LL |     std::time::SystemTime::now()
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: accept a time parameter or use a clock trait so callers can control the time source in tests
+
+warning: direct call to `std::env::var()`
+  --> $DIR/main.rs:25:5
+   |
+LL |     std::env::var("MY_CONFIG").ok()
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move this to your application's entry point and pass the value as a parameter
+   = note: `#[warn(global_side_effect_env)]` on by default
+
+warning: direct call to `std::env::vars()`
+  --> $DIR/main.rs:29:29
+   |
+LL |     let _vars: Vec<_> = std::env::vars().collect();
+   |                             ^^^^^^^^^^^^^^^^
+   |
+   = help: move this to your application's entry point and pass the value as a parameter
+
+warning: direct call to `std::env::args()`
+  --> $DIR/main.rs:33:29
+   |
+LL |     let _args: Vec<_> = std::env::args().collect();
+   |                             ^^^^^^^^^^^^^^^^
+   |
+   = help: move this to your application's entry point and pass the value as a parameter
+
+warning: 5 warnings emitted
