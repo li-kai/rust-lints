@@ -284,16 +284,19 @@ if echo "$output" | _grep -q '^error|^warning\\['; then
   echo "$output"
 fi
 
-# 2. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
+# 2. Strip decorative comment dividers (language-agnostic — works on any //-comment language).
+echo "$staged" | _grep '\\.(rs|ts|tsx|js|jsx)$' | xargs -r awk -i inplace -f scripts/strip-decorative-comments.awk
+
+# 3. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
 cargo dylint debug_remnants --warn || true
 
-# 3. Format only staged .rs files.
+# 4. Format only staged .rs files.
 echo "$staged" | _grep '\\.rs$' | xargs -r rustfmt
 
-# 4. Re-stage only originally-staged files modified by auto-fix and formatting.
+# 5. Re-stage only originally-staged files modified by auto-fix and formatting.
 echo "$staged" | xargs -r git add
 
-# 5. Check for banned crates — catches additions at the point they enter Cargo.toml.
+# 6. Check for banned crates — catches additions at the point they enter Cargo.toml.
 declare -A BANNED=(
 {banned_entries}
 )
