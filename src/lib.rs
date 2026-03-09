@@ -35,6 +35,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::global_side_effect::GLOBAL_SIDE_EFFECT_TIME,
         lints::global_side_effect::GLOBAL_SIDE_EFFECT_RANDOMNESS,
         lints::global_side_effect::GLOBAL_SIDE_EFFECT_ENV,
+        lints::map_init_then_insert::MAP_INIT_THEN_INSERT,
     ]);
     lint_store.register_pre_expansion_pass(|| {
         Box::new(lints::bon_builder_collector::BonBuilderCollector)
@@ -44,4 +45,6 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store
         .register_late_pass(|_| Box::new(lints::proper_error_type::ProperErrorType::default()));
     lint_store.register_late_pass(|_| Box::new(lints::global_side_effect::GlobalSideEffect::new()));
+    lint_store
+        .register_late_pass(|_| Box::new(lints::map_init_then_insert::MapInitThenInsert::new()));
 }
