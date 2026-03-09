@@ -70,11 +70,6 @@ default_trait_access      = "warn"
 format_push_string        = "warn"
 unreadable_literal        = "warn"
 
-# Debug & diagnostic output
-dbg_macro                 = "warn"
-print_stdout              = "warn"
-print_stderr              = "warn"
-
 # File & I/O operations
 create_dir                = "warn"
 verbose_file_reads        = "warn"
@@ -529,9 +524,7 @@ expect_used      = "deny"
 panic            = "deny"
 indexing_slicing = "deny"
 map_err_ignore   = "deny"
-print_stdout     = "deny"
-print_stderr     = "deny"
-dbg_macro        = "deny"
+# print_stdout, print_stderr, dbg_macro — superseded by dylint debug_remnants
 ```
 
 ```toml
