@@ -40,6 +40,10 @@ rustc_session::impl_lint_pass!(MapInitThenInsert => [MAP_INIT_THEN_INSERT]);
 const MIN_INSERTS: usize = 2;
 
 impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "indices are bounds-checked by the while condition"
+    )]
     fn check_block(&mut self, cx: &LateContext<'tcx>, block: &'tcx Block<'tcx>) {
         let stmts = block.stmts;
         let mut i = 0;

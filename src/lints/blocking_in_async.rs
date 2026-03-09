@@ -134,6 +134,10 @@ impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
 /// Walks up the HIR parent chain. If we encounter an async fn signature
 /// or an async closure/block before hitting a sync function boundary,
 /// the expression is in async context.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "we only care about closures and function boundaries"
+)]
 fn is_in_async_context(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     for (_, node) in cx.tcx.hir_parent_iter(expr.hir_id) {
         match node {
@@ -164,6 +168,10 @@ fn is_in_async_context(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 ///
 /// Walks up the HIR parent chain looking for a closure whose parent
 /// is a call to a known `spawn_blocking` function.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "we only care about closures and function boundaries"
+)]
 fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     for (hir_id, node) in cx.tcx.hir_parent_iter(expr.hir_id) {
         match node {
