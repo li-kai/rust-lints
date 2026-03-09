@@ -53,6 +53,22 @@ impl Default for NeedlessBuilderConfig {
     }
 }
 
+/// Config for the `fallible_new` lint.
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct FallibleNewConfig {
+    /// Also lint `fn new_*()` methods, not just `fn new()`.
+    pub check_new_variants: bool,
+}
+
+impl Default for FallibleNewConfig {
+    fn default() -> Self {
+        Self {
+            check_new_variants: true,
+        }
+    }
+}
+
 /// Top-level config for the `global_side_effect` lint group.
 ///
 /// Read from `dylint.toml` under the key `global_side_effect`:

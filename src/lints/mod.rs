@@ -1,5 +1,6 @@
 pub mod bon_builder_collector;
 pub mod debug_remnants;
+pub mod fallible_new;
 pub mod global_side_effect;
 pub mod map_init_then_insert;
 pub mod needless_builder;
