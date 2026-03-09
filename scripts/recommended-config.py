@@ -270,7 +270,23 @@ echo "$staged" | _grep '\\.rs$|Cargo\\.toml$' || exit 0
 
 stash_name="pre-commit-$(date +%s)"
 git stash push --keep-index --include-untracked -q -m "$stash_name"
-trap 'git stash list | grep -qF "$stash_name" && git stash pop -q || true' EXIT
+# Restore the user's working tree unconditionally. Plain `git stash pop`
+# merges, which conflicts when tools mutated the same files. Instead:
+#   (a) snapshot the fixed index to a tree object
+#   (b) hard-reset working tree + index to HEAD (the stash's base)
+#   (c) pop the stash — applies cleanly because the base matches
+#   (d) re-read the fixed index and checkout fixed files into working tree
+trap '
+  if git stash list | grep -qF "$stash_name"; then
+    fixed_tree=$(git write-tree)
+    git reset --hard -q HEAD
+    git stash pop -q
+    if [[ -n "${{fixed_tree:-}}" ]]; then
+      git read-tree "$fixed_tree"
+      echo "$staged" | xargs -r git checkout-index -f --
+    fi
+  fi
+' EXIT
 
 # 1. Auto-fix idioms — always-correct machine-applicable fixes applied silently.
 #    Fixed-point loop: --fix skips fixes with overlapping spans, so a single
