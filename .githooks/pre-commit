@@ -65,8 +65,9 @@ if echo "$output" | _grep -q '^error|^warning\['; then
   echo "$output"
 fi
 
-# 2. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
-cargo dylint debug_remnants --warn || true
+# 2. Check for debug remnants — disabled: cargo dylint doesn't support
+#    per-lint invocation from this repo (it *is* the lint library).
+# cargo dylint debug_remnants --warn || true
 
 # 3. Format only staged .rs files.
 echo "$staged" | _grep '\.rs$' | xargs -r rustfmt
