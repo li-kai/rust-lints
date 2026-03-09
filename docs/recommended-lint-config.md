@@ -60,8 +60,8 @@ missing_panics_doc        = "warn"
 missing_fields_in_debug   = "warn"
 return_self_not_must_use  = "warn"
 should_panic_without_expect = "warn"
-allow_attributes_without_reason = "warn"
-ignore_without_reason     = "warn"
+allow_attributes_without_reason = "deny"
+ignore_without_reason     = "deny"
 
 # Performance & idioms
 unnecessary_wraps         = "warn"
@@ -298,7 +298,8 @@ Why each workspace lint is included, grouped by concern.
 | `missing_assert_message` | warn | Bare `assert!` produces unhelpful panic messages — always include context. |
 | `should_panic_without_expect` | warn | `#[should_panic]` without `expected = "..."` passes on *any* panic, not just the right one. |
 | `tests_outside_test_module` | warn | `#[test]` functions belong in `#[cfg(test)]` modules for organizational clarity. |
-| `ignore_without_reason` | warn | `#[ignore]` without rationale accumulates silently. |
+| `allow_attributes_without_reason` | deny | Every suppression must carry a `reason` — prevents silent lint bypasses and keeps `#[expect]` stale-suppression detection meaningful. |
+| `ignore_without_reason` | deny | `#[ignore]` without rationale accumulates silently. |
 
 ### Performance & async
 

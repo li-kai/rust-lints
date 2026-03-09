@@ -86,8 +86,8 @@ missing_panics_doc                  = "warn"
 missing_fields_in_debug             = "warn"
 return_self_not_must_use            = "warn"
 should_panic_without_expect         = "warn"
-allow_attributes_without_reason     = "warn"
-ignore_without_reason               = "warn"
+allow_attributes_without_reason     = "deny"
+ignore_without_reason               = "deny"
 
 # --- Performance & idioms ---
 unnecessary_wraps                   = "warn"
