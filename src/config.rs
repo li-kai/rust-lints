@@ -1,5 +1,34 @@
 use serde::Deserialize;
 
+/// Which logging framework to suggest in diagnostics.
+///
+/// Deserialized from `dylint.toml` as `"tracing"` or `"log"`.
+/// Invalid values produce a serde error at config load time.
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFramework {
+    #[default]
+    Tracing,
+    Log,
+}
+
+impl LogFramework {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Tracing => "tracing",
+            Self::Log => "log",
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+#[derive(Default)]
+pub struct DebugRemnantsConfig {
+    /// Which logging framework to suggest: `"tracing"` (default) or `"log"`.
+    pub suggested_framework: LogFramework,
+}
+
 #[derive(Deserialize)]
 #[serde(default)]
 pub struct SuggestBuilderConfig {

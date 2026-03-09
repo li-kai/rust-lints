@@ -1,0 +1,43 @@
+warning: debug remnant: `println!` in committed code
+  --> $DIR/main.rs:15:5
+   |
+LL |     println!("Processing ${}", amount); //~ WARNING: debug remnant
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: replace with `tracing::info!(...)` for structured logging
+   = note: `#[warn(debug_remnants)]` on by default
+
+warning: debug remnant: `eprintln!` in committed code
+  --> $DIR/main.rs:23:5
+   |
+LL |     eprintln!("Got request: {}", req); //~ WARNING: debug remnant
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: replace with `tracing::warn!(...)` for structured logging
+
+warning: debug remnant: `dbg!` in committed code
+  --> $DIR/main.rs:31:5
+   |
+LL |     dbg!(config); //~ WARNING: debug remnant
+   |     ^^^^^^^^^^^^
+   |
+   = help: replace with `tracing::debug!(...)` for structured logging
+
+warning: debug remnant: `print!` in committed code
+  --> $DIR/main.rs:40:5
+   |
+LL |     print!("debug: "); //~ WARNING: debug remnant
+   |     ^^^^^^^^^^^^^^^^^
+   |
+   = help: replace with `tracing::info!(...)` for structured logging
+
+warning: debug remnant: `println!` in committed code
+  --> $DIR/main.rs:48:5
+   |
+LL |     println!("Starting server"); //~ WARNING: debug remnant
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: replace with `tracing::info!(...)` for structured logging
+
+warning: 5 warnings emitted
+

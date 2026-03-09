@@ -1,5 +1,6 @@
 #![allow(
     dead_code,
+    debug_remnants,
     unknown_lints,
     unused_variables,
     unused_mut,

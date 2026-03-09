@@ -1,5 +1,5 @@
 warning: immediately inserting into a newly created map — consider using `HashMap::from([..])`
-  --> $DIR/main.rs:18:5
+  --> $DIR/main.rs:19:5
    |
 LL | /     let mut m = HashMap::new(); //~ WARNING: immediately inserting into a newly created map
 LL | |     m.insert("a", 1);
@@ -10,7 +10,7 @@ LL | |     m.insert("b", 2);
    = note: `#[warn(map_init_then_insert)]` on by default
 
 warning: immediately inserting into a newly created map — consider using `HashMap::from([..])`
-  --> $DIR/main.rs:24:5
+  --> $DIR/main.rs:25:5
    |
 LL | /     let mut m = HashMap::new(); //~ WARNING: immediately inserting into a newly created map
 LL | |     m.insert("a", 1);
@@ -21,7 +21,7 @@ LL | |     m.insert("c", 3);
    = help: use `let m = HashMap::from([..])` to initialize the map inline
 
 warning: immediately inserting into a newly created map — consider using `BTreeMap::from([..])`
-  --> $DIR/main.rs:35:5
+  --> $DIR/main.rs:36:5
    |
 LL | /     let mut m = BTreeMap::new(); //~ WARNING: immediately inserting into a newly created map
 LL | |     m.insert(1, "one");
@@ -31,7 +31,7 @@ LL | |     m.insert(2, "two");
    = help: use `let m = BTreeMap::from([..])` to initialize the map inline
 
 warning: immediately inserting into a newly created map — consider using `IndexMap::from([..])`
-  --> $DIR/main.rs:45:5
+  --> $DIR/main.rs:46:5
    |
 LL | /     let mut m = IndexMap::new(); //~ WARNING: immediately inserting into a newly created map
 LL | |     m.insert("a", 1);
@@ -41,7 +41,7 @@ LL | |     m.insert("b", 2);
    = help: use `let m = IndexMap::from([..])` to initialize the map inline
 
 warning: immediately inserting into a newly created map — consider using `HashMap::from([..])`
-  --> $DIR/main.rs:64:5
+  --> $DIR/main.rs:65:5
    |
 LL | /     let mut m: HashMap<&str, i32> = HashMap::default(); //~ WARNING: immediately inserting into a newly created map
 LL | |     m.insert("x", 10);
@@ -51,7 +51,7 @@ LL | |     m.insert("y", 20);
    = help: use `let m = HashMap::from([..])` to initialize the map inline
 
 warning: immediately inserting into a newly created map — consider using `HashMap::from([..])`
-  --> $DIR/main.rs:74:5
+  --> $DIR/main.rs:75:5
    |
 LL | /     let mut m = HashMap::with_capacity(4); //~ WARNING: immediately inserting into a newly created map
 LL | |     m.insert("a", 1);
@@ -61,7 +61,7 @@ LL | |     m.insert("b", 2);
    = help: use `let m = HashMap::from([..])` to initialize the map inline
 
 warning: immediately inserting into a newly created map — consider using `HashMap::from([..])`
-  --> $DIR/main.rs:134:5
+  --> $DIR/main.rs:135:5
    |
 LL | /     let mut m = HashMap::new(); //~ WARNING: immediately inserting into a newly created map
 LL | |     m.insert("a", 1);

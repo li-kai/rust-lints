@@ -1,9 +1,11 @@
 pub mod bon_builder_collector;
+pub mod debug_remnants;
 pub mod global_side_effect;
 pub mod map_init_then_insert;
 pub mod needless_builder;
 pub mod proper_error_type;
 pub mod suggest_builder;
+mod suppression;
 
 use core::cell::RefCell;
 use std::collections::HashSet;

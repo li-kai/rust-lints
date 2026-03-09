@@ -1,10 +1,11 @@
 use clippy_utils::diagnostics::span_lint_and_help;
-use clippy_utils::{is_entrypoint_fn, is_in_test};
+use clippy_utils::is_entrypoint_fn;
 use rustc_hir::def_id::DefId;
 use rustc_hir::{Expr, ExprKind};
-use rustc_lint::{LateContext, LateLintPass, LintContext as _};
+use rustc_lint::{LateContext, LateLintPass};
 
 use crate::config::GlobalSideEffectConfig;
+use crate::lints::suppression::is_in_test_zone;
 
 // ── Lint declarations ───────────────────────────────────────────────
 
@@ -213,32 +214,17 @@ fn resolve_callee_def_id(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<DefId>
 
 /// Returns `true` if the expression is inside a suppression zone:
 ///
-/// - **Test crate** — the crate is compiled with `--test` (integration tests
-///   in `tests/`, or `cargo test` on the main crate). Detected via
-///   `cx.sess().is_test_crate()`. This covers test helper functions that
-///   don't carry `#[test]` themselves (e.g. `tests/common/mod.rs`).
-/// - **Test function** — any function registered with the test harness
-///   (`#[test]`, `#[tokio::test]`, `#[rstest]`, etc.). Detected via
-///   `clippy_utils::is_in_test` which checks for `#[rustc_test_marker]`,
-///   covering all proc-macro test attributes automatically.
-/// - **`#[cfg(test)]` module** — also handled by `is_in_test`.
+/// - **Test zone** — test crate, `#[test]` function, or `#[cfg(test)]` module
+///   (see `suppression::is_in_test_zone`).
 /// - **`fn main()`** — the composition root, where wiring up real
 ///   dependencies is expected.
 fn is_in_suppression_zone(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
-    // Entire crate is a test target (integration tests, `cargo test` build).
-    if cx.sess().is_test_crate() {
-        return true;
-    }
-
-    let hir_id = expr.hir_id;
-
-    // Inside a #[test] function or #[cfg(test)] module.
-    if is_in_test(cx.tcx, hir_id) {
+    if is_in_test_zone(cx, expr) {
         return true;
     }
 
     // fn main() — the composition root.
-    let enclosing_def_id = cx.tcx.hir_enclosing_body_owner(hir_id);
+    let enclosing_def_id = cx.tcx.hir_enclosing_body_owner(expr.hir_id);
     is_entrypoint_fn(cx, enclosing_def_id.to_def_id())
 }
 
