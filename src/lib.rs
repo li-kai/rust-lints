@@ -39,6 +39,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::debug_remnants::DEBUG_REMNANTS,
         lints::fallible_new::FALLIBLE_NEW,
         lints::unbounded_channel::UNBOUNDED_CHANNEL,
+        lints::blocking_in_async::BLOCKING_IN_ASYNC,
     ]);
     lint_store.register_pre_expansion_pass(|| {
         Box::new(lints::bon_builder_collector::BonBuilderCollector)
@@ -53,4 +54,5 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store.register_late_pass(|_| Box::new(lints::debug_remnants::DebugRemnants::new()));
     lint_store.register_late_pass(|_| Box::new(lints::fallible_new::FallibleNew::new()));
     lint_store.register_late_pass(|_| Box::new(lints::unbounded_channel::UnboundedChannel::new()));
+    lint_store.register_late_pass(|_| Box::new(lints::blocking_in_async::BlockingInAsync::new()));
 }

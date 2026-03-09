@@ -1,0 +1,35 @@
+warning: blocking call to `std::fs::read_to_string()` inside async context
+  --> $DIR/main.rs:8:13
+   |
+LL |     let _ = std::fs::read_to_string("foo.txt"); //~ WARNING: blocking call
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use an async-aware alternative, or wrap the blocking call in `tokio::task::spawn_blocking()`
+   = note: `#[warn(blocking_in_async)]` on by default
+
+warning: blocking call to `std::thread::sleep()` inside async context
+  --> $DIR/main.rs:12:5
+   |
+LL |     std::thread::sleep(Duration::from_secs(1)); //~ WARNING: blocking call
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use an async-aware alternative, or wrap the blocking call in `tokio::task::spawn_blocking()`
+
+warning: blocking call to `std::net::TcpStream::connect()` inside async context
+  --> $DIR/main.rs:16:13
+   |
+LL |     let _ = std::net::TcpStream::connect("127.0.0.1:8080"); //~ WARNING: blocking call
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use an async-aware alternative, or wrap the blocking call in `tokio::task::spawn_blocking()`
+
+warning: blocking call to `std::fs::read_to_string()` inside async context
+  --> $DIR/main.rs:21:17
+   |
+LL |         let _ = std::fs::read_to_string("bar.txt"); //~ WARNING: blocking call
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use an async-aware alternative, or wrap the blocking call in `tokio::task::spawn_blocking()`
+
+warning: 4 warnings emitted
+

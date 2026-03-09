@@ -1,3 +1,4 @@
+pub mod blocking_in_async;
 pub mod bon_builder_collector;
 pub mod call_matching;
 pub mod debug_remnants;
