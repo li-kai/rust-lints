@@ -1,4 +1,5 @@
 pub mod bon_builder_collector;
+pub mod call_matching;
 pub mod debug_remnants;
 pub mod fallible_new;
 pub mod global_side_effect;
@@ -7,6 +8,7 @@ pub mod needless_builder;
 pub mod proper_error_type;
 pub mod suggest_builder;
 mod suppression;
+pub mod unbounded_channel;
 
 use core::cell::RefCell;
 use std::collections::HashSet;
