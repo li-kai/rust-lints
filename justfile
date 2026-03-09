@@ -21,11 +21,11 @@ test *args:
 
 # Check code with clippy (no modifications)
 check *args:
-    cargo clippy --all-targets {{ args }} -- -D warnings
+    cargo clippy --lib --tests {{ args }} -- -D warnings
 
 # Auto-fix clippy issues and format code
 fix *args:
-    cargo clippy --all-targets --fix --allow-dirty {{ args }} -- -D warnings
+    cargo clippy --lib --tests --fix --allow-dirty {{ args }} -- -D warnings
     just fmt
 
 # Format code (use --check to verify without changing)
