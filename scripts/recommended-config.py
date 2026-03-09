@@ -265,6 +265,9 @@ fi
 staged=$(git diff --cached --name-only --diff-filter=ACM)
 [[ -z "$staged" ]] && exit 0
 
+# Skip entirely when no Rust-relevant files are staged (e.g. docs-only commits).
+echo "$staged" | _grep '\\.rs$|Cargo\\.toml$' || exit 0
+
 stash_name="pre-commit-$(date +%s)"
 git stash push --keep-index --include-untracked -q -m "$stash_name"
 trap 'git stash list | grep -qF "$stash_name" && git stash pop -q || true' EXIT
