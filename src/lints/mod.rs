@@ -1,4 +1,5 @@
 pub mod bon_builder_collector;
+pub mod global_side_effect;
 pub mod needless_builder;
 pub mod proper_error_type;
 pub mod suggest_builder;
