@@ -143,7 +143,7 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
     // ── Steps 2, 4, 5: check_item ──
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
         // Step 5: *Error without Error impl
-        self.check_error_named_type(cx, item);
+        Self::check_error_named_type(cx, item);
 
         // Steps 2-4: collect impl Error / impl Display
         self.collect_trait_impls(cx, item);
@@ -168,7 +168,7 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
                     && !error_info.source_field_names.is_empty()
                     && let Some(fmt_def_id) = display_info.fmt_def_id
                 {
-                    self.check_duplicated_source(
+                    Self::check_duplicated_source(
                         cx,
                         fmt_def_id,
                         &error_info.source_field_names,
@@ -187,6 +187,10 @@ impl ProperErrorType {
         cx: &LateContext<'tcx>,
         err_ty: Ty<'tcx>,
     ) -> Option<UnstructuredKind> {
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "ty::TyKind has too many variants to enumerate; all unrecognised kinds correctly return None"
+        )]
         match err_ty.kind() {
             // &str
             ty::Ref(_, inner, _) if inner.is_str() => Some(UnstructuredKind::Basic("&str")),
@@ -222,7 +226,11 @@ impl ProperErrorType {
     }
 
     /// Step 5: Check if a struct/enum named `*Error` or `*Err` implements `Error`.
-    fn check_error_named_type<'tcx>(&self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
+    fn check_error_named_type<'tcx>(cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "ItemKind has many variants; all non-ADT kinds are correctly skipped"
+        )]
         let ident = match &item.kind {
             ItemKind::Struct(ident, _, _) | ItemKind::Enum(ident, _, _) => *ident,
             _ => return,
@@ -345,7 +353,6 @@ impl ProperErrorType {
 
     /// Step 3: Check if Display fmt body references error-typed fields.
     fn check_duplicated_source(
-        &self,
         cx: &LateContext<'_>,
         fmt_def_id: rustc_hir::def_id::LocalDefId,
         source_field_names: &[Symbol],
