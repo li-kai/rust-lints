@@ -1,6 +1,7 @@
 #![feature(rustc_private)]
 
 extern crate rustc_ast;
+extern crate rustc_data_structures;
 extern crate rustc_hir;
 extern crate rustc_lint;
 extern crate rustc_middle;
@@ -30,10 +31,13 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::suggest_builder::SUGGEST_BUILDER,
         lints::needless_builder::NEEDLESS_BUILDER,
         lints::bon_builder_collector::BON_BUILDER_COLLECTOR,
+        lints::proper_error_type::PROPER_ERROR_TYPE,
     ]);
     lint_store.register_pre_expansion_pass(|| {
         Box::new(lints::bon_builder_collector::BonBuilderCollector)
     });
     lint_store.register_late_pass(|_| Box::new(lints::suggest_builder::SuggestBuilder::new()));
     lint_store.register_late_pass(|_| Box::new(lints::needless_builder::NeedlessBuilder::new()));
+    lint_store
+        .register_late_pass(|_| Box::new(lints::proper_error_type::ProperErrorType::default()));
 }

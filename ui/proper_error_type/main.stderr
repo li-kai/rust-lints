@@ -1,0 +1,127 @@
+warning: public function returns `Result<_, String>` — use a type that implements `Error`
+  --> $DIR/main.rs:11:38
+   |
+LL | pub fn parse_string(_input: &str) -> Result<(), String> {
+   |                                      ^^^^^^^^^^^^^^^^^^
+   |
+   = help: define an error enum with `#[derive(thiserror::Error)]`
+   = note: `#[warn(proper_error_type)]` on by default
+
+warning: public function returns `Result<_, &str>` — use a type that implements `Error`
+  --> $DIR/main.rs:16:35
+   |
+LL | pub fn parse_str(_input: &str) -> Result<(), &'static str> {
+   |                                   ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: define an error enum with `#[derive(thiserror::Error)]`
+
+warning: public function returns `Result<_, Box<dyn Error>>` — use a type that implements `Error`
+  --> $DIR/main.rs:21:37
+   |
+LL | pub fn parse_boxed(_input: &str) -> Result<(), Box<dyn std::error::Error>> {
+   |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: define an error enum with `#[derive(thiserror::Error)]`
+
+warning: public function returns `Result<_, Box<dyn Error>>` — use a type that implements `Error`
+  --> $DIR/main.rs:26:47
+   |
+LL | pub fn parse_boxed_send_sync(_input: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+   |                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: define an error enum with `#[derive(thiserror::Error)]`
+
+warning: `ConfigError` wraps error types but does not implement `source()`
+  --> $DIR/main.rs:65:1
+   |
+LL | impl std::error::Error for ConfigError {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[derive(thiserror::Error)]` with `#[source]` / `#[from]`
+
+warning: `ParseError` is named as an error type but does not implement `std::error::Error`
+  --> $DIR/main.rs:135:1
+   |
+LL | / pub enum ParseError {
+LL | |     InvalidSyntax,
+LL | |     UnexpectedEof,
+LL | | }
+   | |_^
+   |
+   = help: add `#[derive(thiserror::Error, Debug)]`
+
+warning: `ConnectionErr` is named as an error type but does not implement `std::error::Error`
+  --> $DIR/main.rs:141:1
+   |
+LL | / pub struct ConnectionErr {
+LL | |     pub message: String,
+LL | | }
+   | |_^
+   |
+   = help: add `#[derive(thiserror::Error, Debug)]`
+
+warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
+  --> $DIR/main.rs:100:1
+   |
+LL | impl std::error::Error for SimpleError {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: thiserror eliminates boilerplate and keeps Display in sync with variants
+
+warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
+  --> $DIR/main.rs:80:1
+   |
+LL | / impl std::error::Error for ConfigErrorWithSource {
+LL | |     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+LL | |         match self {
+LL | |             Self::Io(e) => Some(e),
+...  |
+LL | | }
+   | |_^
+   |
+   = help: thiserror eliminates boilerplate and keeps Display in sync with variants
+
+warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
+  --> $DIR/main.rs:65:1
+   |
+LL | impl std::error::Error for ConfigError {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: thiserror eliminates boilerplate and keeps Display in sync with variants
+
+warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
+  --> $DIR/main.rs:47:1
+   |
+LL | impl std::error::Error for MyTypedError {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: thiserror eliminates boilerplate and keeps Display in sync with variants
+
+warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
+  --> $DIR/main.rs:119:1
+   |
+LL | / impl std::error::Error for DupSourceError {
+LL | |     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+LL | |         match self {
+LL | |             Self::Io(e) => Some(e),
+...  |
+LL | | }
+   | |_^
+   |
+   = help: thiserror eliminates boilerplate and keeps Display in sync with variants
+
+warning: `Display` renders inner error that is also returned by `source()`
+  --> $DIR/main.rs:112:1
+   |
+LL | / impl fmt::Display for DupSourceError {
+LL | |     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+LL | |         match self {
+LL | |             Self::Io(e) => write!(f, "io error: {e}"),
+...  |
+LL | | }
+   | |_^
+   |
+   = help: describe only what went wrong at this level — the source chain handles the rest
+
+warning: 13 warnings emitted
+

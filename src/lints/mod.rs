@@ -1,5 +1,6 @@
 pub mod bon_builder_collector;
 pub mod needless_builder;
+pub mod proper_error_type;
 pub mod suggest_builder;
 
 use core::cell::RefCell;
