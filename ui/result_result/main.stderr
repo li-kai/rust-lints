@@ -1,0 +1,35 @@
+warning: nested `Result<Result<_, _>, _>` — consider flattening into a single Result
+  --> $DIR/main.rs:26:43
+   |
+LL |     fn parse_and_validate(input: &str) -> Result<Result<Config, ValidationError>, ParseError> {
+   |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `.and_then()` to chain fallible operations, or unify the error types into a single enum
+   = note: `#[warn(result_result)]` on by default
+
+warning: nested `Result<Result<_, _>, _>` — consider flattening into a single Result
+  --> $DIR/main.rs:32:5
+   |
+LL |     type LoadResult = Result<Result<Data, DecodeError>, io::Error>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `.and_then()` to chain fallible operations, or unify the error types into a single enum
+
+warning: nested `Result<Result<_, _>, _>` — consider flattening into a single Result
+  --> $DIR/main.rs:36:28
+   |
+LL |     fn load(path: &str) -> Result<Result<String, std::num::ParseIntError>, io::Error> {
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `.and_then()` to chain fallible operations, or unify the error types into a single enum
+
+warning: nested `Result<Result<_, _>, _>` — consider flattening into a single Result
+  --> $DIR/main.rs:44:31
+   |
+LL |         pub fn load(&self) -> Result<Result<String, DecodeError>, io::Error> {
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `.and_then()` to chain fallible operations, or unify the error types into a single enum
+
+warning: 4 warnings emitted
+
