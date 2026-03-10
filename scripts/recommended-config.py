@@ -301,7 +301,9 @@ if echo "$output" | _grep -q '^error|^warning\\['; then
 fi
 
 # 2. Strip decorative comment dividers (language-agnostic — works on any //-comment language).
-echo "$staged" | _grep '\\.(rs|ts|tsx|js|jsx)$' | xargs -r awk -i inplace -f scripts/strip-decorative-comments.awk
+echo "$staged" | _grep '\\.(rs|ts|tsx|js|jsx)$' | while IFS= read -r f; do
+  awk -f scripts/strip-decorative-comments.awk "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+done
 
 # 3. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
 cargo dylint --lib rust-lints || true
