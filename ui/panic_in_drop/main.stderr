@@ -1,0 +1,110 @@
+warning: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:12:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         std::fs::remove_file(&self.path).unwrap();
+LL | |     }
+   | |_____^
+   |
+note: `.unwrap()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:13:42
+   |
+LL |         std::fs::remove_file(&self.path).unwrap();
+   |                                          ^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+   = note: `#[warn(panic_in_drop)]` on by default
+
+warning: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:23:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         assert!(self.active, "dropped inactive connection");
+LL | |     }
+   | |_____^
+   |
+note: `assert!()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:24:9
+   |
+LL |         assert!(self.active, "dropped inactive connection");
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+
+warning: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:34:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         let data = self.data.take().expect("already flushed");
+LL | |         // simulate flush
+LL | |         let _ = data;
+LL | |     }
+   | |_____^
+   |
+note: `.expect()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:35:37
+   |
+LL |         let data = self.data.take().expect("already flushed");
+   |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+
+warning: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:47:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         panic!("oops");
+LL | |     }
+   | |_____^
+   |
+note: `panic!()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:48:9
+   |
+LL |         panic!("oops");
+   |         ^^^^^^^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+
+warning: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:56:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         unreachable!("should never drop");
+LL | |     }
+   | |_____^
+   |
+note: `unreachable!()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:57:9
+   |
+LL |         unreachable!("should never drop");
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+
+warning: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:67:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         assert_eq!(self.val, 0);
+LL | |     }
+   | |_____^
+   |
+note: `assert_eq!()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:68:9
+   |
+LL |         assert_eq!(self.val, 0);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+
+warning: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:78:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         assert_ne!(self.val, 42);
+LL | |     }
+   | |_____^
+   |
+note: `assert_ne!()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:79:9
+   |
+LL |         assert_ne!(self.val, 42);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+
+warning: 7 warnings emitted
+

@@ -6,6 +6,7 @@ pub mod fallible_new;
 pub mod global_side_effect;
 pub mod map_init_then_insert;
 pub mod needless_builder;
+pub mod panic_in_drop;
 pub mod proper_error_type;
 pub mod suggest_builder;
 mod suppression;
