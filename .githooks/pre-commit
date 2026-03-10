@@ -85,7 +85,7 @@ fi
 echo "$staged" | _grep '\.(rs|ts|tsx|js|jsx)$' | xargs -r awk -i inplace -f scripts/strip-decorative-comments.awk
 
 # 3. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
-cargo dylint debug_remnants --warn || true
+cargo dylint --lib rust-lints || true
 
 # 4. Format only staged .rs files.
 echo "$staged" | _grep '\.rs$' | xargs -r rustfmt
