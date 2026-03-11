@@ -14,13 +14,16 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | [`global_side_effect::randomness`](#global_side_effect) | warn | Direct calls to random number generators outside `main()` and tests |
 | [`global_side_effect::time`](#global_side_effect) | warn | Direct calls to wall-clock or monotonic time outside `main()` and tests |
 | [`map_init_then_insert`](#map_init_then_insert) | warn | `HashMap`/`BTreeMap`/`IndexMap` created empty then immediately populated with `insert()` |
+| [`module_dependencies`](#module_dependencies) | deny | Cross-module dependencies not declared in the allowlist |
 | [`needless_builder`](#needless_builder) | warn | Structs with ≤ 2 named fields that unnecessarily derive `bon::Builder` |
 | [`panic_in_drop`](#panic_in_drop) | deny | Panic-able expressions inside `Drop` implementations |
 | [`proper_error_type`](#proper_error_type) | warn | Incomplete or unstructured error types in public APIs |
+| [`realtime_in_async_test`](#realtime_in_async_test) | warn | Tokio time calls in async tests without `start_paused = true` |
 | [`result_result`](#result_result) | warn | Nested `Result<Result<T, E1>, E2>` in function signatures |
 | [`suggest_builder`](#suggest_builder) | warn | Structs with ≥ 4 named fields that don't derive `bon::Builder` |
 | [`suggest_fn_builder`](#suggest_fn_builder) | warn | Functions with many parameters that could use `#[bon::builder]` |
 | [`unbounded_channel`](#unbounded_channel) | deny | Creation of unbounded channels that can exhaust memory |
+| [`unstructured_log_fields`](#unstructured_log_fields) | warn | `tracing` macros using format args instead of structured fields |
 
 ---
 
@@ -119,6 +122,25 @@ warning: immediately inserting into a newly created map — consider using `Hash
 
 Does not fire when there is intervening control flow, reads, or borrows between creation and the insert sequence, or when there is only one insert. Complements Clippy's `vec_init_then_push`.
 
+### `module_dependencies`
+
+Enforces an allowlist of permitted cross-module dependencies within a crate. Each top-level module declares which other top-level modules it may depend on. Any undeclared dependency is a compile-time error.
+
+```
+error[module_dependencies]: `payments` depends on `server`, which is not in its allowlist
+  --> src/payments/checkout.rs:12:5
+   |
+12 |     use crate::server::SessionInfo;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this dependency is intentional, add "server" to the
+           `payments` allowlist in module_dependencies.toml
+   = help: if not, move `SessionInfo` to a module that `payments`
+           is allowed to depend on (currently: types, errors, utils)
+```
+
+Configuration is via a `[module_dependencies]` section declaring the allowed dependency edges per module. In exhaustive mode (default), every top-level module must appear in the config. Dead edges (declared but unused dependencies) produce a warning. Does not fire inside `#[cfg(test)]` code.
+
 ### `needless_builder`
 
 Warns when `bon::Builder` is derived on a struct with very few fields.
@@ -179,6 +201,23 @@ warning: nested `Result<Result<_, _>, _>` — consider flattening into a single 
 
 Complements Clippy's `option_option` (pedantic), which catches `Option<Option<T>>`.
 
+### `realtime_in_async_test`
+
+Flags `tokio::time::sleep`, `timeout`, `interval`, and related calls inside async test functions that don't have the tokio clock paused. Tests using real wall-clock time are slow and flaky; `start_paused = true` makes the clock auto-advance instantly.
+
+```
+warning: real-time wait in async test without paused clock
+  --> src/jobs/retry_test.rs:12:5
+   |
+12 |     tokio::time::sleep(Duration::from_secs(5)).await;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add `start_paused = true` to `#[tokio::test]` so the clock auto-advances and tests run instantly:
+           `#[tokio::test(start_paused = true)]`
+```
+
+Does not fire outside test functions, when `.start_paused(true)` is present, or on `tokio::time::advance` (which is the correct tool for stepping a paused clock).
+
 ### `suggest_builder`
 
 Suggests adding `#[derive(bon::Builder)]` to structs with many named fields.
@@ -223,6 +262,23 @@ warning: unbounded channel created — can exhaust memory under backpressure
 Flagged by default: `std::sync::mpsc::channel`, `tokio::sync::mpsc::unbounded_channel`, `flume::unbounded`, `crossbeam::channel::unbounded`.
 
 Does not fire inside `#[test]` / `#[tokio::test]`, `#[cfg(test)]` modules, or `fn main()`.
+
+### `unstructured_log_fields`
+
+Flags `tracing` macro invocations where all captured values are positional format arguments and none are structured key-value fields. Structured fields enable filtering, indexing, and machine-readable logs.
+
+```
+warning: `tracing::info!` uses format args instead of structured fields
+  --> src/handler.rs:15:5
+   |
+15 |     tracing::info!("user {} hit {}", user_id, path);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use structured fields: `tracing::info!(user_id, path, "message")`
+           instead of `tracing::info!("user {} path {}", user_id, path)`
+```
+
+Does not fire when at least one structured field is present, when the format string has no capture placeholders, or on non-tracing macros (e.g. `log::info!`).
 
 ---
 
@@ -274,6 +330,18 @@ allow_in_test_modules = true
 
 [global_side_effect::logging_init]
 # additional_paths = []
+
+[module_dependencies]
+exhaustive = true
+
+[module_dependencies.allow]
+# types = []
+# errors = ["types"]
+# utils = ["types", "errors"]
+# payments = ["types", "errors", "utils"]
+
+[realtime_in_async_test]
+# allowed_paths = ["my_crate::time::sleep"]
 ```
 
 ## Development
