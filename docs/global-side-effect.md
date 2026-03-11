@@ -1,13 +1,15 @@
 # Global Side-Effect Lints
 
-**Lints:** `global_side_effect::time`, `global_side_effect::randomness`, `global_side_effect::env`
+**Lints:** `global_side_effect::time`, `global_side_effect::randomness`, `global_side_effect::env`, `global_side_effect::logging_init`
 **Level:** `warn`
 
-Three lints that flag direct calls to non-deterministic or environment-coupled functions. Each targets a different dependency — wall-clock time, random number generation, or environment variables — but the architecture and fix are identical: **accept the dependency as a parameter** so callers can inject a testable, deterministic implementation.
+Four lints that flag direct calls to non-deterministic or environment-coupled functions. The first three target runtime dependencies — wall-clock time, random number generation, or environment variables — and the fix is identical: **accept the dependency as a parameter**. The fourth targets global logger initialization, where the fix is: **move it to `main()`**.
 
 ## Why
 
 Code that calls these functions directly is untestable (you can't control the inputs), non-deterministic (same inputs, different outputs), and hard to mock without thread-local hacks.
+
+Global logger initialization (`tracing_subscriber::fmt::init()`, `env_logger::init()`, etc.) shares the same structural problem: it mutates process-global state, it can only succeed once per process, and when called from library code or deep inside the call graph it causes silent failures in tests (the second `init()` panics or is silently ignored) and removes the application author's ability to choose their own logging configuration.
 
 ## Flagged calls
 
@@ -54,11 +56,35 @@ Each lint ships with built-in defaults covering common crates.
 | `dotenvy::vars` | Iterate `.env` vars |
 | `dotenv::var` | Older dotenv crate |
 
+### `global_side_effect::logging_init`
+
+| Path | Notes |
+|---|---|
+| `tracing_subscriber::fmt::init` | Sets the global default subscriber |
+| `tracing_subscriber::fmt::try_init` | Same, returns `Result` instead of panicking |
+| `tracing_subscriber::fmt::Subscriber::init` | Builder-style init |
+| `tracing_subscriber::fmt::Subscriber::try_init` | Builder-style try-init |
+| `tracing_subscriber::util::SubscriberInitExt::init` | Extension trait `init()` |
+| `tracing_subscriber::util::SubscriberInitExt::try_init` | Extension trait `try_init()` |
+| `tracing::subscriber::set_global_default` | Low-level global subscriber registration |
+| `env_logger::init` | Sets global logger |
+| `env_logger::try_init` | Same, returns `Result` |
+| `env_logger::Builder::init` | Builder-style init |
+| `env_logger::Builder::try_init` | Builder-style try-init |
+| `log::set_logger` | Low-level global logger registration |
+| `log::set_max_level` | Global log level filter |
+| `fern::Dispatch::apply` | Applies logging config globally |
+| `simplelog::TermLogger::init` | |
+| `simplelog::CombinedLogger::init` | |
+| `slog_stdlog::init` | Bridges slog to the `log` facade globally |
+
 ## Examples
+
+### `time`, `randomness`, `env`
 
 All three lints follow the same pattern. These examples use `global_side_effect::time`; substitute the relevant function for the other two.
 
-### Triggers
+#### Triggers
 
 ```rust
 use std::time::Instant;
@@ -69,7 +95,7 @@ fn is_expired(&self) -> bool {
 }
 ```
 
-### Does not trigger
+#### Does not trigger
 
 ```rust
 // Injected as a parameter
@@ -95,6 +121,51 @@ fn main() {
 }
 ```
 
+### `logging_init`
+
+#### Triggers
+
+```rust
+// Inside a library function
+pub fn setup_app() {
+    //~^ WARNING: global logger initialization outside of `main()`
+    tracing_subscriber::fmt::init();
+    // ...
+}
+
+// Inside a module initializer
+pub fn configure_service(config: &Config) {
+    //~^ WARNING: global logger initialization outside of `main()`
+    env_logger::init();
+    start_service(config);
+}
+```
+
+#### Does not trigger
+
+```rust
+// In main() — the only place global logger init belongs
+fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter("info")
+        .init(); // ok — this is the composition root
+    run();
+}
+
+// In a function that returns a subscriber without installing it globally
+fn build_subscriber() -> impl tracing::Subscriber {
+    tracing_subscriber::fmt()
+        .with_env_filter("info")
+        .finish() // ok — returns the subscriber, doesn't install it
+}
+
+// Inside #[test] or #[cfg(test)]
+#[test]
+fn test_with_logging() {
+    let _ = tracing_subscriber::fmt().try_init(); // ok
+}
+```
+
 ## Suppression zones
 
 The lint does not fire in these contexts:
@@ -109,7 +180,7 @@ The lint does not fire in these contexts:
 
 ## Configuration
 
-All three lints accept the same two fields. Use the lint name as the TOML section key.
+All four lints accept the same two fields. Use the lint name as the TOML section key.
 
 ```toml
 [global_side_effect::time]
@@ -127,7 +198,7 @@ additional_paths = ["my_crate::util::current_time"]
 
 ## Implementation
 
-All three lints use identical `LateLintPass::check_expr` structure:
+All four lints use identical `LateLintPass::check_expr` structure:
 
 1. Match `ExprKind::Call` and `ExprKind::MethodCall`.
 2. Resolve the callee's `DefId`.
@@ -154,3 +225,4 @@ The help text varies by lint:
 | `global_side_effect::time` | accept a time parameter or use a clock trait |
 | `global_side_effect::randomness` | accept an `impl Rng` parameter so callers can inject a seeded RNG |
 | `global_side_effect::env` | move this to your application's entry point and pass the value as a parameter |
+| `global_side_effect::logging_init` | move logger initialization to `main()`; library code should never install a global logger |
