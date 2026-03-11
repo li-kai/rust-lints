@@ -6,21 +6,21 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 
 | Lint | Level | Description |
 |------|-------|-------------|
-| [`blocking_in_async`](#blocking_in_async) | warn | Blocking operations inside `async fn` or `async {}` blocks |
+| [`blocking_in_async`](#blocking_in_async) | deny | Blocking operations inside `async fn` or `async {}` blocks |
 | [`debug_remnants`](#debug_remnants) | warn | Debug macros (`println!`, `eprintln!`, `dbg!`) in non-test code |
-| [`fallible_new`](#fallible_new) | warn | `fn new()` constructors that can panic |
+| [`fallible_new`](#fallible_new) | deny | `fn new()` constructors that can panic |
 | [`global_side_effect::env`](#global_side_effect) | warn | Direct calls to `std::env::var` and similar outside `main()` |
-| [`global_side_effect::logging_init`](#global_side_effect) | warn | Global logger initialization outside `main()` |
+| [`global_side_effect::logging_init`](#global_side_effect) | deny | Global logger initialization outside `main()` |
 | [`global_side_effect::randomness`](#global_side_effect) | warn | Direct calls to random number generators outside `main()` and tests |
 | [`global_side_effect::time`](#global_side_effect) | warn | Direct calls to wall-clock or monotonic time outside `main()` and tests |
 | [`map_init_then_insert`](#map_init_then_insert) | warn | `HashMap`/`BTreeMap`/`IndexMap` created empty then immediately populated with `insert()` |
 | [`needless_builder`](#needless_builder) | warn | Structs with ≤ 2 named fields that unnecessarily derive `bon::Builder` |
-| [`panic_in_drop`](#panic_in_drop) | warn | Panic-able expressions inside `Drop` implementations |
+| [`panic_in_drop`](#panic_in_drop) | deny | Panic-able expressions inside `Drop` implementations |
 | [`proper_error_type`](#proper_error_type) | warn | Incomplete or unstructured error types in public APIs |
 | [`result_result`](#result_result) | warn | Nested `Result<Result<T, E1>, E2>` in function signatures |
 | [`suggest_builder`](#suggest_builder) | warn | Structs with ≥ 4 named fields that don't derive `bon::Builder` |
 | [`suggest_fn_builder`](#suggest_fn_builder) | warn | Functions with many parameters that could use `#[bon::builder]` |
-| [`unbounded_channel`](#unbounded_channel) | warn | Creation of unbounded channels that can exhaust memory |
+| [`unbounded_channel`](#unbounded_channel) | deny | Creation of unbounded channels that can exhaust memory |
 
 ---
 

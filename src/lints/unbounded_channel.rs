@@ -13,7 +13,7 @@ rustc_session::declare_lint! {
     /// Flags creation of unbounded channels, which can exhaust memory
     /// under backpressure.
     pub UNBOUNDED_CHANNEL,
-    Warn,
+    Deny,
     "unbounded channel created \u{2014} can exhaust memory under backpressure"
 }
 

@@ -11,7 +11,7 @@ use crate::config::SubLintConfig;
 rustc_session::declare_lint! {
     /// Flags known-blocking operations inside `async fn` or `async {}` blocks.
     pub BLOCKING_IN_ASYNC,
-    Warn,
+    Deny,
     "blocking call inside async context \u{2014} starves the executor"
 }
 

@@ -14,7 +14,7 @@ rustc_session::declare_lint! {
     /// Warns when a `fn new()` constructor contains operations that can panic,
     /// suggesting it return `Result` or be renamed to convey fallibility.
     pub FALLIBLE_NEW,
-    Warn,
+    Deny,
     "constructor `new` can panic \u{2014} consider returning `Result` or renaming to `try_new`"
 }
 
