@@ -16,7 +16,7 @@ staged=$(git diff --cached --name-only --diff-filter=ACM)
 [[ -z "$staged" ]] && exit 0
 
 # Skip entirely when no Rust-relevant files are staged (e.g. docs-only commits).
-echo "$staged" | _grep '\.rs$|Cargo\.toml$' || exit 0
+echo "$staged" | _grep -q '\.rs$|Cargo\.toml$' || exit 0
 
 stash_name="pre-commit-$(date +%s)"
 git stash push --keep-index --include-untracked -q -m "$stash_name"
@@ -84,13 +84,13 @@ fi
 # 2. Strip decorative comment dividers (language-agnostic — works on any //-comment language).
 echo "$staged" | _grep '\.(rs|ts|tsx|js|jsx)$' | while IFS= read -r f; do
   awk -f scripts/strip-decorative-comments.awk "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-done
+done || true
 
 # 3. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
 cargo dylint --lib rust-lints || true
 
 # 4. Format only staged .rs files.
-echo "$staged" | _grep '\.rs$' | xargs -r rustfmt
+echo "$staged" | _grep '\.rs$' | xargs -r rustfmt || true
 
 # 5. Re-stage only originally-staged files modified by auto-fix and formatting.
 echo "$staged" | xargs -r git add
