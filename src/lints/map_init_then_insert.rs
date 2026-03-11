@@ -1,6 +1,6 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::path_to_local_with_projections;
-use rustc_hir::{Block, Expr, ExprKind, HirId, PatKind, Stmt, StmtKind};
+use rustc_hir::{Block, Expr, ExprKind, HirId, PatKind, QPath, Stmt, StmtKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
 use rustc_span::{Symbol, sym};
@@ -8,8 +8,9 @@ use rustc_span::{Symbol, sym};
 // ── Lint declaration ────────────────────────────────────────────────
 
 rustc_session::declare_lint! {
-    /// Warns when a `HashMap`, `BTreeMap`, or `IndexMap` is created empty and
-    /// then immediately populated with sequential `.insert()` calls.
+    /// Warns when a `HashMap`, `BTreeMap`, `IndexMap`, `FxHashMap`, `AHashMap`,
+    /// or similar map is created empty and then immediately populated with
+    /// sequential `.insert()` calls.
     ///
     /// Suggests using `Type::from([...])` instead.
     pub MAP_INIT_THEN_INSERT,
@@ -18,10 +19,12 @@ rustc_session::declare_lint! {
 }
 
 pub struct MapInitThenInsert {
-    // Cached symbols for IndexMap detection (no diagnostic item exists).
+    // Cached symbols for third-party map detection (no diagnostic items exist).
     // Interned once in `new()` to avoid per-statement re-interning.
     sym_indexmap_crate: Symbol,
     sym_indexmap_type: Symbol,
+    sym_ahash_crate: Symbol,
+    sym_ahashmap_type: Symbol,
 }
 
 impl MapInitThenInsert {
@@ -29,6 +32,8 @@ impl MapInitThenInsert {
         Self {
             sym_indexmap_crate: Symbol::intern("indexmap"),
             sym_indexmap_type: Symbol::intern("IndexMap"),
+            sym_ahash_crate: Symbol::intern("ahash"),
+            sym_ahashmap_type: Symbol::intern("AHashMap"),
         }
     }
 }
@@ -54,6 +59,8 @@ impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
                 &stmts[i],
                 self.sym_indexmap_crate,
                 self.sym_indexmap_type,
+                self.sym_ahash_crate,
+                self.sym_ahashmap_type,
             ) else {
                 i += 1;
                 continue;
@@ -92,13 +99,20 @@ impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
 
 /// If `stmt` is `let [mut] <name> = <MapType>::new()` (or `::default()` or
 /// `::with_capacity(_)`), returns the binding's `HirId` and a display name
-/// for the map type (e.g. `"HashMap"`).
+/// for the map type.
+///
+/// The display name is taken from the callee path (what the user wrote, e.g.
+/// `"FxHashMap"`) so that type aliases of `HashMap` produce the correct
+/// suggestion. Falls back to the resolved type name when the callee is a
+/// plain `Default::default()` call without a type qualifier.
 fn map_init_binding<'tcx>(
     cx: &LateContext<'tcx>,
     stmt: &Stmt<'tcx>,
     sym_indexmap_crate: Symbol,
     sym_indexmap_type: Symbol,
-) -> Option<(HirId, &'static str)> {
+    sym_ahash_crate: Symbol,
+    sym_ahashmap_type: Symbol,
+) -> Option<(HirId, String)> {
     let StmtKind::Let(local) = &stmt.kind else {
         return None;
     };
@@ -113,17 +127,43 @@ fn map_init_binding<'tcx>(
     };
 
     let ty = cx.typeck_results().expr_ty(init);
-    let type_name = recognized_map_type(cx, ty, sym_indexmap_crate, sym_indexmap_type)?;
+    let fallback_name = recognized_map_type(
+        cx,
+        ty,
+        sym_indexmap_crate,
+        sym_indexmap_type,
+        sym_ahash_crate,
+        sym_ahashmap_type,
+    )?;
 
     if !is_map_constructor(cx, callee) {
         return None;
     }
+
+    // Prefer the name the user wrote so that type aliases (e.g. `FxHashMap`,
+    // `AHashMap`) produce `FxHashMap::from([..])` rather than `HashMap::from([..])`.
+    let type_name =
+        callee_type_name(callee).map_or_else(|| fallback_name.to_owned(), |s| s.to_string());
 
     let PatKind::Binding(_, hir_id, _, _) = local.pat.kind else {
         return None;
     };
 
     Some((hir_id, type_name))
+}
+
+/// Extracts the type name segment written by the user from a `Type::method`
+/// callee expression. Returns `Some("FxHashMap")` for `FxHashMap::new`,
+/// `Some("HashMap")` for `HashMap::new`, etc. Returns `None` for bare
+/// `Default::default()` calls where no explicit type is written on the callee.
+fn callee_type_name(callee: &Expr<'_>) -> Option<rustc_span::Symbol> {
+    let ExprKind::Path(QPath::TypeRelative(ty, _)) = &callee.kind else {
+        return None;
+    };
+    let rustc_hir::TyKind::Path(QPath::Resolved(_, path)) = &ty.kind else {
+        return None;
+    };
+    path.segments.last().map(|seg| seg.ident.name)
 }
 
 /// Returns the display name if `ty` is a recognized map type, `None` otherwise.
@@ -137,6 +177,8 @@ fn recognized_map_type<'tcx>(
     ty: Ty<'tcx>,
     sym_indexmap_crate: Symbol,
     sym_indexmap_type: Symbol,
+    sym_ahash_crate: Symbol,
+    sym_ahashmap_type: Symbol,
 ) -> Option<&'static str> {
     let ty::Adt(adt, _) = ty.kind() else {
         return None;
@@ -151,6 +193,10 @@ fn recognized_map_type<'tcx>(
         && cx.tcx.item_name(def_id) == sym_indexmap_type
     {
         Some("IndexMap")
+    } else if cx.tcx.crate_name(def_id.krate) == sym_ahash_crate
+        && cx.tcx.item_name(def_id) == sym_ahashmap_type
+    {
+        Some("AHashMap")
     } else {
         None
     }

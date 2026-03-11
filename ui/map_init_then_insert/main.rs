@@ -8,7 +8,9 @@
 )]
 // Tests for the `map_init_then_insert` lint.
 
+use ahash::AHashMap;
 use indexmap::IndexMap;
+use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, HashMap};
 
 // ══════════════════════════════════════════════════════════════════════
@@ -159,6 +161,26 @@ macro_rules! make_map {
 
 fn macro_generated() {
     let _m = make_map!();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should trigger: FxHashMap (type alias of HashMap via rustc-hash)
+// ══════════════════════════════════════════════════════════════════════
+
+fn fxhashmap_default_two_inserts() {
+    let mut m = FxHashMap::default(); //~ WARNING: immediately inserting into a newly created map
+    m.insert("a", 1);
+    m.insert("b", 2);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should trigger: AHashMap (type alias of HashMap via ahash)
+// ══════════════════════════════════════════════════════════════════════
+
+fn ahashmap_new_two_inserts() {
+    let mut m = AHashMap::new(); //~ WARNING: immediately inserting into a newly created map
+    m.insert("a", 1);
+    m.insert("b", 2);
 }
 
 fn main() {}

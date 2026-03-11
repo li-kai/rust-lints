@@ -2,7 +2,7 @@
 
 **Level:** `warn`
 
-Warns when a `HashMap`, `BTreeMap`, or `IndexMap` is created empty and then immediately populated with sequential `.insert()` calls, suggesting `::from([...])` instead.
+Warns when a `HashMap`, `BTreeMap`, `IndexMap`, `FxHashMap`, `AHashMap`, or similar map is created empty and then immediately populated with sequential `.insert()` calls, suggesting `::from([...])` instead.
 
 ## Why
 
@@ -20,7 +20,7 @@ Clippy has `vec_init_then_push` (perf) which catches the analogous pattern for `
 
 The lint fires when all of the following hold:
 
-1. A `HashMap`, `BTreeMap`, or `IndexMap` is created via `::new()`, `::default()`, or `::with_capacity(n)`
+1. A `HashMap`, `BTreeMap`, `IndexMap`, `FxHashMap`, `AHashMap`, or other recognized map is created via `::new()`, `::default()`, or `::with_capacity(n)`
 2. The immediately following statements are all `.insert(k, v)` calls on the same binding
 3. There are no intervening reads, borrows, or control flow between creation and the insert sequence
 
@@ -29,9 +29,11 @@ The lint fires when all of the following hold:
 | `HashMap::new()` + inserts | `HashMap::from([...])` |
 | `BTreeMap::new()` + inserts | `BTreeMap::from([...])` |
 | `IndexMap::new()` + inserts | `IndexMap::from([...])` |
+| `FxHashMap::default()` + inserts | `FxHashMap::from([...])` |
+| `AHashMap::new()` + inserts | `AHashMap::from([...])` |
 | `::with_capacity(n)` + inserts | `::from([...])` (capacity is implicit) |
 
-**Note:** This lint suggests `IndexMap::from([...])` for consistency with `HashMap` and `BTreeMap`. If you want to disallow the `indexmap!` macro entirely, use the `disallowed_macros` lint.
+**Note:** The suggestion always uses the name the user wrote. `FxHashMap::from([...])` and `AHashMap::from([...])` are valid because both are type aliases of `HashMap` and inherit its `From<[(K, V); N]>` impl. If you want to disallow the `indexmap!` macro entirely, use the `disallowed_macros` lint.
 
 ## Examples
 
@@ -102,17 +104,21 @@ None. Use `#[allow(map_init_then_insert)]` to suppress on a case-by-case basis, 
 | `std::collections::HashMap` | `is_type_diagnostic_item(sym::HashMap)` | ✅ |
 | `std::collections::BTreeMap` | `is_type_diagnostic_item(sym::BTreeMap)` | ✅ |
 | `indexmap::IndexMap` | Type path matching | ✅ |
+| `rustc_hash::FxHashMap` | Type alias of `HashMap` — caught by diagnostic item | ✅ |
+| `ahash::AHashMap` | Type alias of `HashMap` — caught by diagnostic item | ✅ |
 | `hashbrown::HashMap` | — | ❌ — diagnostic item is on std's `HashMap` only; direct hashbrown usage is rare |
-| `ahash::AHashMap` | — | ❌ — niche wrapper around hashbrown |
 | `dashmap::DashMap` | — | ❌ — concurrent map, different semantics |
+| `FxHashSet` / `AHashSet` / `HashSet` | — | ❌ — sets, not maps; fit a `set_init_then_insert` lint |
 
 ## Implementation notes
 
 ### Lint pass
 
-`LateLintPass::check_block` — scan each block for local bindings initialized with `HashMap::new()` / `BTreeMap::new()` / `IndexMap::new()` (or `::default()` / `::with_capacity()`). Then check if the immediately following statements are all `.insert()` calls on the same `HirId`. Stop at the first non-insert statement or any statement that reads/borrows the map.
+`LateLintPass::check_block` — scan each block for local bindings initialized with a recognized map constructor (`::new()`, `::default()`, `::with_capacity()`). Then check if the immediately following statements are all `.insert()` calls on the same `HirId`. Stop at the first non-insert statement or any statement that reads/borrows the map.
 
-Use `clippy_utils::ty::is_type_diagnostic_item` with `sym::HashMap` / `sym::BTreeMap` for std types. For `IndexMap`, match on the type path.
+Use `clippy_utils::ty::is_type_diagnostic_item` with `sym::HashMap` / `sym::BTreeMap` for std types. This automatically covers type aliases (`FxHashMap`, `AHashMap`) since they resolve to std's `HashMap` ADT. For `IndexMap`, match on the type path since no diagnostic item exists for third-party crates.
+
+The suggestion uses the **callee-written type name** extracted from the `QPath::TypeRelative` in the HIR, not the resolved type name. This ensures `FxHashMap::default()` suggests `FxHashMap::from([..])` rather than `HashMap::from([..])`.
 
 ### Skip conditions
 
