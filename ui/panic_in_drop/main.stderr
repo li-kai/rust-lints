@@ -1,4 +1,4 @@
-warning: panic-able expression in `Drop` impl — this will abort during unwinding
+error: panic-able expression in `Drop` impl — this will abort during unwinding
   --> $DIR/main.rs:12:5
    |
 LL | /     fn drop(&mut self) {
@@ -12,9 +12,9 @@ note: `.unwrap()` can panic — handle the error or use `let _ = ...` to ignore 
 LL |         std::fs::remove_file(&self.path).unwrap();
    |                                          ^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
-   = note: `#[warn(panic_in_drop)]` on by default
+   = note: `#[deny(panic_in_drop)]` on by default
 
-warning: panic-able expression in `Drop` impl — this will abort during unwinding
+error: panic-able expression in `Drop` impl — this will abort during unwinding
   --> $DIR/main.rs:23:5
    |
 LL | /     fn drop(&mut self) {
@@ -29,7 +29,7 @@ LL |         assert!(self.active, "dropped inactive connection");
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
 
-warning: panic-able expression in `Drop` impl — this will abort during unwinding
+error: panic-able expression in `Drop` impl — this will abort during unwinding
   --> $DIR/main.rs:34:5
    |
 LL | /     fn drop(&mut self) {
@@ -46,7 +46,7 @@ LL |         let data = self.data.take().expect("already flushed");
    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
 
-warning: panic-able expression in `Drop` impl — this will abort during unwinding
+error: panic-able expression in `Drop` impl — this will abort during unwinding
   --> $DIR/main.rs:47:5
    |
 LL | /     fn drop(&mut self) {
@@ -61,7 +61,7 @@ LL |         panic!("oops");
    |         ^^^^^^^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
 
-warning: panic-able expression in `Drop` impl — this will abort during unwinding
+error: panic-able expression in `Drop` impl — this will abort during unwinding
   --> $DIR/main.rs:56:5
    |
 LL | /     fn drop(&mut self) {
@@ -76,7 +76,7 @@ LL |         unreachable!("should never drop");
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
 
-warning: panic-able expression in `Drop` impl — this will abort during unwinding
+error: panic-able expression in `Drop` impl — this will abort during unwinding
   --> $DIR/main.rs:67:5
    |
 LL | /     fn drop(&mut self) {
@@ -91,7 +91,7 @@ LL |         assert_eq!(self.val, 0);
    |         ^^^^^^^^^^^^^^^^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
 
-warning: panic-able expression in `Drop` impl — this will abort during unwinding
+error: panic-able expression in `Drop` impl — this will abort during unwinding
   --> $DIR/main.rs:78:5
    |
 LL | /     fn drop(&mut self) {
@@ -106,5 +106,5 @@ LL |         assert_ne!(self.val, 42);
    |         ^^^^^^^^^^^^^^^^^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
 
-warning: 7 warnings emitted
+error: aborting due to 7 previous errors
 
