@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables, unused_imports)]
+#![allow(dead_code, unknown_lints, unused_variables, unused_imports)]
 
 // ══════════════════════════════════════════════════════════════════════
 // SHOULD TRIGGER
