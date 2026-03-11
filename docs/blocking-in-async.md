@@ -173,62 +173,6 @@ additional_paths = [
 | `additional_paths` | `Vec<String>` | `[]` | Extra blocking function paths to flag |
 | `paths` | `Option<Vec<String>>` | `None` | If set, replaces built-in defaults entirely |
 
-## Implementation notes
-
-### Lint pass
-
-`LateLintPass::check_expr` — match `ExprKind::Call` and `ExprKind::MethodCall`, resolve the callee's `DefId`, and compare against the configured path list.
-
-**Async context detection:** Determine if the expression is syntactically inside an `async fn` or `async {}` block. This can be done by:
-
-1. Checking the parent `FnKind` — if it's an `async` function, any expression inside it is in async context.
-2. For `async {}` blocks, check if the parent `ExprKind::Async` exists in the HIR.
-3. Use the `hir::Visitor` to track async nesting depth as you traverse.
-
-### Skip conditions
-
-| Condition | Reason |
-|---|---|
-| Inside `#[test]` function or `#[tokio::test]` | Tests can block without starving other tasks |
-| Inside `#[cfg(test)]` module | Test helpers commonly block |
-| Inside `tokio::task::spawn_blocking` or similar escape hatch | Caller is already aware of blocking |
-| Inside `#[allow(blocking_in_async)]` | Standard rustc attribute |
-
-### Diagnostic
-
-```
-warning: blocking call to `std::fs::read_to_string()` inside async function
-  --> src/loader.rs:12:13
-   |
-12 |     let data = std::fs::read_to_string(path)?;
-   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = help: use `tokio::fs::read_to_string()` instead
-           or wrap the blocking call in `tokio::task::spawn_blocking()`
-```
-
-### Config struct
-
-```rust
-#[derive(Deserialize)]
-#[serde(default)]
-pub struct BlockingInAsyncConfig {
-    /// Extra paths to flag, merged with defaults.
-    pub additional_paths: Vec<String>,
-    /// If set, replaces the built-in defaults entirely.
-    pub paths: Option<Vec<String>>,
-}
-
-impl Default for BlockingInAsyncConfig {
-    fn default() -> Self {
-        Self {
-            additional_paths: vec![],
-            paths: None,
-        }
-    }
-}
-```
-
 ## Relation to other lints
 
 This lint complements `await_holding_lock` (Clippy) and `hardcoded_time` (this suite). Together they cover the most dangerous async anti-patterns:

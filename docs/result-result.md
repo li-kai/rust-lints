@@ -82,42 +82,6 @@ fn wrap<T>(value: T) -> Result<T, Error> {
 
 No configuration. The lint always fires on `Result<Result<_, _>, _>` in function signatures and type aliases.
 
-## Implementation notes
-
-### Lint pass
-
-`LateLintPass::check_fn` for function return types, `LateLintPass::check_item` for type aliases. Inspect the return type / aliased type and check whether it matches the shape `Result<Result<_, _>, _>` by resolving the `DefId` of the outer and inner types to `core::result::Result`.
-
-### Detection strategy
-
-1. Check if the outermost type resolves to `core::result::Result`.
-2. Extract the `Ok` type parameter (first generic argument).
-3. Check if that type also resolves to `core::result::Result`.
-4. If both match, emit the lint.
-
-This approach uses `DefId` resolution rather than string matching, so it works regardless of imports, aliases, or re-exports.
-
-### Skip conditions
-
-| Condition | Reason |
-|---|---|
-| `span.from_expansion()` | Macro-generated code |
-| Generic type parameters | `fn wrap<T>(v: T) -> Result<T, E>` where `T` is opaque |
-| Trait impl methods | Signature is dictated by the trait |
-
-### Diagnostic
-
-```
-warning: nested `Result<Result<_, _>, _>` — consider flattening into a single Result
-  --> src/loader.rs:5:34
-   |
- 5 | fn load(path: &str) -> Result<Result<Config, toml::de::Error>, io::Error> {
-   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = help: use `.and_then()` to chain fallible operations, or unify the error
-           types into a single enum
-```
-
 ### Relation to other lints
 
 Since Clippy provides `option_option` (pedantic) for `Option<Option<T>>`, only the `Result` variant is needed here.

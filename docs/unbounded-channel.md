@@ -154,56 +154,6 @@ additional_paths = [
 | `additional_paths` | `Vec<String>` | `[]` | Extra unbounded channel paths to flag |
 | `paths` | `Option<Vec<String>>` | `None` | If set, replaces built-in defaults entirely |
 
-## Implementation notes
-
-### Lint pass
-
-`LateLintPass::check_expr` — match `ExprKind::Call`, resolve the callee's `DefId`, and compare against the configured path list using `clippy_utils::match_def_path`.
-
-### Skip conditions
-
-| Condition | Reason |
-|---|---|
-| Inside `#[test]` or `#[tokio::test]` | Tests don't run under production load |
-| Inside `#[cfg(test)]` module | Test code can afford unbounded channels |
-| Inside `fn main()` | Main may set up initial channels (application-level decision) |
-| Inside `#[allow(unbounded_channel)]` | Standard rustc attribute |
-
-### Diagnostic
-
-```
-warning: unbounded channel created — can exhaust memory under backpressure
-  --> src/logger.rs:42:29
-   |
-42 |     let (tx, rx) = mpsc::unbounded_channel();
-   |                         ^^^^^^^^^^^^^^^^^^
-   |
-   = help: use `mpsc::channel(capacity)` instead with an explicit bound
-           (e.g., `channel(1000)`) to enable backpressure
-```
-
-### Config struct
-
-```rust
-#[derive(Deserialize)]
-#[serde(default)]
-pub struct UnboundedChannelConfig {
-    /// Extra paths to flag, merged with defaults.
-    pub additional_paths: Vec<String>,
-    /// If set, replaces the built-in defaults entirely.
-    pub paths: Option<Vec<String>>,
-}
-
-impl Default for UnboundedChannelConfig {
-    fn default() -> Self {
-        Self {
-            additional_paths: vec![],
-            paths: None,
-        }
-    }
-}
-```
-
 ## Choosing a Bounded Capacity
 
 - **Logging channels:** 1,000–10,000 messages (logs rarely get backed up)

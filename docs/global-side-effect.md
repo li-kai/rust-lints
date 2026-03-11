@@ -196,33 +196,3 @@ additional_paths = ["my_crate::util::current_time"]
 | `additional_paths` | `Vec<String>` | `[]` | Extra paths to flag, merged with defaults |
 | `paths` | `Option<Vec<String>>` | `None` | If set, replaces built-in defaults entirely |
 
-## Implementation
-
-All four lints use identical `LateLintPass::check_expr` structure:
-
-1. Match `ExprKind::Call` and `ExprKind::MethodCall`.
-2. Resolve the callee's `DefId`.
-3. Compare against the configured path list via `clippy_utils::match_def_path`.
-4. If matched, emit the lint.
-
-### Diagnostic format
-
-```
-warning[global_side_effect::time]: direct call to `chrono::Utc::now()`
-  --> src/billing.rs:42:15
-   |
-42 |     let now = Utc::now();
-   |               ^^^^^^^^^^
-   |
-   = help: accept a time parameter or use a clock trait so callers can
-           control the time source in tests
-```
-
-The help text varies by lint:
-
-| Lint | Help |
-|---|---|
-| `global_side_effect::time` | accept a time parameter or use a clock trait |
-| `global_side_effect::randomness` | accept an `impl Rng` parameter so callers can inject a seeded RNG |
-| `global_side_effect::env` | move this to your application's entry point and pass the value as a parameter |
-| `global_side_effect::logging_init` | move logger initialization to `main()`; library code should never install a global logger |

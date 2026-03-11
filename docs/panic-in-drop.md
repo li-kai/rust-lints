@@ -103,52 +103,6 @@ impl Processor {
 
 No configuration. The lint always fires on panic-able expressions inside `Drop::drop`.
 
-## Implementation notes
-
-### Lint pass
-
-`LateLintPass::check_impl_item` — check if the enclosing `impl` block is an `impl Drop for T`. If so, match `ImplItemKind::Fn` where the method name is `drop`. Walk the function body with a `rustc_hir::intravisit::Visitor` to find:
-
-1. Method calls to `unwrap` and `expect` (via `ExprKind::MethodCall`).
-2. Macro invocations of `panic!`, `unreachable!`, `assert!`, `assert_eq!`, `assert_ne!` (via `ExprKind::Call` on items whose `DefId` resolves to the known macro paths, or by checking `span.ctxt()` for macro expansion from these macros).
-
-### Detecting the Drop impl
-
-Check the parent `impl` block's trait ref: resolve the trait `DefId` and compare against `core::ops::drop::Drop`. This ensures it works regardless of imports.
-
-### Skip conditions
-
-| Condition | Reason |
-|---|---|
-| `span.from_expansion()` on the impl item | Macro-generated Drop impls |
-| Expressions inside `if std::thread::panicking()` guards | Already guarded against double-panic |
-
-The `std::thread::panicking()` guard is a common pattern:
-
-```rust
-impl Drop for Guard {
-    fn drop(&mut self) {
-        if !std::thread::panicking() {
-            // Safe to panic here — we know we're not already unwinding
-            self.check().unwrap();
-        }
-    }
-}
-```
-
-### Diagnostic
-
-```
-warning: `.unwrap()` in `Drop` impl — this will abort if called during unwinding
-  --> src/tempfile.rs:12:9
-   |
-12 |         std::fs::remove_file(&self.path).unwrap();
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = help: handle the error with `if let Err(e) = ...` or ignore it with `let _ = ...`
-   = note: panicking in `drop()` while already unwinding causes an immediate process abort
-```
-
-### Relation to other lints
+## Relation to other lints
 
 This pairs well with `fallible_new` — together they cover the two most dangerous places to panic: constructors (surprising callers) and destructors (aborting the process).
