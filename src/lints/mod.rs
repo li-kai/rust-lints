@@ -13,6 +13,7 @@ pub mod result_result;
 pub mod suggest_builder;
 mod suppression;
 pub mod unbounded_channel;
+pub mod unstructured_log_fields;
 
 use core::cell::RefCell;
 use std::collections::HashSet;

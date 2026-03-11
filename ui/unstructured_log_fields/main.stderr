@@ -1,0 +1,35 @@
+warning: `tracing::info!` uses format args instead of structured fields
+  --> $DIR/main.rs:18:5
+   |
+LL |     tracing::info!("user {} hit {}", user_id, path); //~ WARNING: unstructured
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use structured fields: `tracing::info!(key, "message")` instead of `tracing::info!("msg {}", key)`
+   = note: `#[warn(unstructured_log_fields)]` on by default
+
+warning: `tracing::warn!` uses format args instead of structured fields
+  --> $DIR/main.rs:23:5
+   |
+LL |     tracing::warn!("processed {} items", count); //~ WARNING: unstructured
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use structured fields: `tracing::info!(key, "message")` instead of `tracing::info!("msg {}", key)`
+
+warning: `tracing::debug!` uses format args instead of structured fields
+  --> $DIR/main.rs:28:5
+   |
+LL |     tracing::debug!("request: {:?}", req); //~ WARNING: unstructured
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use structured fields: `tracing::info!(key, "message")` instead of `tracing::info!("msg {}", key)`
+
+warning: `tracing::error!` uses format args instead of structured fields
+  --> $DIR/main.rs:33:5
+   |
+LL |     tracing::error!("failed with status {}", code); //~ WARNING: unstructured
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use structured fields: `tracing::info!(key, "message")` instead of `tracing::info!("msg {}", key)`
+
+warning: 4 warnings emitted
+
