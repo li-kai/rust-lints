@@ -1,5 +1,5 @@
 // Test cases for the `panic_in_drop` lint.
-#![allow(unknown_lints, debug_remnants)]
+#![allow(dead_code, unknown_lints, debug_remnants)]
 
 // ── SHOULD TRIGGER ──────────────────────────────────────────────────
 

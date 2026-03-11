@@ -1,5 +1,5 @@
 // Test cases for the `unbounded_channel` lint.
-#![allow(unknown_lints)]
+#![allow(dead_code, unknown_lints)]
 
 use std::sync::mpsc;
 

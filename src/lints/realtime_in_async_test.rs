@@ -165,8 +165,8 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
 fn is_start_paused_true(expr: &Expr<'_>) -> bool {
     if let ExprKind::MethodCall(method, _receiver, args, _span) = &expr.kind
         && method.ident.as_str() == "start_paused"
-        && args.len() == 1
-        && is_bool_lit_true(&args[0])
+        && let [arg] = args
+        && is_bool_lit_true(arg)
     {
         return true;
     }

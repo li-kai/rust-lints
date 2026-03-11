@@ -1,7 +1,7 @@
 #![allow(
+    unknown_lints,
     dead_code,
     debug_remnants,
-    unknown_lints,
     unused_variables,
     unused_mut,
     clippy::allow_attributes_without_reason

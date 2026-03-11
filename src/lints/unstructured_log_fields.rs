@@ -113,6 +113,10 @@ fn has_only_format_args(snippet: &str) -> bool {
 /// and the format string content itself.
 ///
 /// Returns `(before_format_string, format_string_content)`.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "all `bytes[i]` accesses are guarded by `i < bytes.len()` loop conditions"
+)]
 fn split_at_format_string(snippet: &str) -> Option<(&str, &str)> {
     // Find the opening delimiter after the macro name.
     let args_start = snippet.find('(')?;
@@ -157,6 +161,10 @@ fn split_at_format_string(snippet: &str) -> Option<(&str, &str)> {
 
 /// Check if a format string contains placeholders like `{}`, `{:?}`, `{name}`.
 /// Escaped braces `{{` are ignored.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "all `bytes[i]` accesses are guarded by `i < bytes.len()` loop condition"
+)]
 fn has_format_placeholders(fmt: &str) -> bool {
     let bytes = fmt.as_bytes();
     let mut i = 0;
