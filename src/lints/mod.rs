@@ -8,6 +8,7 @@ pub mod map_init_then_insert;
 pub mod needless_builder;
 pub mod panic_in_drop;
 pub mod proper_error_type;
+pub mod realtime_in_async_test;
 pub mod result_result;
 pub mod suggest_builder;
 mod suppression;

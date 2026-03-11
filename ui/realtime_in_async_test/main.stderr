@@ -1,0 +1,40 @@
+warning: real-time wait in async test without paused clock
+  --> $DIR/main.rs:18:5
+   |
+LL |     tokio::time::sleep(Duration::from_secs(5)).await; //~ WARNING: real-time wait
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
+   = note: `#[warn(realtime_in_async_test)]` on by default
+
+warning: real-time wait in async test without paused clock
+  --> $DIR/main.rs:23:13
+   |
+LL |       let _ = tokio::time::timeout(
+   |  _____________^
+LL | |         //~ WARNING: real-time wait
+LL | |         Duration::from_secs(5),
+LL | |         async { 42 },
+LL | |     )
+   | |_____^
+   |
+   = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
+
+warning: real-time wait in async test without paused clock
+  --> $DIR/main.rs:33:24
+   |
+LL |     let mut interval = tokio::time::interval(Duration::from_secs(1)); //~ WARNING: real-time wait
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
+
+warning: real-time wait in async test without paused clock
+  --> $DIR/main.rs:40:5
+   |
+LL |     tokio::time::sleep_until(deadline).await; //~ WARNING: real-time wait
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
+
+warning: 4 warnings emitted
+
