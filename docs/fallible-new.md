@@ -28,8 +28,6 @@ The lint fires when the body of `fn new(...)` (or `fn new_*()` variants) contain
 | `.expect("...")` | On `Result` or `Option` |
 | `panic!(...)` | Direct panic |
 | `unreachable!(...)` | Logically equivalent to panic |
-| `todo!(...)` | Incomplete implementation |
-| `unimplemented!(...)` | Incomplete implementation |
 
 ## Examples
 
@@ -109,7 +107,7 @@ check_new_variants = true
 
 ### Lint pass
 
-`LateLintPass::check_impl_item` — match `ImplItemKind::Fn` where the method name is `new` (or starts with `new_` when `check_new_variants` is enabled). Walk the function body with a `rustc_hir::intravisit::Visitor` to find calls to `unwrap`, `expect`, and macro invocations of `panic!`, `todo!`, `unreachable!`, and `unimplemented!`.
+`LateLintPass::check_impl_item` — match `ImplItemKind::Fn` where the method name is `new` (or starts with `new_` when `check_new_variants` is enabled). Walk the function body with a `rustc_hir::intravisit::Visitor` to find calls to `unwrap`, `expect`, and macro invocations of `panic!` and `unreachable!`.
 
 ### Skip conditions
 

@@ -163,15 +163,13 @@ impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
             }
         }
 
-        // Check for panic macros: panic!, unreachable!, todo!, unimplemented!
+        // Check for panic macros: panic!, unreachable!
         if expr.span.from_expansion() {
             let expn_data = expr.span.ctxt().outer_expn_data();
             if let ExpnKind::Macro(_, macro_name) = expn_data.kind {
                 let desc: Option<&'static str> = match macro_name.as_str() {
                     "panic" => Some("panic!()"),
                     "unreachable" => Some("unreachable!()"),
-                    "todo" => Some("todo!()"),
-                    "unimplemented" => Some("unimplemented!()"),
                     _ => None,
                 };
                 if let Some(desc) = desc {

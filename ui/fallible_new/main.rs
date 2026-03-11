@@ -48,16 +48,6 @@ mod triggers {
         }
     }
 
-    // -- todo! in new --
-    struct Placeholder;
-
-    impl Placeholder {
-        pub fn new() -> Self {
-            //~^ WARNING: constructor `new` can panic
-            todo!()
-        }
-    }
-
     // -- new_* variant with unwrap --
     struct Server {
         port: u16,
