@@ -1,68 +1,106 @@
-# Module Dependencies: Exploring Solutions to Architectural Erosion
+# Module Dependencies
 
-## The Problem (Unsolved)
+## The Problem
 
-AI coding agents widen visibility modifiers (`fn` → `pub fn`, `pub(crate)` → `pub`) as a quick fix when encountering compiler access errors. This silently exposes internal implementation details and creates architectural debt. The question is: what's the best way to guide agents toward restructuring instead?
+AI coding agents widen visibility modifiers (`fn` → `pub fn`, `pub(crate)` → `pub`) as a quick fix when encountering compiler access errors. This silently exposes internal implementation details and creates architectural debt. The ball of mud doesn't form through one bad decision — it forms because architectural changes are invisible in code review. A `use crate::server::SessionInfo` buried on line 847 of a new file is an architectural decision that ships unreviewed.
 
-Several approaches exist, none proven optimal:
+The solution has two parts: a **lint** that forces architectural intent before implementation, and a **CI process** that makes dependency changes visible to human reviewers.
 
-- **Enforce visibility narrowing directly:** Flag overly-wide `pub` and push back on widening. This works but requires the agent to understand why narrowing is right — it's fighting the symptom.
-- **Enforce dependency direction:** Restrict which modules can depend on which. If the target module isn't permitted, widening visibility becomes useless and restructuring becomes necessary.
-- **Enforce acyclic dependencies only:** Catch entanglement but not directionality. Weaker but simpler.
-- **Split into crates:** Structural enforcement at compile time via `Cargo.toml`.
-- **Do nothing in code:** Accept that this is an architectural decision, enforce it via code review and conventions.
+### Why Compile-Time, Not CI-Only
 
-This document explores one path: **enforcing dependency direction via an allowlist lint.** This is not the answer. It's a hypothesis, informed by research in other ecosystems, about what might work. The problem is unsolved. Multiple approaches remain viable, and the right answer may involve none of these tools.
+A CI-only check (flagging bad dependencies in PR diffs) fires *after* the agent has written the code. The agent pushes a PR, CI flags it, the agent rewrites — or the human rejects and explains. That's the review bottleneck this tool exists to eliminate. A compiler lint fires *during* implementation, before a PR exists. The agent gets immediate feedback and self-corrects without human involvement.
 
-## The Case for Module-Level Linting (Provisional)
+### Demand Side Only
 
-Crate splitting solves the directional dependency problem structurally. `Cargo.toml` declares allowed dependencies, cargo enforces them, cycles are impossible. This is the structural solution.
+The lint enforces **who may consume** (demand side), not **what is exposed** (supply side). An agent widening `fn` to `pub fn` within the same module won't trigger this lint. That's deliberate — Rust's visibility modifiers (`pub`, `pub(crate)`, `pub(super)`, private fields, accessor methods) already handle the supply side. Trying to control both sides is what Packwerk attempted with privacy enforcement; they removed it in 3.0 because it created more debt than it resolved. The lint constrains dependency direction. Rust constrains API surface. Each does its job.
 
-But there's a question about timing and scope:
+## Why an Allowlist, Not a Deny List
 
-**Timing:** By the time a crate has grown enough to justify splitting, the architectural seams may already be tangled. A module-level lint earlier in the codebase's lifecycle could keep seams clean *before* splitting becomes necessary, making future refactoring cheaper.
+We considered two approaches:
 
-**Scope:** Not every crate justifies a workspace. A 2000-line crate with 4 interdependent modules might never split. But it still benefits from enforced architectural structure.
+- **Deny list:** Everything is permitted by default. Bad edges are recorded after they're caught in review.
+- **Allowlist:** Nothing is permitted by default. Every cross-module dependency must be declared upfront.
 
-The module-level lint is a hypothesis: apply crate-like discipline (directional dependencies) at the module scale. Whether this is better than "just split earlier" or "just review carefully" is unproven. This document explores what such a lint would look like.
+The deny list is reactive — by the time a reviewer catches a bad edge, the agent has already written code that depends on it. Rejecting the PR means throwing away work. Approving it means the bad edge ships.
+
+The allowlist forces the architectural decision **before the code exists**. The agent can't write `use crate::server::SessionInfo` in the payments module without first adding `server` to payments' dependency list in the config. That config change is the architectural decision, and it happens explicitly, not buried in an implementation file.
+
+A wrong allowlist is fixable — update the config, the lint stops firing. A bad dependency that shipped is structural debt — code depends on it, tests assume it, removing it is a refactor. The allowlist's failure mode is friction. The deny list's failure mode is erosion. Erosion is worse.
 
 ## What We Learned From Other Ecosystems
 
-We researched how Java (ArchUnit), Python (import-linter), TypeScript (dependency-cruiser), Go (language + third-party tools), and .NET (ArchUnitNET, NDepend) solve this problem. Key insights:
+We researched how Java (ArchUnit), Python (import-linter), TypeScript (dependency-cruiser), Ruby (Packwerk), Go (language + third-party tools), and .NET (ArchUnitNET, NDepend) solve this problem.
+
+### The Packwerk Story
+
+Shopify built allowlist-based module dependency enforcement for a 2.8M-line Ruby monolith. Gusto extended the tooling (including a Rust reimplementation, `pks`, for 10-20x speed). GitHub adopted it. The results were mixed:
+
+**What worked:** "Stop the bleeding" — new violations are blocked, old ones grandfathered. Exhaustive mode prevents modules from escaping enforcement. Gusto achieved ~20% CI savings via conditional pack builds.
+
+**What failed:** Boundaries drawn from semantic intuition ("this is billing code") rarely matched actual runtime coupling. Todo files grew "monstrously large." Even after clearing all Packwerk violations for a package, only 40% of tests passed when actually extracted — static analysis misses dynamic coupling (metaprogramming, test fixtures, initializers). Privacy enforcement (controlling which items are part of a module's public API) was removed entirely in Packwerk 3.0 — it created more debt than it resolved.
+
+**Shopify's conclusion:** Packwerk remains valuable for "holding the line against new dependencies at the base layer" but is "no longer as central as it once was." Architecture-as-tests works. Getting the boundaries right is the hard part.
 
 ### What to Adopt
 
-1. **Exhaustive mode** (from import-linter): Every module must be assigned to the config. An agent cannot create a new module that silently escapes enforcement.
+1. **Exhaustive mode** (from import-linter): Every module must appear in the config. An agent cannot create a new module that silently escapes enforcement.
 
-2. **Full dependency chains in diagnostics** (from ArchUnit + import-linter): Show the exact line, the item being referenced, and which module it resolved to. The agent needs precision to know what to fix.
+2. **Full dependency chains in diagnostics** (from ArchUnit + import-linter): Show the exact line, the item being referenced, and which module it resolved to.
 
-3. **Baseline file for adoption** (from ArchUnit's FreezingArchRule): Existing codebases have violations. Without a baseline, enabling the lint produces a wall of errors and gets disabled. A baseline records current violations and only flags new ones, making incremental adoption practical.
+3. **Architecture-as-configuration** (from ArchUnit): The config file is the crate's architectural diagram — documentation that fails the build when violated.
 
-4. **Architecture-as-configuration** (from ArchUnit): The config file should be readable as the crate's architectural diagram. It's documentation that fails the build when violated.
+4. **Full type resolution, not parse-only** (learning from cargo-archtest): Parse-only tools detect dependencies via `use` statements but miss direct path references in function bodies, type annotations, and trait bounds. A compiler lint with `TyCtxt` access sees all resolved paths.
 
-5. **Full type resolution, not parse-only** (learning from cargo-archtest): Some tools only detect dependencies via `use` statements. They miss direct path references in function bodies, type annotations, and trait bounds. A compiler lint with `TyCtxt` access sees all resolved paths.
+5. **Dead edge detection** (novel): Warn on edges declared in the config that have no corresponding dependency in code. Stale edges make the config lie and the diagram misleading. The config must stay honest.
 
 ### What to Skip
 
-1. **Transitive dependency checking** (from import-linter): import-linter flags `A → B → C` as `A` depending on `C`. We skip this because the allowlist already handles it — if both edges are approved, the transitive dependency is by design.
+1. **Baseline / todo files:** Packwerk's `package_todo.yml` and ArchUnit's `FreezingArchRule` exist for gradual adoption on legacy codebases. We skip this — violations are errors, not warnings. This is viable because the lint targets new projects where dependencies are clean from the start. Baselines defer debt; they don't resolve it. Shopify's todo files grew for years without being resolved. If legacy adoption becomes a requirement, revisit this decision — but the no-baseline stance is correct for the current scope.
 
-2. **Forbidden vs allowed duality** (from dependency-cruiser): Some tools support both denylists and allowlists. We use only allowlists — stricter and simpler.
+2. **Privacy enforcement:** Shopify tried controlling which items are part of a module's public API. They removed it in Packwerk 3.0. Dependency direction is the right lever — not API surface control. Rust's visibility modifiers (`pub`, `pub(crate)`, `pub(super)`) already handle the supply side. The lint handles the demand side.
 
-3. **Multi-layer classification schemes**: Every ecosystem uses layers (Java: 3-5, Stripe: 5). Every engineer complains about classification ambiguity. The problem: logic and data have opposite gravity. A struct belongs in the foundation, but its methods may belong in application logic — they live in the same impl block. No layer scheme cleanly separates them. Per-module allowlists sidestep this by not classifying at all; they just constrain edges.
+3. **Transitive dependency checking** (from import-linter): import-linter flags `A → B → C` as `A` depending on `C`. The allowlist already handles this — if both edges are approved, the transitive dependency is by design.
 
-## One Possible Design: Allowlist-Based Module Dependencies
+4. **Multi-layer classification schemes:** Every ecosystem uses layers (Java: 3-5, Stripe: 5). Every engineer complains about classification ambiguity. A struct belongs in the foundation, but its methods may belong in application logic — they live in the same impl block. Per-module allowlists sidestep this by not classifying at all; they just constrain edges.
 
-If the answer is "enforce module dependency direction," here's one design (informed by what works in other ecosystems):
+### Known Failure Modes to Design Against
 
-**Lint name:** `module_dependencies`
+Research across ecosystems identified six failure modes:
 
-**Core idea:** Each top-level module declares which other top-level modules it may depend on. Anything not in the allowlist is a violation.
+| Failure Mode | Root Cause | Our Mitigation |
+|---|---|---|
+| Utopian graph design | Boundaries from ideals, not code reality | Config is reviewed in PRs with a rendered graph — bad boundaries are visible |
+| Baseline only grows | Adding exceptions easier than fixing violations | No baseline — violations are errors |
+| Config burden > value | Config must track every structural change | Config is small (top-level modules only) and changes are the review artifact |
+| Cross-cutting gravity well | Shared/foundation module absorbs everything | Visible in the graph — a module with arrows from everything is obvious |
+| Refactoring cliff | Large refactors require simultaneous config changes | Config is one file with short lines — updating it is trivial |
+| Tool as noise | Violations without actionable guidance | Prescriptive diagnostics that say what to do, not just what's wrong |
+
+## The Gap in Rust Tooling
+
+No existing Rust tool provides type-resolved, directional module dependency enforcement within a single crate:
+
+| Tool | What It Does | What It Doesn't Do |
+|---|---|---|
+| `unreachable_pub` | Flags `pub` items that aren't reachable outside the crate | No dependency direction |
+| `pub(in path)` | Controls what's exposed (supply side) | Doesn't control who consumes (demand side) |
+| `cargo-modules --acyclic` | Detects cycles | No directional enforcement |
+| `arch_test_core` / `cargo-archtest` | Layer and cycle rules | Parse-only — misses direct path references |
+| Crate splitting | Full enforcement via `Cargo.toml` | High cost, orphan rule complications |
+
+The infrastructure for a proper lint exists: dylint provides `LateLintPass` with full `TyCtxt` access. Nobody has built it.
+
+## Design
+
+### Lint: `module_dependencies`
+
+**Core idea:** Each top-level module declares which other top-level modules it may depend on. Anything not in the allowlist is a compile-time error. The config file is the architecture diagram.
 
 **Configuration:**
 
 ```toml
 [module_dependencies]
-exhaustive = true  # Every module must appear in this config
+exhaustive = true  # Every top-level module must appear
 
 [module_dependencies.allow]
 types = []
@@ -72,50 +110,119 @@ payments = ["types", "errors", "utils"]
 server = ["types", "errors", "utils", "payments"]
 ```
 
-**How it would work:**
-
-- At compile time, for every resolved path in the code, the lint checks: "Is the target module in the source module's allowlist?"
-- If not, violation. Diagnostic shows the exact line, the item, and the resolved target.
-- Modules not in the config are errors (exhaustive mode prevents escape hatches).
-- `#[cfg(test)]` code is excluded — tests can reach anywhere.
-
-**Baseline adoption (from ArchUnit):**
-
-For existing codebases, generate a baseline file:
+**Submodule granularity (future):** The config schema should not prevent optional nesting for cases where top-level granularity is too coarse. For example, allowing only `payments.checkout` (not all of `payments`) to depend on `server`:
 
 ```toml
-# module_dependencies_baseline.toml
-[[accepted]]
-from = "utils"
-to = "payments"
-reason = "Legacy; refactoring tracked in #1234"
+[module_dependencies.allow]
+payments = ["types", "errors", "utils"]
+payments.checkout = ["server"]  # only checkout, not all of payments
 ```
 
-New violations fail. Removing entries re-enables enforcement. This makes gradual adoption possible.
+This is not required for the initial implementation, but the config format and lint internals should not make it impossible to add later. Top-level modules are the default enforcement boundary; submodule overrides are opt-in where the risk justifies the config cost.
 
-**Tradeoffs of this design:**
+**How it works:**
 
-- **Pro:** Unambiguous (no classification debates like "is this a tool or a library?"). Exhaustive mode prevents modules from escaping enforcement. Full type resolution catches dependencies that parse-only tools miss.
-- **Con:** Configuration burden (though with AI agents writing code, burden is one-time human setup). Doesn't solve the orphan rule problem when crates eventually split. May be overkill for small codebases that will never split.
+1. At compile time, for every resolved path, the lint determines the source and target top-level modules.
+2. If the target module is not in the source module's allowlist, the lint emits an error.
+3. Modules not in the config are errors (exhaustive mode).
+4. `#[cfg(test)]` code is excluded — tests can reach anywhere. This is safe because test code doesn't run in release builds, so an agent cannot use `#[cfg(test)]` to smuggle production logic past the lint. Integration tests genuinely need cross-module access; enforcing the allowlist on tests would make them unwritable without mirroring the entire dependency graph.
+5. Edges declared in the config with no corresponding dependency in code produce a warning (dead edge detection).
 
-## Open Questions
+**Diagnostic format:**
 
-1. **Is directional enforcement the right leverage?** Our hypothesis is that restricting *which modules can depend on which* forces better restructuring than restrictions on *how visible items are*. But this is untested. It's possible that simpler approaches work better — just enabling `unreachable_pub`, or just doing code review, or just splitting into crates earlier.
+```
+error[module_dependencies]: `payments` depends on `server`, which is not in its allowlist
+  --> src/payments/checkout.rs:12:5
+   |
+12 |     use crate::server::SessionInfo;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this dependency is intentional, add "server" to the
+           `payments` allowlist in module_dependencies.toml
+   = help: if not, move `SessionInfo` to a module that `payments`
+           is allowed to depend on (currently: types, errors, utils)
+```
 
-2. **What's the false positive rate in practice?** The allowlist model is conceptually simple, but real codebases have patterns we haven't modeled — macros, generic code, cross-cutting concerns. How often would the lint fire on architecturally sound code?
+The diagnostic tells the agent exactly what to do: either update the config (which will be reviewed) or restructure the code.
 
-3. **Does the configuration burden justify the value?** With AI agents, setup cost is one-time. But the config still needs to be right, and it needs to evolve as the codebase evolves. Is this worth it, or is the answer "just split into crates"?
+### CI Process: Graph Rendering
 
-4. **How does this interact with the orphan rule?** If you build this lint and later split the crate into a workspace, the orphan rule will create new constraints that the module-level lint never anticipated. Does this lint actually make crates-splitting easier, or just delay the pain?
+The config file is machine-readable architecture. CI renders it as a visual graph on every PR that changes it.
 
-5. **What do agents actually need?** When an agent encounters a visibility error or a dependency error, what guidance actually changes its behavior? A lint message? Access to the allowlist in the config? A guide explaining the orphan rule and how to handle it?
+**What CI does:**
 
-## What We Know From Other Ecosystems
+1. Detect if `module_dependencies.toml` changed in the PR.
+2. Render the before and after dependency graphs (mermaid, graphviz, or similar).
+3. Post the graph diff as a PR comment, highlighting new and removed edges.
 
-- ArchUnit (Java) shows that architecture-as-tests works and scales.
-- import-linter (Python) shows that exhaustive mode prevents drift.
-- cargo-archtest (Rust) shows that parse-only dependency detection misses transitive dependencies.
-- Existing Rust tooling offers `unreachable_pub` (visibility hygiene) and cycle detection, but nothing for directional enforcement.
+**Example PR comment:**
 
-This is the research foundation. The design above is one possible next step, informed but not proven.
+```
+Module dependency changes in this PR:
 
+  Added:    payments → server
+  Removed:  utils → legacy
+
+[Before] types ← errors ← utils ← payments
+                             ↑
+                           server
+
+[After]  types ← errors ← utils ← payments
+                             ↑        ↓
+                           server ←───┘
+```
+
+The reviewer sees the architectural change visually. "Payments now depends on server and server depends on payments — that's a cycle." Ten-second review. Without this, the same change is a `use` statement buried in an implementation file.
+
+**Why render from the config, not from the code:** The config is the architectural intent. The lint ensures the code matches the config. The graph shows the intent. If we derived the graph from code, it would show the current state including any violations — which defeats the purpose.
+
+### Complementary Conventions
+
+The lint enforces dependency direction (demand side). Rust's existing mechanisms enforce API surfaces (supply side). Together:
+
+- **Private submodules:** Submodules within a top-level module should be private (`mod`, not `pub mod`). The parent re-exports its API via `pub use`. This is standard Rust (the std library does this everywhere). An agent widening a submodule to `pub mod` is a code smell independent of this lint.
+- **`unreachable_pub` denied:** Items marked `pub` that aren't reachable outside the crate should use `pub(crate)`. This is an existing Rust lint, set to `deny`.
+
+These conventions are recommendations, not enforced by the `module_dependencies` lint. They reduce the surface area of what's importable, making the allowlist more meaningful.
+
+## Resolved Questions
+
+### 1. False positive rate in practice
+
+**Proc macros:** Non-issue. Proc macros must live in external crates (Rust language requirement). The lint only tracks intra-crate dependencies, so proc macro-generated paths are invisible to it.
+
+**`macro_rules!` macros:** Treated as real dependencies. A `macro_rules!` macro in `utils` that expands to `crate::server::SessionInfo` creates a dependency from the *call site's* module to `server`. The lint flags this at the call site. The dependency is real — the macro creates coupling. The agent can read the macro definition to understand the expansion and decide whether to restructure or propose a config change.
+
+**Re-exports:** The lint tracks the *syntactic* dependency — the module the path resolves through, not the module that originally defines the item. If `api` re-exports `types::UserId` and `payments` uses `api::UserId`, the lint sees `payments → api`. This is correct. The alternative (tracing to the origin module) would require the config to model re-export chains, adding config bloat without meaningful architectural signal.
+
+**Feature-gated code:** `#[cfg(feature = "...")]` code is treated the same as non-gated code. A dependency that only exists under a feature flag is still a dependency. Only `#[cfg(test)]` code is excluded.
+
+**Blanket trait impls:** If `types` defines `trait Validate` with a blanket impl and `payments::Order` satisfies the bounds, the implicit dependency may or may not surface as a path the lint can intercept. This is a known potential gap. **Action:** Validate empirically during implementation with real-world trait patterns. If `TyCtxt` does not surface these as interceptable paths, document as a limitation rather than adding complexity to cover an edge case.
+
+### 2. Orphan rule interaction
+
+The lint does not solve crate splitting. Module boundaries are not crate boundaries. A clean module dependency graph is *necessary* for a future crate split but not *sufficient* — the orphan rule (`impl ForeignTrait for ForeignType` is forbidden across crate boundaries) introduces constraints that module-level analysis cannot detect.
+
+This is a known limitation, not a design flaw. The lint's job is enforcing architecture within a crate. Crate splitting is a separate problem with a separate strategy (newtypes, facade crates, etc.) to be documented independently when the need arises.
+
+### 3. What agents need
+
+**Model:** The AI agent can either restructure code *or* propose a config change in a separate commit. The config change goes through CI, which renders the graph diff. A human reviews the architectural decision (config + graph), not the implementation.
+
+This means the agent is never blocked — it can always unblock itself by proposing the dependency. The review gate is on the config change, not the code. If the human rejects the architectural change, the agent restructures.
+
+**Diagnostic update:** The error message should make both paths explicit:
+
+```
+error[module_dependencies]: `payments` depends on `server`, which is not in its allowlist
+  --> src/payments/checkout.rs:12:5
+   |
+12 |     use crate::server::SessionInfo;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this dependency is architecturally correct, add "server" to
+           the `payments` allowlist in module_dependencies.toml (in a
+           separate commit for review)
+   = help: if not, move `SessionInfo` to a module that `payments` is
+           allowed to depend on (currently: types, errors, utils)
+```

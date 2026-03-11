@@ -1,0 +1,55 @@
+error: `payments` depends on `server`, which is not in its allowlist
+  --> $DIR/main.rs:58:32
+   |
+LL |     pub fn bad_dependency() -> crate::server::Session {
+   |                                ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this dependency is architecturally correct, add "server" to the `payments` allowlist in dylint.toml under [module_dependencies.allow]
+           if not, move the item to a module that `payments` is allowed to depend on (currently: errors, types, utils)
+   = note: `#[deny(module_dependencies)]` on by default
+
+error: `payments` depends on `server`, which is not in its allowlist
+  --> $DIR/main.rs:59:9
+   |
+LL |         crate::server::Session { active: true }
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this dependency is architecturally correct, add "server" to the `payments` allowlist in dylint.toml under [module_dependencies.allow]
+           if not, move the item to a module that `payments` is allowed to depend on (currently: errors, types, utils)
+
+error: `server` depends on `payments`, which is not in its allowlist
+  --> $DIR/main.rs:69:32
+   |
+LL |     pub fn bad_dependency() -> crate::payments::Order {
+   |                                ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this dependency is architecturally correct, add "payments" to the `server` allowlist in dylint.toml under [module_dependencies.allow]
+           if not, move the item to a module that `server` is allowed to depend on (currently: errors, types, utils)
+
+error: `server` depends on `payments`, which is not in its allowlist
+  --> $DIR/main.rs:70:9
+   |
+LL | /         crate::payments::Order {
+LL | |             user: crate::types::UserId(1), // OK: server → types is allowed
+LL | |             total: crate::types::Amount(0.0),
+LL | |         }
+   | |_________^
+   |
+   = help: if this dependency is architecturally correct, add "payments" to the `server` allowlist in dylint.toml under [module_dependencies.allow]
+           if not, move the item to a module that `server` is allowed to depend on (currently: errors, types, utils)
+
+warning: allowlist declares `server` → `errors`, but no such dependency exists in code
+   |
+   = help: remove "errors" from the `server` allowlist in dylint.toml, or this edge is stale
+   = note: `#[warn(module_dependencies_dead_edge)]` on by default
+
+warning: allowlist declares `server` → `utils`, but no such dependency exists in code
+   |
+   = help: remove "utils" from the `server` allowlist in dylint.toml, or this edge is stale
+
+warning: allowlist declares `payments` → `errors`, but no such dependency exists in code
+   |
+   = help: remove "errors" from the `payments` allowlist in dylint.toml, or this edge is stale
+
+error: aborting due to 4 previous errors; 3 warnings emitted
+

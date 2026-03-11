@@ -44,6 +44,9 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::result_result::RESULT_RESULT,
         lints::realtime_in_async_test::REALTIME_IN_ASYNC_TEST,
         lints::unstructured_log_fields::UNSTRUCTURED_LOG_FIELDS,
+        lints::module_dependencies::MODULE_DEPENDENCIES,
+        lints::module_dependencies::MODULE_DEPENDENCIES_UNLISTED,
+        lints::module_dependencies::MODULE_DEPENDENCIES_DEAD_EDGE,
     ]);
     lint_store.register_pre_expansion_pass(|| {
         Box::new(lints::bon_builder_collector::BonBuilderCollector)
@@ -67,4 +70,6 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store.register_late_pass(|_| {
         Box::new(lints::realtime_in_async_test::RealtimeInAsyncTest::new())
     });
+    lint_store
+        .register_late_pass(|_| Box::new(lints::module_dependencies::ModuleDependencies::new()));
 }

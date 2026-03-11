@@ -69,6 +69,16 @@ impl Default for FallibleNewConfig {
     }
 }
 
+/// Config for the `module_dependencies` lint.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub struct ModuleDependenciesConfig {
+    /// When true, every top-level module must appear in the config.
+    pub exhaustive: bool,
+    /// Map of module name → list of modules it may depend on.
+    pub allow: std::collections::HashMap<String, Vec<String>>,
+}
+
 /// Top-level config for the `global_side_effect` lint group.
 ///
 /// Read from `dylint.toml` under the key `global_side_effect`:
