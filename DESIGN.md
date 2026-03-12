@@ -48,14 +48,15 @@ rust-lints/
 
 Suggests adding `#[derive(bon::Builder)]` to structs with many named fields.
 
-**Triggers when:** A struct has `>= threshold` named fields (default: 4) and does not have `#[derive(bon::Builder)]`, `#[derive(Builder)]`, or `#[bon::builder]` attribute.
+**Triggers when:** A struct has `>= threshold` named fields (default: 6, excluding `PhantomData`) and does not have `#[derive(bon::Builder)]`.
 
-**Skips:** Tuple structs, unit structs, macro-expanded structs (`item.span.from_expansion()`).
+**Skips:** Tuple structs, unit structs, macro-expanded structs, structs with lifetime parameters, `#[repr(C)]` structs, structs named `*Builder`, and structs deriving any trait in `skip_derives`.
 
 **Config** (via `dylint.toml`):
 ```toml
 [suggest_builder]
-threshold = 4
+threshold = 6
+skip_derives = ["Default", "Queryable", "Insertable", "Selectable"]
 ```
 
 **Implementation:** `LateLintPass::check_item`, match `ItemKind::Struct` with `VariantData::Struct`, count `fields.len()`, check attrs via `cx.tcx.hir().attrs(item.hir_id())` for derive attributes containing `bon::Builder` or `Builder` in the token stream.

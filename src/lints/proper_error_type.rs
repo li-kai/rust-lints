@@ -18,6 +18,7 @@ rustc_session::declare_lint! {
     "flags improper error types in public API signatures"
 }
 
+#[expect(suggest_builder)]
 pub struct ProperErrorType {
     /// `impl Error for T` blocks seen, keyed by the self type's ADT `DefId`.
     error_impls: FxHashMap<rustc_hir::def_id::DefId, ErrorImplInfo>,

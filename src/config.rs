@@ -33,11 +33,23 @@ pub struct DebugRemnantsConfig {
 #[serde(default)]
 pub struct SuggestBuilderConfig {
     pub threshold: usize,
+    /// Derive names that exempt a struct from this lint.
+    /// Matches the last path segment (e.g. `"Default"` matches both
+    /// `#[derive(Default)]` and `#[derive(std::default::Default)]`).
+    pub skip_derives: Vec<String>,
 }
 
 impl Default for SuggestBuilderConfig {
     fn default() -> Self {
-        Self { threshold: 4 }
+        Self {
+            threshold: 6,
+            skip_derives: vec![
+                "Default".into(),
+                "Queryable".into(),
+                "Insertable".into(),
+                "Selectable".into(),
+            ],
+        }
     }
 }
 

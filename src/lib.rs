@@ -1,4 +1,5 @@
 #![feature(rustc_private)]
+#![allow(unknown_lints)]
 
 extern crate rustc_ast;
 extern crate rustc_data_structures;

@@ -18,6 +18,7 @@ rustc_session::declare_lint! {
     "immediately inserting into a newly created map \u{2014} consider using `Type::from([..])`"
 }
 
+#[expect(suggest_builder)]
 pub struct MapInitThenInsert {
     // Cached symbols for third-party map detection (no diagnostic items exist).
     // Interned once in `new()` to avoid per-statement re-interning.

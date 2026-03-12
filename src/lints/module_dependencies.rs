@@ -41,6 +41,7 @@ rustc_session::declare_lint! {
 
 // ── Lint pass ────────────────────────────────────────────────────────
 
+#[expect(suggest_builder)]
 pub struct ModuleDependencies {
     exhaustive: bool,
     allow: FxHashMap<Symbol, FxHashSet<Symbol>>,

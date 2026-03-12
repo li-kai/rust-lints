@@ -1,4 +1,5 @@
 #![allow(dead_code, unknown_lints, clippy::allow_attributes_without_reason)]
+use std::marker::PhantomData;
 // Tests for the `suggest_builder` lint.
 // Threshold: 4 (from dylint.toml).
 
@@ -40,6 +41,77 @@ struct Coords(f64, f64, f64, f64);
 
 // Should NOT trigger: unit struct.
 struct Marker;
+
+// Should NOT trigger: derives Default (in skip_derives).
+#[derive(Default)]
+struct DefaultConfig {
+    host: String,
+    port: u16,
+    timeout: u32,
+    retries: u8,
+}
+
+// Should trigger: manual Default impl is NOT caught by skip_derives
+// (which only checks derive attributes). Use `#[allow]` for these.
+struct ManualDefaultConfig {
+    host: String,
+    port: u16,
+    timeout: u32,
+    retries: u8,
+}
+impl Default for ManualDefaultConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            port: 8080,
+            timeout: 30,
+            retries: 3,
+        }
+    }
+}
+
+// Should NOT trigger: struct name ends with `Builder`.
+struct ConnectionBuilder {
+    host: String,
+    port: u16,
+    timeout: u32,
+    retries: u8,
+}
+
+// Should NOT trigger: has lifetime parameters (borrowed view / visitor).
+struct Visitor<'a> {
+    context: &'a str,
+    items: &'a [u8],
+    count: usize,
+    done: bool,
+}
+
+// Should NOT trigger: `#[repr(C)]` FFI struct.
+#[repr(C)]
+struct FfiPoint {
+    x: f64,
+    y: f64,
+    z: f64,
+    w: f64,
+}
+
+// Should NOT trigger: PhantomData fields don't count (3 real + 1 phantom = below threshold).
+struct TypedHandle<T> {
+    id: u64,
+    generation: u32,
+    flags: u8,
+    _marker: PhantomData<T>,
+}
+
+// Should trigger: 4 real fields even with PhantomData (4 real + 2 phantom).
+struct TypedContainer<T, U> {
+    name: String,
+    capacity: usize,
+    items: Vec<u8>,
+    label: String,
+    _t: PhantomData<T>,
+    _u: PhantomData<fn(U)>,
+}
 
 // Should NOT trigger: suppressed with `#[allow]`.
 #[allow(suggest_builder)]

@@ -17,12 +17,16 @@ pub mod unbounded_channel;
 pub mod unstructured_log_fields;
 
 use core::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rustc_span::Symbol;
 
 thread_local! {
     pub static BON_BUILDER_STRUCTS: RefCell<HashSet<Symbol>> = RefCell::new(HashSet::new());
+    /// Maps struct names to the set of derive trait names found on them during
+    /// the pre-expansion pass.  Populated by [`BonBuilderCollector`] and
+    /// consumed by [`SuggestBuilder`] via [`has_any_derive`].
+    pub static STRUCT_DERIVES: RefCell<HashMap<Symbol, HashSet<Symbol>>> = RefCell::new(HashMap::new());
 }
 
 /// Returns `true` if a struct with the given name was found to have
@@ -38,4 +42,14 @@ thread_local! {
 /// consumed by macro expansion before the HIR is built.
 pub fn has_bon_builder(name: Symbol) -> bool {
     BON_BUILDER_STRUCTS.with(|set| set.borrow().contains(&name))
+}
+
+/// Returns `true` if any of the given derive names were found on a struct
+/// with the given name during the pre-expansion pass.
+pub fn has_any_derive(name: Symbol, derives: &[Symbol]) -> bool {
+    STRUCT_DERIVES.with(|map| {
+        map.borrow()
+            .get(&name)
+            .is_some_and(|set| derives.iter().any(|d| set.contains(d)))
+    })
 }
