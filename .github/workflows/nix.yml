@@ -1,0 +1,29 @@
+name: Nix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v16
+      - uses: cachix/cachix-action@v15
+        with:
+          name: li-kai
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          skipPush: true
+      - run: nix build --print-out-paths | tee /tmp/nix-out
+      - name: Push output to cachix
+        if: github.event_name == 'push'
+        # Push only our output store path — not the full closure.
+        # The fenix nightly toolchain is pulled from fenix.cachix.org by
+        # consumers, not from our cache.
+        run: cachix push li-kai $(cat /tmp/nix-out)
