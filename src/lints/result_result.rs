@@ -6,8 +6,6 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
 
-// ── Lint declaration ────────────────────────────────────────────────
-
 rustc_session::declare_lint! {
     /// Flags `Result<Result<T, E1>, E2>` in function signatures and type aliases.
     /// Almost always a mistake (`.map()` instead of `.and_then()`) or simplifiable.
@@ -41,17 +39,11 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
         span: Span,
         def_id: rustc_hir::def_id::LocalDefId,
     ) {
-        if span.from_expansion() {
-            return;
-        }
-
-        // Skip closures — only named functions
-        if matches!(kind, FnKind::Closure) {
-            return;
-        }
-
-        // Skip trait impl methods — signature is dictated by the trait
-        if is_def_id_trait_method(cx, def_id) {
+        // Skip macros, and trait impl methods as signature is dictated by the trait
+        if span.from_expansion()
+            || matches!(kind, FnKind::Closure)
+            || is_def_id_trait_method(cx, def_id)
+        {
             return;
         }
 
@@ -67,7 +59,6 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
             return;
         }
 
-        // Only check type aliases: `type Foo = Result<Result<_, _>, _>;`
         let ItemKind::TyAlias(..) = &item.kind else {
             return;
         };
@@ -86,7 +77,6 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
 /// Assumption: generic type params (e.g. `T` in `Result<T, E>`) are opaque
 /// and won't match — no false positives from `fn wrap<T>(v: T) -> Result<T, E>`.
 fn is_nested_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
-    // Check outer is Result
     let ty::Adt(outer_adt, outer_args) = ty.kind() else {
         return false;
     };
@@ -94,7 +84,6 @@ fn is_nested_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
         return false;
     }
 
-    // Check inner (Ok type parameter) is also Result
     let ok_ty = outer_args.type_at(0);
     let ty::Adt(inner_adt, _) = ok_ty.kind() else {
         return false;

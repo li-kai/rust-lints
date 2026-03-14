@@ -8,8 +8,6 @@ use rustc_span::{ExpnKind, Span, sym};
 
 use crate::config::FallibleNewConfig;
 
-// ── Lint declaration ────────────────────────────────────────────────
-
 rustc_session::declare_lint! {
     /// Warns when a `fn new()` constructor contains operations that can panic,
     /// suggesting it return `Result` or be renamed to convey fallibility.
@@ -35,39 +33,29 @@ rustc_session::impl_lint_pass!(FallibleNew => [FALLIBLE_NEW]);
 
 impl<'tcx> LateLintPass<'tcx> for FallibleNew {
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) {
-        // Only check functions
         let ImplItemKind::Fn(_sig, body_id) = &impl_item.kind else {
             return;
         };
 
-        // Skip macro-generated impls
         if impl_item.span.from_expansion() {
             return;
         }
 
         let name = impl_item.ident.as_str();
 
-        // Check method name: "new" or "new_*" variants
         if name != "new" && !(self.check_new_variants && name.starts_with("new_")) {
             return;
         }
 
-        // Skip non-public methods — private constructors are internal invariants
-        if !is_sufficiently_visible(cx, impl_item) {
+        // Skip private constructors (internal invariants) and
+        // trait impls (signature dictated by trait).
+        if !is_sufficiently_visible(cx, impl_item)
+            || is_trait_impl_item(cx, impl_item.hir_id())
+            || returns_result(cx, impl_item)
+        {
             return;
         }
 
-        // Skip trait impls — signature is dictated by the trait
-        if is_trait_impl_item(cx, impl_item.hir_id()) {
-            return;
-        }
-
-        // Skip if return type is already Result
-        if returns_result(cx, impl_item) {
-            return;
-        }
-
-        // Walk the body looking for panicking expressions
         let body = cx.tcx.hir_body(*body_id);
         let mut finder = PanicFinder {
             cx,
@@ -97,8 +85,6 @@ impl<'tcx> LateLintPass<'tcx> for FallibleNew {
         );
     }
 }
-
-// ── Skip-condition helpers ──────────────────────────────────────────
 
 /// Returns `true` if the method is `pub` or `pub(crate)`.
 fn is_sufficiently_visible<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
@@ -131,8 +117,6 @@ fn receiver_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, receiver: &Expr<'t
     false
 }
 
-// ── Body visitor: find panicking expressions ────────────────────────
-
 struct PanicFinder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     /// Collected (span, description) pairs for each panicking expression found.
@@ -148,7 +132,6 @@ impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
             return;
         }
 
-        // Check for .unwrap() and .expect() on Option/Result
         if let ExprKind::MethodCall(method, receiver, _args, span) = &expr.kind {
             let name = method.ident.as_str();
             if (name == "unwrap" || name == "expect")
@@ -163,7 +146,6 @@ impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
             }
         }
 
-        // Check for panic macros: panic!, unreachable!
         if expr.span.from_expansion() {
             let expn_data = expr.span.ctxt().outer_expn_data();
             if let ExpnKind::Macro(_, macro_name) = expn_data.kind {

@@ -71,7 +71,7 @@ enum UnstructuredKind {
 }
 
 impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
-    // ── Step 1: Unstructured error types ──
+    // Step 1: Unstructured error types
     fn check_fn(
         &mut self,
         cx: &LateContext<'tcx>,
@@ -140,7 +140,7 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
         }
     }
 
-    // ── Steps 2, 4, 5: check_item ──
+    // Steps 2, 4, 5
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
         // Step 5: *Error without Error impl
         Self::check_error_named_type(cx, item);
@@ -149,7 +149,7 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
         self.collect_trait_impls(cx, item);
     }
 
-    // ── Steps 3, 4: check_crate_post ──
+    // Steps 3, 4
     fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
         for (adt_did, error_info) in &self.error_impls {
             // Step 4: Manual Error + Display
@@ -192,7 +192,6 @@ impl ProperErrorType {
             reason = "ty::TyKind has too many variants to enumerate; all unrecognised kinds correctly return None"
         )]
         match err_ty.kind() {
-            // &str
             ty::Ref(_, inner, _) if inner.is_str() => Some(UnstructuredKind::Basic("&str")),
             ty::Adt(adt, args) => {
                 let did = adt.did();

@@ -7,8 +7,6 @@ use super::call_matching::{
 };
 use crate::config::GlobalSideEffectConfig;
 
-// ── Lint declarations ───────────────────────────────────────────────
-
 rustc_session::declare_lint! {
     /// Flags direct calls to wall-clock or monotonic time functions.
     pub GLOBAL_SIDE_EFFECT_TIME,
@@ -29,8 +27,6 @@ rustc_session::declare_lint! {
     Warn,
     "direct call to an environment function \u{2014} pass the value as a parameter instead"
 }
-
-// ── Default path lists ──────────────────────────────────────────────
 
 const DEFAULT_TIME_PATHS: &[&str] = &[
     "std::time::SystemTime::now",
@@ -99,15 +95,11 @@ const DEFAULT_ENV_PATHS: &[&str] = &[
     "dotenv::vars",
 ];
 
-// ── Help messages ───────────────────────────────────────────────────
-
 const HELP_TIME: &str =
     "accept a time parameter or use a clock trait so callers can control the time source in tests";
 const HELP_RANDOMNESS: &str = "accept an `impl Rng` parameter so callers can inject a seeded RNG";
 const HELP_ENV: &str =
     "move this to your application's entry point and pass the value as a parameter";
-
-// ── Lint pass struct ────────────────────────────────────────────────
 
 /// A single lint pass that checks for all three categories of global side effects.
 /// Each category has its own `Lint` and configured path list, but the detection
@@ -143,20 +135,16 @@ rustc_session::impl_lint_pass!(GlobalSideEffect => [
 
 impl<'tcx> LateLintPass<'tcx> for GlobalSideEffect {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
-        // Skip macro-generated code.
         if expr.span.from_expansion() {
             return;
         }
 
-        // Resolve the DefId of the called function, if any.
         let Some(def_id) = resolve_callee_def_id(cx, expr) else {
             return;
         };
 
-        // Resolve the full path string once, then compare against all lists.
         let callee_path = cx.tcx.def_path_str(def_id);
 
-        // Determine which category matches (if any).
         let (lint, matched_path, help) =
             if let Some(p) = find_matching_path(&callee_path, &self.time_paths) {
                 (&GLOBAL_SIDE_EFFECT_TIME, p, HELP_TIME)

@@ -5,8 +5,6 @@ use rustc_hir::{Closure, Expr, ExprKind, ImplItem, ImplItemKind, LangItem, Node}
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::{ExpnKind, Span, sym};
 
-// ── Lint declaration ────────────────────────────────────────────────
-
 rustc_session::declare_lint! {
     /// Warns when a `Drop::drop` implementation contains operations that can
     /// panic, since panicking during unwinding causes an immediate process abort.
@@ -27,31 +25,20 @@ rustc_session::impl_lint_pass!(PanicInDrop => [PANIC_IN_DROP]);
 
 impl<'tcx> LateLintPass<'tcx> for PanicInDrop {
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) {
-        // Only check functions named `drop`
         let ImplItemKind::Fn(_sig, body_id) = &impl_item.kind else {
             return;
         };
 
-        // Skip macro-generated impls
-        if impl_item.span.from_expansion() {
+        // Skip macro-generated impls, and must be a drop impl
+        if impl_item.span.from_expansion()
+            || impl_item.ident.as_str() != "drop"
+            // Fast pre-check: avoids HIR parent walk for inherent impls
+            || !is_trait_impl_item(cx, impl_item.hir_id())
+            || !is_drop_impl(cx, impl_item)
+        {
             return;
         }
 
-        // Must be named `drop`
-        if impl_item.ident.as_str() != "drop" {
-            return;
-        }
-
-        // Must be inside an `impl Drop for T` block
-        // Fast pre-check: any trait impl at all (avoids HIR parent walk for inherent impls)
-        if !is_trait_impl_item(cx, impl_item.hir_id()) {
-            return;
-        }
-        if !is_drop_impl(cx, impl_item) {
-            return;
-        }
-
-        // Walk the body looking for panicking expressions
         let body = cx.tcx.hir_body(*body_id);
         let typeck = cx.tcx.typeck(impl_item.owner_id.def_id);
         let mut finder = DropPanicFinder {
@@ -90,8 +77,6 @@ impl<'tcx> LateLintPass<'tcx> for PanicInDrop {
     }
 }
 
-// ── Skip-condition helpers ──────────────────────────────────────────
-
 /// Returns `true` if the parent `impl` block is `impl Drop for T`.
 fn is_drop_impl<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
     // Chose trait DefId comparison over string matching because it works
@@ -111,8 +96,6 @@ fn is_drop_impl<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -
     };
     cx.tcx.is_lang_item(trait_def_id, LangItem::Drop)
 }
-
-// ── Body visitor: find panicking expressions inside Drop::drop ──────
 
 struct DropPanicFinder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
@@ -144,12 +127,7 @@ fn receiver_is_option_or_result<'tcx>(
 impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         // Skip closure/async block bodies — panics there don't run during drop
-        if matches!(expr.kind, ExprKind::Closure(Closure { .. })) {
-            return;
-        }
-
-        // Skip findings when inside `if std::thread::panicking()` guard
-        if self.inside_panicking_guard {
+        if matches!(expr.kind, ExprKind::Closure(Closure { .. })) || self.inside_panicking_guard {
             return;
         }
 
@@ -179,7 +157,6 @@ impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
             return;
         }
 
-        // Check for .unwrap() and .expect() on Option/Result
         if let ExprKind::MethodCall(method, receiver, _args, span) = &expr.kind {
             let name = method.ident.as_str();
             if (name == "unwrap" || name == "expect")

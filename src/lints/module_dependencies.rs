@@ -11,8 +11,6 @@ use rustc_span::{Span, Symbol};
 
 use crate::config::ModuleDependenciesConfig;
 
-// ── Lint declarations ────────────────────────────────────────────────
-
 rustc_session::declare_lint! {
     /// Flags cross-module dependencies not declared in the allowlist.
     ///
@@ -38,8 +36,6 @@ rustc_session::declare_lint! {
     Warn,
     "allowlist edge has no corresponding dependency in code"
 }
-
-// ── Lint pass ────────────────────────────────────────────────────────
 
 pub struct ModuleDependencies {
     exhaustive: bool,
@@ -82,19 +78,12 @@ impl ModuleDependencies {
     }
 
     fn check_dependency(&mut self, cx: &LateContext<'_>, def_id: DefId, hir_id: HirId, span: Span) {
-        if !self.is_configured() {
-            return;
-        }
-
-        if !def_id.is_local() {
-            return;
-        }
-
-        if span.from_expansion() {
-            return;
-        }
-
-        if cx.sess().is_test_crate() || is_in_test(cx.tcx, hir_id) {
+        if !self.is_configured()
+            || !def_id.is_local()
+            || span.from_expansion()
+            || cx.sess().is_test_crate()
+            || is_in_test(cx.tcx, hir_id)
+        {
             return;
         }
 
@@ -106,7 +95,6 @@ impl ModuleDependencies {
             return;
         };
 
-        // Same module — always OK.
         if source == target {
             return;
         }
@@ -183,19 +171,16 @@ impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
     )]
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
         match &expr.kind {
-            // Path expressions: `crate::foo::Bar`, `foo::bar()`, etc.
             ExprKind::Path(qpath) => {
                 if let Res::Def(_, def_id) = cx.qpath_res(qpath, expr.hir_id) {
                     self.check_dependency(cx, def_id, expr.hir_id, expr.span);
                 }
             }
-            // Struct literals: `Foo { field: val }`
             ExprKind::Struct(qpath, _, _) => {
                 if let Res::Def(_, def_id) = cx.qpath_res(qpath, expr.hir_id) {
                     self.check_dependency(cx, def_id, expr.hir_id, expr.span);
                 }
             }
-            // Method calls: `receiver.method()`
             ExprKind::MethodCall(..) => {
                 if let Some(def_id) = cx.typeck_results().type_dependent_def_id(expr.hir_id) {
                     self.check_dependency(cx, def_id, expr.hir_id, expr.span);
@@ -218,7 +203,6 @@ impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
-        // Catch `use` statements.
         if let ItemKind::Use(path, _) = &item.kind {
             for res in path.res.iter().flatten() {
                 if let Res::Def(_, def_id) = res {
@@ -255,8 +239,6 @@ impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
         }
     }
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────
 
 /// Extracts the top-level module name for a local `DefId`.
 ///

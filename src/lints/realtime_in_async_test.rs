@@ -81,11 +81,9 @@ impl<'tcx> LateLintPass<'tcx> for RealtimeInAsyncTest {
         def_id: rustc_hir::def_id::LocalDefId,
     ) {
         // Only top-level test functions (skip closures, async blocks, etc.).
-        if !matches!(_kind, rustc_hir::intravisit::FnKind::ItemFn(..)) {
-            return;
-        }
-        let hir_id = cx.tcx.local_def_id_to_hir_id(def_id);
-        if !is_in_test(cx.tcx, hir_id) {
+        if !matches!(_kind, rustc_hir::intravisit::FnKind::ItemFn(..))
+            || !is_in_test(cx.tcx, cx.tcx.local_def_id_to_hir_id(def_id))
+        {
             return;
         }
 
@@ -151,8 +149,6 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
             }
         }
 
-        // Check for .start_paused(true) — method call named "start_paused"
-        // with a boolean `true` literal argument.
         if !self.has_start_paused_true && is_start_paused_true(expr) {
             self.has_start_paused_true = true;
         }

@@ -6,16 +6,12 @@ use super::call_matching::{build_path_list, find_matching_path, resolve_callee_d
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
 
-// ── Lint declaration ────────────────────────────────────────────────
-
 rustc_session::declare_lint! {
     /// Flags known-blocking operations inside `async fn` or `async {}` blocks.
     pub BLOCKING_IN_ASYNC,
     Deny,
     "blocking call inside async context \u{2014} starves the executor"
 }
-
-// ── Default paths ───────────────────────────────────────────────────
 
 const DEFAULT_PATHS: &[&str] = &[
     // std::fs
@@ -65,8 +61,6 @@ const SPAWN_BLOCKING_PATHS: &[&str] = &[
 const HELP: &str = "use an async-aware alternative, or wrap the blocking call \
                      in `tokio::task::spawn_blocking()`";
 
-// ── Lint pass ───────────────────────────────────────────────────────
-
 pub struct BlockingInAsync {
     paths: Vec<String>,
 }
@@ -100,18 +94,10 @@ impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
             return;
         };
 
-        // Only lint inside async context.
-        if !is_in_async_context(cx, expr) {
-            return;
-        }
-
-        // Suppress in test zones.
-        if is_in_test_zone(cx, expr) {
-            return;
-        }
-
-        // Suppress inside spawn_blocking escape hatches.
-        if is_inside_spawn_blocking(cx, expr) {
+        if !is_in_async_context(cx, expr)
+            || is_in_test_zone(cx, expr)
+            || is_inside_spawn_blocking(cx, expr)
+        {
             return;
         }
 
@@ -125,8 +111,6 @@ impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
         );
     }
 }
-
-// ── Async context detection ─────────────────────────────────────────
 
 /// Returns `true` if `expr` is syntactically inside an `async fn` or
 /// `async {}` block.

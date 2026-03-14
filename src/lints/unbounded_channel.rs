@@ -7,8 +7,6 @@ use super::call_matching::{
 };
 use crate::config::SubLintConfig;
 
-// ── Lint declaration ────────────────────────────────────────────────
-
 rustc_session::declare_lint! {
     /// Flags creation of unbounded channels, which can exhaust memory
     /// under backpressure.
@@ -16,8 +14,6 @@ rustc_session::declare_lint! {
     Deny,
     "unbounded channel created \u{2014} can exhaust memory under backpressure"
 }
-
-// ── Default paths ───────────────────────────────────────────────────
 
 const DEFAULT_PATHS: &[&str] = &[
     // std (unbounded by default — no capacity parameter)
@@ -33,8 +29,6 @@ const DEFAULT_PATHS: &[&str] = &[
 
 const HELP: &str = "use a bounded channel with an explicit capacity to enable backpressure \
                      (e.g., `mpsc::channel(1000)`)";
-
-// ── Lint pass ───────────────────────────────────────────────────────
 
 pub struct UnboundedChannel {
     paths: Vec<String>,

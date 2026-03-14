@@ -5,8 +5,6 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
 use rustc_span::{Symbol, sym};
 
-// ── Lint declaration ────────────────────────────────────────────────
-
 rustc_session::declare_lint! {
     /// Warns when a `HashMap`, `BTreeMap`, `IndexMap`, `FxHashMap`, `AHashMap`,
     /// or similar map is created empty and then immediately populated with
@@ -89,13 +87,10 @@ impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
                 );
             }
 
-            // Skip past the insert sequence regardless.
             i = insert_start + insert_count;
         }
     }
 }
-
-// ── Helper functions ────────────────────────────────────────────────
 
 /// If `stmt` is `let [mut] <name> = <MapType>::new()` (or `::default()` or
 /// `::with_capacity(_)`), returns the binding's `HirId` and a display name
