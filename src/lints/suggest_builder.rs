@@ -1,4 +1,5 @@
 use clippy_utils::diagnostics::span_lint_and_help;
+use clippy_utils::ty::implements_trait;
 use rustc_hir::{GenericParamKind, Item, ItemKind, LangItem, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::Symbol;
@@ -85,6 +86,13 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
         // Skip structs that derive any trait in the configured `skip_derives`
         // list (default: Default, Queryable, Insertable, Selectable).
         if super::has_any_derive(ident.name, &self.skip_derives) {
+            return;
+        }
+        // Skip structs that implement `Default` (derived or manual).
+        let ty = cx.tcx.type_of(item.owner_id).instantiate_identity();
+        if let Some(default_id) = cx.tcx.get_diagnostic_item(rustc_span::sym::Default)
+            && implements_trait(cx, ty, default_id, &[])
+        {
             return;
         }
         span_lint_and_help(

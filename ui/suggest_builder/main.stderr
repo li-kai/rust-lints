@@ -26,21 +26,8 @@ LL | | }
    |
    = help: add `#[derive(bon::Builder)]` to enable the builder pattern
 
-warning: struct `ManualDefaultConfig` has 4 fields but does not derive `bon::Builder`
-  --> $DIR/main.rs:56:1
-   |
-LL | / struct ManualDefaultConfig {
-LL | |     host: String,
-LL | |     port: u16,
-LL | |     timeout: u32,
-LL | |     retries: u8,
-LL | | }
-   | |_^
-   |
-   = help: add `#[derive(bon::Builder)]` to enable the builder pattern
-
 warning: struct `TypedContainer` has 4 fields but does not derive `bon::Builder`
-  --> $DIR/main.rs:107:1
+  --> $DIR/main.rs:106:1
    |
 LL | / struct TypedContainer<T, U> {
 LL | |     name: String,
@@ -53,5 +40,5 @@ LL | | }
    |
    = help: add `#[derive(bon::Builder)]` to enable the builder pattern
 
-warning: 4 warnings emitted
+warning: 3 warnings emitted
 

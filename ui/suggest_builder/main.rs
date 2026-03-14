@@ -51,8 +51,7 @@ struct DefaultConfig {
     retries: u8,
 }
 
-// Should trigger: manual Default impl is NOT caught by skip_derives
-// (which only checks derive attributes). Use `#[allow]` for these.
+// Should NOT trigger: manual Default impl.
 struct ManualDefaultConfig {
     host: String,
     port: u16,
