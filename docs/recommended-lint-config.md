@@ -10,6 +10,7 @@ Clippy and dylint setup for production Rust codebases. Copy the [Setup](#setup) 
 [workspace.lints.rust]
 unsafe_code     = "forbid"
 unused_must_use = "deny"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dylint_lib, values("rust_lints"))'] }
 
 [workspace.lints.clippy]
 # --- Deny: always wrong in production ---
@@ -345,6 +346,25 @@ pub fn configure(host: &str, port: u16, timeout: u64, retries: u32, tls: bool) {
     // ...
 }
 ```
+
+### Suppressing dylint lints
+
+Dylint lints are loaded at runtime, so rustc does not recognise their names and reports `unknown lint`. To use `#[expect]` or `#[allow]` on a dylint lint without blanket-allowing all unknown lints, add a crate-level `cfg_attr` gated on the `dylint_lib` cfg that dylint sets when it runs:
+
+```rust
+// lib.rs / main.rs — only suppresses unknown_lints when dylint is *not* running,
+// so typos in lint names are still caught during `cargo dylint`.
+#![cfg_attr(not(dylint_lib = "rust_lints"), allow(unknown_lints))]
+```
+
+Then `#[expect]` works normally on individual items:
+
+```rust
+#[expect(suggest_builder, reason = "false positive: struct is not a builder")]
+pub struct Config { /* ... */ }
+```
+
+The `unexpected_cfgs` entry in `[lints.rust]` (see [Setup](#setup)) tells rustc that `dylint_lib` is a valid cfg name.
 
 ---
 

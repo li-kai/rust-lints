@@ -36,6 +36,7 @@ from pathlib import Path
 RUST_LINTS: OrderedDict[str, str] = OrderedDict([
     ("unsafe_code", "forbid"),
     ("unused_must_use", "deny"),
+    ("unexpected_cfgs", """{ level = "warn", check-cfg = ['cfg(dylint_lib, values("rust_lints"))'] }"""),
 ])
 
 CLIPPY_LINTS: OrderedDict[str, list[tuple[str, str]]] = OrderedDict([
@@ -183,7 +184,10 @@ def emit_lints(fixable_lints_path: Path | None = None) -> str:
     ]
     pad = max(len(k) for k in RUST_LINTS)
     for lint, level in RUST_LINTS.items():
-        lines.append(f'{lint:<{pad}} = "{level}"')
+        if level.startswith("{"):
+            lines.append(f'{lint:<{pad}} = {level}')
+        else:
+            lines.append(f'{lint:<{pad}} = "{level}"')
 
     lines += ["", "[lints.clippy]"]
 
