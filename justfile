@@ -22,10 +22,12 @@ test *args:
 # Check code with clippy (no modifications)
 check *args:
     cargo clippy --lib --tests {{ args }} -- -D warnings
+    DYLINT_LIBRARY_PATH="$PWD/target/debug" cargo dylint --lib rust_lints
 
 # Auto-fix clippy issues and format code
 fix *args:
     cargo clippy --lib --tests --fix --allow-dirty {{ args }} -- -D warnings
+    DYLINT_LIBRARY_PATH="$PWD/target/debug" cargo dylint --lib rust_lints
     just fmt
 
 # Format code (use --check to verify without changing)
