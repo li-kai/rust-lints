@@ -86,6 +86,7 @@ path = "ui/unstructured_log_fields/main.rs"
 [lints.rust]
 unsafe_code     = "deny"
 unused_must_use = "deny"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dylint_lib, values("rust_lints"))'] }
 
 [lints.clippy]
 # --- Deny: always wrong in production ---

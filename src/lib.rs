@@ -1,5 +1,5 @@
 #![feature(rustc_private)]
-#![allow(unknown_lints)]
+#![cfg_attr(not(dylint_lib = "rust_lints"), allow(unknown_lints))]
 
 extern crate rustc_ast;
 extern crate rustc_data_structures;
