@@ -1,7 +1,7 @@
 # Global Side-Effect Lints
 
 **Lints:** `global_side_effect::time`, `global_side_effect::randomness`, `global_side_effect::env`, `global_side_effect::logging_init`
-**Level:** `warn`
+**Levels:** `warn` for `time`, `randomness`, and `env`; `deny` for `logging_init`
 
 Four lints that flag direct calls to non-deterministic or environment-coupled functions. The first three target runtime dependencies — wall-clock time, random number generation, or environment variables — and the fix is identical: **accept the dependency as a parameter**. The fourth targets global logger initialization, where the fix is: **move it to `main()`**.
 
@@ -9,7 +9,7 @@ Four lints that flag direct calls to non-deterministic or environment-coupled fu
 
 Code that calls these functions directly is untestable (you can't control the inputs), non-deterministic (same inputs, different outputs), and hard to mock without thread-local hacks.
 
-Global logger initialization (`tracing_subscriber::fmt::init()`, `env_logger::init()`, etc.) shares the same structural problem: it mutates process-global state, it can only succeed once per process, and when called from library code or deep inside the call graph it causes silent failures in tests (the second `init()` panics or is silently ignored) and removes the application author's ability to choose their own logging configuration.
+Global tracing subscriber initialization (`tracing_subscriber::fmt::init()`, etc.) shares the same structural problem: it mutates process-global state, it can only succeed once per process, and when called from library code or deep inside the call graph it causes silent failures in tests (the second `init()` panics or is silently ignored) and removes the application author's ability to choose their own logging configuration.
 
 ## Flagged calls
 
@@ -62,27 +62,17 @@ Each lint ships with built-in defaults covering common crates.
 |---|---|
 | `tracing_subscriber::fmt::init` | Sets the global default subscriber |
 | `tracing_subscriber::fmt::try_init` | Same, returns `Result` instead of panicking |
-| `tracing_subscriber::fmt::Subscriber::init` | Builder-style init |
-| `tracing_subscriber::fmt::Subscriber::try_init` | Builder-style try-init |
+| `tracing_subscriber::fmt::SubscriberBuilder::init` | Builder-style init |
+| `tracing_subscriber::fmt::SubscriberBuilder::try_init` | Builder-style try-init |
 | `tracing_subscriber::util::SubscriberInitExt::init` | Extension trait `init()` |
 | `tracing_subscriber::util::SubscriberInitExt::try_init` | Extension trait `try_init()` |
 | `tracing::subscriber::set_global_default` | Low-level global subscriber registration |
-| `env_logger::init` | Sets global logger |
-| `env_logger::try_init` | Same, returns `Result` |
-| `env_logger::Builder::init` | Builder-style init |
-| `env_logger::Builder::try_init` | Builder-style try-init |
-| `log::set_logger` | Low-level global logger registration |
-| `log::set_max_level` | Global log level filter |
-| `fern::Dispatch::apply` | Applies logging config globally |
-| `simplelog::TermLogger::init` | |
-| `simplelog::CombinedLogger::init` | |
-| `slog_stdlog::init` | Bridges slog to the `log` facade globally |
 
 ## Examples
 
 ### `time`, `randomness`, `env`
 
-All three lints follow the same pattern. These examples use `global_side_effect::time`; substitute the relevant function for the other two.
+The first three lints follow the same pattern. These examples use `global_side_effect::time`; substitute the relevant function for the other two.
 
 #### Triggers
 
@@ -128,14 +118,14 @@ fn main() {
 ```rust
 // Inside a library function
 pub fn setup_app() {
-    //~^ WARNING: global logger initialization outside of `main()`
+    //~^ ERROR: global logger initialization outside of `main()`
     tracing_subscriber::fmt::init();
     // ...
 }
 
 // Inside a module initializer
 pub fn configure_service(config: &Config) {
-    //~^ WARNING: global logger initialization outside of `main()`
+    //~^ ERROR: global logger initialization outside of `main()`
     env_logger::init();
     start_service(config);
 }
@@ -195,4 +185,3 @@ additional_paths = ["my_crate::util::current_time"]
 |---|---|---|---|
 | `additional_paths` | `Vec<String>` | `[]` | Extra paths to flag, merged with defaults |
 | `paths` | `Option<Vec<String>>` | `None` | If set, replaces built-in defaults entirely |
-

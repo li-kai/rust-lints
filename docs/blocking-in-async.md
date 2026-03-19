@@ -13,7 +13,9 @@ Calling blocking operations inside async code blocks the executor thread, causin
 - **Deadlocks in thread pools** — if all worker threads are blocked on I/O, no task can make progress. This is a classic cause of async deadlocks.
 - **Defeats the point of async** — async is for I/O multiplexing. Blocking inside async wastes the entire benefit.
 
-The fix is to use async-aware alternatives (e.g., `tokio::fs` instead of `std::fs`) or to offload blocking work to a thread pool via `tokio::task::spawn_blocking`.
+The fix is to use async-aware alternatives, such as `tokio::fs`, or to offload blocking work with `tokio::task::spawn_blocking`.
+
+This lint is about executor blocking, not test clock semantics. A Tokio test using `tokio::time::sleep(...)` without `start_paused = true` has a clock problem, not a blocking problem. That case belongs to `realtime_in_async_test`.
 
 ## Flagged calls
 
@@ -48,7 +50,7 @@ The lint ships with a default set of paths for the most common blocking operatio
 
 | Path | Notes |
 |---|---|
-| `std::thread::sleep` | Blocks the thread (always wrong in async) |
+| `std::thread::sleep` | Blocks the thread; unlike `tokio::time::sleep`, this stalls the executor itself |
 
 ### `std::sync`
 
@@ -175,10 +177,11 @@ additional_paths = [
 
 ## Relation to other lints
 
-This lint complements `await_holding_lock` (Clippy) and `hardcoded_time` (this suite). Together they cover the most dangerous async anti-patterns:
+This lint complements `await_holding_lock` (Clippy), `global_side_effect::time`, and `realtime_in_async_test`:
 
 | Lint | Catches |
 |---|---|
 | `blocking_in_async` | Blocking operations starving the executor |
 | `await_holding_lock` (Clippy) | `std::sync::Mutex` held across `.await` |
-| `hardcoded_time` | Non-testable time dependency |
+| `global_side_effect::time` | Non-testable direct time dependencies in production code |
+| `realtime_in_async_test` | Tokio timer misuse and `std::time::Instant` mismatches in async tests |

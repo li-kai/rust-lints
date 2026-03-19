@@ -10,7 +10,7 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | [`debug_remnants`](#debug_remnants) | warn | Debug macros (`println!`, `eprintln!`, `dbg!`) in non-test code |
 | [`fallible_new`](#fallible_new) | deny | `fn new()` constructors that can panic |
 | [`global_side_effect::env`](#global_side_effect) | warn | Direct calls to `std::env::var` and similar outside `main()` |
-| [`global_side_effect::logging_init`](#global_side_effect) | deny | Global logger initialization outside `main()` |
+| [`global_side_effect::logging_init`](#global_side_effect) | deny | Global tracing subscriber initialization outside `main()` |
 | [`global_side_effect::randomness`](#global_side_effect) | warn | Direct calls to random number generators outside `main()` and tests |
 | [`global_side_effect::time`](#global_side_effect) | warn | Direct calls to wall-clock or monotonic time outside `main()` and tests |
 | [`map_init_then_insert`](#map_init_then_insert) | warn | `HashMap`/`BTreeMap`/`IndexMap` created empty then immediately populated with `insert()` |
@@ -80,7 +80,7 @@ Does not fire when the return type is already `Result`, when the constructor is 
 
 ### `global_side_effect`
 
-Four lints that flag direct calls to non-deterministic or environment-coupled functions. The fix for `time`, `randomness`, and `env` is to accept the dependency as a parameter. The fix for `logging_init` is to move initialization to `main()`.
+Four lints that flag direct calls to non-deterministic or environment-coupled functions. The fix for `time`, `randomness`, and `env` is to accept the dependency as a parameter. `logging_init` is `deny` by default because it mutates process-global state; the fix is to move initialization to `main()`.
 
 ```
 warning[global_side_effect::time]: direct call to `chrono::Utc::now()`
@@ -101,7 +101,7 @@ None of the four lints fire inside `#[test]` functions, `#[cfg(test)]` modules, 
 
 **`global_side_effect::env`** — flags: `std::env::var`, `std::env::vars`, `std::env::args`, `dotenvy::var`, `dotenvy::vars`, `dotenv::var`.
 
-**`global_side_effect::logging_init`** — flags: `tracing_subscriber::fmt::init`, `env_logger::init`, `log::set_logger`, `fern::Dispatch::apply`, `simplelog::TermLogger::init`, and more.
+**`global_side_effect::logging_init`** — `deny` by default; flags: `tracing_subscriber::fmt::init`, `tracing_subscriber::fmt::try_init`, `tracing_subscriber::fmt::SubscriberBuilder::{init, try_init}`, `tracing_subscriber::util::SubscriberInitExt::{init, try_init}`, and `tracing::subscriber::set_global_default`.
 
 ### `map_init_then_insert`
 
