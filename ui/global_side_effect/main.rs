@@ -1,6 +1,7 @@
 #![allow(
     dead_code,
     unknown_lints,
+    unused_must_use,
     unused_variables,
     clippy::allow_attributes_without_reason
 )]
@@ -38,6 +39,23 @@ fn get_args() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Should trigger: global_side_effect_logging_init
+// ══════════════════════════════════════════════════════════════════════
+
+fn init_tracing() {
+    tracing_subscriber::fmt::init(); //~ ERROR: direct call to `tracing_subscriber::fmt::init()`
+}
+
+fn try_init_tracing() {
+    tracing_subscriber::fmt().try_init(); //~ ERROR: direct call to `tracing_subscriber::fmt::SubscriberBuilder::try_init()`
+}
+
+fn install_subscriber() {
+    let subscriber = tracing_subscriber::fmt().finish();
+    tracing::subscriber::set_global_default(subscriber); //~ ERROR: direct call to `tracing::subscriber::set_global_default()`
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: suppression zones
 // ══════════════════════════════════════════════════════════════════════
 
@@ -45,6 +63,7 @@ fn get_args() {
 fn main() {
     let _now = Instant::now(); // OK: in main
     let _var = std::env::var("HOME"); // OK: in main
+    tracing_subscriber::fmt().init(); // OK: in main
 }
 
 // #[cfg(test)] is a suppression zone.
@@ -55,6 +74,7 @@ mod tests {
     #[test]
     fn test_timing() {
         let _now = Instant::now(); // OK: in #[cfg(test)]
+        let _ = tracing_subscriber::fmt().try_init(); // OK: in #[cfg(test)]
     }
 }
 

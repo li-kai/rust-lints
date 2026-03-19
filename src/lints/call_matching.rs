@@ -54,11 +54,65 @@ pub fn is_in_suppression_zone(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 /// Checks if `callee_path` (from `def_path_str`) matches any configured path.
 /// Returns the matched path string for use in the diagnostic message.
 pub fn find_matching_path<'a>(callee_path: &str, paths: &'a [String]) -> Option<&'a str> {
+    let normalized = strip_generic_args(callee_path);
+
     // def_path_str returns e.g. "std::env::var" — direct string comparison.
     paths
         .iter()
-        .find(|p| p.as_str() == callee_path)
+        .find(|p| p.as_str() == normalized)
         .map(String::as_str)
+}
+
+fn strip_generic_args(path: &str) -> String {
+    let mut normalized = String::with_capacity(path.len());
+    let mut chars = path.chars().peekable();
+    let mut generic_depth = 0_usize;
+
+    while let Some(ch) = chars.next() {
+        if generic_depth == 0 && ch == ':' && chars.peek() == Some(&':') {
+            let mut lookahead = chars.clone();
+            lookahead.next();
+            if lookahead.peek() == Some(&'<') {
+                chars.next();
+                chars.next();
+                generic_depth = 1;
+                continue;
+            }
+        }
+
+        if generic_depth > 0 {
+            match ch {
+                '<' => generic_depth += 1,
+                '>' => generic_depth -= 1,
+                _ => {}
+            }
+            continue;
+        }
+
+        normalized.push(ch);
+    }
+
+    normalized
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_generic_args;
+
+    #[test]
+    fn strip_generic_args_removes_turbofish_segments() {
+        assert_eq!(
+            strip_generic_args(
+                "tracing_subscriber::fmt::SubscriberBuilder::<N, E, F, W>::try_init"
+            ),
+            "tracing_subscriber::fmt::SubscriberBuilder::try_init"
+        );
+        assert_eq!(
+            strip_generic_args("foo::Bar::<Baz::<Qux>>::quux"),
+            "foo::Bar::quux"
+        );
+        assert_eq!(strip_generic_args("std::env::var"), "std::env::var");
+    }
 }
 
 /// Builds the effective path list from defaults and config overrides.

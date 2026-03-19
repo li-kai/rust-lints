@@ -104,9 +104,10 @@ pub struct GlobalSideEffectConfig {
     pub time: SubLintConfig,
     pub randomness: SubLintConfig,
     pub env: SubLintConfig,
+    pub logging_init: SubLintConfig,
 }
 
-/// Per-sublint configuration shared by all three `global_side_effect` lints.
+/// Per-sublint configuration shared by all four `global_side_effect` lints.
 #[derive(Default, Deserialize)]
 #[serde(default)]
 pub struct SubLintConfig {

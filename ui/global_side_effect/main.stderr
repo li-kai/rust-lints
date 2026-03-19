@@ -1,5 +1,5 @@
 warning: direct call to `std::time::Instant::now()`
-  --> $DIR/main.rs:16:15
+  --> $DIR/main.rs:17:15
    |
 LL |     let now = Instant::now(); //~ WARNING: direct call to `std::time::Instant::now()`
    |               ^^^^^^^^^^^^^^
@@ -8,7 +8,7 @@ LL |     let now = Instant::now(); //~ WARNING: direct call to `std::time::Insta
    = note: `#[warn(global_side_effect_time)]` on by default
 
 warning: direct call to `std::time::SystemTime::now()`
-  --> $DIR/main.rs:21:5
+  --> $DIR/main.rs:22:5
    |
 LL |     std::time::SystemTime::now() //~ WARNING: direct call to `std::time::SystemTime::now()`
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -16,7 +16,7 @@ LL |     std::time::SystemTime::now() //~ WARNING: direct call to `std::time::Sy
    = help: accept a time parameter or use a clock trait so callers can control the time source in tests
 
 warning: direct call to `std::env::var()`
-  --> $DIR/main.rs:29:5
+  --> $DIR/main.rs:30:5
    |
 LL |     std::env::var("MY_CONFIG").ok() //~ WARNING: direct call to `std::env::var()`
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -25,7 +25,7 @@ LL |     std::env::var("MY_CONFIG").ok() //~ WARNING: direct call to `std::env::
    = note: `#[warn(global_side_effect_env)]` on by default
 
 warning: direct call to `std::env::vars()`
-  --> $DIR/main.rs:33:25
+  --> $DIR/main.rs:34:25
    |
 LL |     let _vars: Vec<_> = std::env::vars().collect(); //~ WARNING: direct call to `std::env::vars()`
    |                         ^^^^^^^^^^^^^^^^
@@ -33,12 +33,37 @@ LL |     let _vars: Vec<_> = std::env::vars().collect(); //~ WARNING: direct cal
    = help: move this to your application's entry point and pass the value as a parameter
 
 warning: direct call to `std::env::args()`
-  --> $DIR/main.rs:37:25
+  --> $DIR/main.rs:38:25
    |
 LL |     let _args: Vec<_> = std::env::args().collect(); //~ WARNING: direct call to `std::env::args()`
    |                         ^^^^^^^^^^^^^^^^
    |
    = help: move this to your application's entry point and pass the value as a parameter
 
-warning: 5 warnings emitted
+error: direct call to `tracing_subscriber::fmt::init()`
+  --> $DIR/main.rs:46:5
+   |
+LL |     tracing_subscriber::fmt::init(); //~ ERROR: direct call to `tracing_subscriber::fmt::init()`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move global tracing subscriber initialization to `main()` so library code does not mutate process-global state
+   = note: `#[deny(global_side_effect_logging_init)]` on by default
+
+error: direct call to `tracing_subscriber::fmt::SubscriberBuilder::try_init()`
+  --> $DIR/main.rs:50:5
+   |
+LL |     tracing_subscriber::fmt().try_init(); //~ ERROR: direct call to `tracing_subscriber::fmt::SubscriberBuilder::try_init()`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move global tracing subscriber initialization to `main()` so library code does not mutate process-global state
+
+error: direct call to `tracing::subscriber::set_global_default()`
+  --> $DIR/main.rs:55:5
+   |
+LL |     tracing::subscriber::set_global_default(subscriber); //~ ERROR: direct call to `tracing::subscriber::set_global_default()`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move global tracing subscriber initialization to `main()` so library code does not mutate process-global state
+
+error: aborting due to 3 previous errors; 5 warnings emitted
 

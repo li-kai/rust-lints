@@ -28,6 +28,13 @@ rustc_session::declare_lint! {
     "direct call to an environment function \u{2014} pass the value as a parameter instead"
 }
 
+rustc_session::declare_lint! {
+    /// Flags global tracing subscriber initialization outside `main()`.
+    pub GLOBAL_SIDE_EFFECT_LOGGING_INIT,
+    Deny,
+    "global tracing subscriber initialization outside `main()`"
+}
+
 const DEFAULT_TIME_PATHS: &[&str] = &[
     "std::time::SystemTime::now",
     "std::time::Instant::now",
@@ -95,23 +102,35 @@ const DEFAULT_ENV_PATHS: &[&str] = &[
     "dotenv::vars",
 ];
 
+const DEFAULT_LOGGING_INIT_PATHS: &[&str] = &[
+    "tracing_subscriber::fmt::init",
+    "tracing_subscriber::fmt::try_init",
+    "tracing_subscriber::fmt::SubscriberBuilder::init",
+    "tracing_subscriber::fmt::SubscriberBuilder::try_init",
+    "tracing_subscriber::util::SubscriberInitExt::init",
+    "tracing_subscriber::util::SubscriberInitExt::try_init",
+    "tracing::subscriber::set_global_default",
+];
+
 const HELP_TIME: &str =
     "accept a time parameter or use a clock trait so callers can control the time source in tests";
 const HELP_RANDOMNESS: &str = "accept an `impl Rng` parameter so callers can inject a seeded RNG";
 const HELP_ENV: &str =
     "move this to your application's entry point and pass the value as a parameter";
+const HELP_LOGGING_INIT: &str = "move global tracing subscriber initialization to `main()` so library code does not mutate process-global state";
 
-/// A single lint pass that checks for all three categories of global side effects.
+/// A single lint pass that checks for all four categories of global side effects.
 /// Each category has its own `Lint` and configured path list, but the detection
 /// logic is identical: match call expressions against known function paths.
 ///
-/// Chose a single pass over three separate passes to avoid triple-traversing
+/// Chose a single pass over four separate passes to avoid repeated traversal
 /// the HIR for what is essentially the same check with different path lists.
 pub struct GlobalSideEffect {
     /// Effective path lists after applying config overrides.
     time_paths: Vec<String>,
     randomness_paths: Vec<String>,
     env_paths: Vec<String>,
+    logging_init_paths: Vec<String>,
 }
 
 impl GlobalSideEffect {
@@ -123,6 +142,7 @@ impl GlobalSideEffect {
             time_paths: build_path_list(DEFAULT_TIME_PATHS, &config.time),
             randomness_paths: build_path_list(DEFAULT_RANDOMNESS_PATHS, &config.randomness),
             env_paths: build_path_list(DEFAULT_ENV_PATHS, &config.env),
+            logging_init_paths: build_path_list(DEFAULT_LOGGING_INIT_PATHS, &config.logging_init),
         }
     }
 }
@@ -131,6 +151,7 @@ rustc_session::impl_lint_pass!(GlobalSideEffect => [
     GLOBAL_SIDE_EFFECT_TIME,
     GLOBAL_SIDE_EFFECT_RANDOMNESS,
     GLOBAL_SIDE_EFFECT_ENV,
+    GLOBAL_SIDE_EFFECT_LOGGING_INIT,
 ]);
 
 impl<'tcx> LateLintPass<'tcx> for GlobalSideEffect {
@@ -144,7 +165,6 @@ impl<'tcx> LateLintPass<'tcx> for GlobalSideEffect {
         };
 
         let callee_path = cx.tcx.def_path_str(def_id);
-
         let (lint, matched_path, help) =
             if let Some(p) = find_matching_path(&callee_path, &self.time_paths) {
                 (&GLOBAL_SIDE_EFFECT_TIME, p, HELP_TIME)
@@ -152,6 +172,8 @@ impl<'tcx> LateLintPass<'tcx> for GlobalSideEffect {
                 (&GLOBAL_SIDE_EFFECT_RANDOMNESS, p, HELP_RANDOMNESS)
             } else if let Some(p) = find_matching_path(&callee_path, &self.env_paths) {
                 (&GLOBAL_SIDE_EFFECT_ENV, p, HELP_ENV)
+            } else if let Some(p) = find_matching_path(&callee_path, &self.logging_init_paths) {
+                (&GLOBAL_SIDE_EFFECT_LOGGING_INIT, p, HELP_LOGGING_INIT)
             } else {
                 return;
             };

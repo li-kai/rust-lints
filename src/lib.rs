@@ -36,6 +36,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::global_side_effect::GLOBAL_SIDE_EFFECT_TIME,
         lints::global_side_effect::GLOBAL_SIDE_EFFECT_RANDOMNESS,
         lints::global_side_effect::GLOBAL_SIDE_EFFECT_ENV,
+        lints::global_side_effect::GLOBAL_SIDE_EFFECT_LOGGING_INIT,
         lints::map_init_then_insert::MAP_INIT_THEN_INSERT,
         lints::debug_remnants::DEBUG_REMNANTS,
         lints::fallible_new::FALLIBLE_NEW,
