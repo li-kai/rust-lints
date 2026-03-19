@@ -286,6 +286,10 @@ Does not fire when at least one structured field is present, when the format str
 
 ## Usage
 
+Choose one install path:
+
+### Git source
+
 Add to your workspace `Cargo.toml`:
 
 ```toml
@@ -294,6 +298,48 @@ libraries = [
     { git = "https://github.com/li-kai/rust-lints" },
 ]
 ```
+
+This makes `cargo-dylint` clone and build the lints from source.
+
+### Nix package
+
+If you use Nix, prefer the flake package instead of the Git source. CI builds
+`packages.default` for Linux and macOS and pushes the result to
+`li-kai.cachix.org`. That package contains the prebuilt lint library and the
+matching `dylint-driver`, so consumers do not need `rustup` or the pinned
+nightly toolchain locally.
+
+In your `flake.nix`:
+
+```nix
+{
+  inputs = {
+    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    rust-lints.url = "github:li-kai/rust-lints";
+  };
+
+  outputs = { self, flake-utils, nixpkgs, rust-lints, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+        lints = rust-lints.packages.${system}.default;
+      in pkgs.mkShell {
+        DYLINT_LIBRARY_PATH = "${lints}/lib";
+        DYLINT_DRIVER_PATH = "${lints}/drivers";
+        packages = [ pkgs.cargo-dylint ];
+      });
+}
+```
+
+Then run:
+
+```sh
+cargo dylint --all
+```
+
+See [docs/nix-packaging.md](docs/nix-packaging.md) for the package layout and
+[docs/nix-cachix.md](docs/nix-cachix.md) for the CI publishing flow.
 
 Configure thresholds and options in `dylint.toml`:
 
