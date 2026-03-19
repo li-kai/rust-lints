@@ -324,10 +324,16 @@ In your `flake.nix`:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         lints = rust-lints.packages.${system}.default;
+        dylintVersion = rust-lints.lib.dylintVersion;
+        cargo-dylint = pkgs.rustPlatform.buildRustPackage {
+          pname = "cargo-dylint";
+          version = dylintVersion;
+          # ... use `dylintVersion` here instead of hardcoding the CLI version
+        };
       in pkgs.mkShell {
         DYLINT_LIBRARY_PATH = "${lints}/lib";
         DYLINT_DRIVER_PATH = "${lints}/drivers";
-        packages = [ pkgs.cargo-dylint ];
+        packages = [ cargo-dylint ];
       });
 }
 ```
@@ -337,6 +343,10 @@ Then run:
 ```sh
 cargo dylint --all
 ```
+
+`rust-lints.lib.dylintVersion` is the stable flake API for the matching
+`cargo-dylint` CLI version. Consumers should read that value instead of parsing
+this repository's source files.
 
 See [docs/nix-packaging.md](docs/nix-packaging.md) for the package layout and
 [docs/nix-cachix.md](docs/nix-cachix.md) for the CI publishing flow.

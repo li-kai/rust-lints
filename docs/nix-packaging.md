@@ -92,6 +92,13 @@ $out/
 
 ### Consumer usage
 
+The flake exposes the matching `cargo-dylint` CLI version as top-level
+metadata:
+
+```nix
+rust-lints.lib.dylintVersion
+```
+
 A consumer's `flake.nix`:
 
 ```nix
@@ -109,11 +116,13 @@ A consumer's `flake.nix`:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         lints = rust-lints.packages.${system}.default;
+        dylintVersion = rust-lints.lib.dylintVersion;
         # cargo-dylint is a pure Rust binary — build it as a proper Nix package,
-        # not via imperative `cargo install` in shellHook.
+        # not via imperative `cargo install` in shellHook. Use the exported
+        # compatibility metadata instead of hardcoding the CLI version.
         cargo-dylint = pkgs.rustPlatform.buildRustPackage {
           pname = "cargo-dylint";
-          version = "5.0.0";
+          version = dylintVersion;
           # ... or use a crane derivation, or pull from a nixpkgs overlay
         };
       in {

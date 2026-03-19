@@ -26,6 +26,13 @@
       fenix,
       crane,
     }:
+    let
+      cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+      # Public compatibility metadata for downstream consumers.
+      dylintVersion =
+        let dep = cargoToml.dependencies.dylint_linting;
+        in if builtins.isString dep then dep else dep.version;
+    in
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -45,11 +52,6 @@
 
         # RUSTUP_TOOLCHAIN must include the target triple for dylint's parse_toolchain()
         toolchainFull = "${toolchainChannel}-${targetTriple}";
-
-        # Version of dylint tools to install (derived from Cargo.toml to stay in sync)
-        dylintVersion =
-          let dep = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).dependencies.dylint_linting;
-          in if builtins.isString dep then dep else dep.version;
 
         # Shim that satisfies dylint's `rustup which <tool>` calls using
         # the nix-managed toolchain instead of a real rustup installation.
@@ -324,5 +326,8 @@
           '';
         };
       }
-    );
+    )
+    // {
+      lib.dylintVersion = dylintVersion;
+    };
 }
