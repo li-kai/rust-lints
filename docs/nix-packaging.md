@@ -48,10 +48,11 @@ The driver loads the dylib and calls register_lints()
 Lint passes run during compilation
 ```
 
-**Key insight:** The consumer's own rustc version is irrelevant. Dylint builds a
-driver matched to the _library's_ toolchain. A consumer on stable Rust can load
-a dylib compiled with nightly — dylint handles the mismatch by using a
-toolchain-specific driver.
+**Key insight:** The packaged driver and library are tied to the _library's_
+toolchain, and the `cargo dylint` invocation must run in an environment that is
+compatible with that toolchain. A consumer project can still use stable Rust for
+normal development, but the supported Nix interface should provide the matching
+Dylint runtime environment instead of asking downstream repos to reconstruct it.
 
 ### The rustup problem (for nix)
 
@@ -73,8 +74,10 @@ Dylint supports two environment variables:
 - **`DYLINT_DRIVER_PATH`** — directory containing pre-built driver binaries,
   structured as `<toolchain>/dylint-driver`
 
-If both are set, dylint needs **no rustup interaction at all**. It finds the
-pre-built library, matches it to the pre-built driver, and runs.
+If both are set, dylint does not need rustup to discover or build a driver. It
+finds the pre-built library, matches it to the pre-built driver, and runs. In
+practice, the supported consumer interface should still provide the matching
+toolchain and `cargo-dylint` invocation environment.
 
 ## Solution: ship dylib + driver as a Nix flake package
 
@@ -92,14 +95,7 @@ $out/
 
 ### Consumer usage
 
-The flake exposes the matching `cargo-dylint` CLI version as top-level
-metadata:
-
-```nix
-rust-lints.lib.dylintVersion
-```
-
-A consumer's `flake.nix`:
+The supported Nix interface is a public shell helper:
 
 ```nix
 {
@@ -107,41 +103,38 @@ A consumer's `flake.nix`:
     rust-lints.url = "github:li-kai/rust-lints";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    # Consumer uses whatever Rust toolchain they want — no fenix required,
-    # no nightly required. They just need cargo-dylint.
   };
 
   outputs = { self, nixpkgs, flake-utils, rust-lints, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        lints = rust-lints.packages.${system}.default;
-        dylintVersion = rust-lints.lib.dylintVersion;
-        # cargo-dylint is a pure Rust binary — build it as a proper Nix package,
-        # not via imperative `cargo install` in shellHook. Use the exported
-        # compatibility metadata instead of hardcoding the CLI version.
-        cargo-dylint = pkgs.rustPlatform.buildRustPackage {
-          pname = "cargo-dylint";
-          version = dylintVersion;
-          # ... or use a crane derivation, or pull from a nixpkgs overlay
-        };
       in {
-        devShells.default = pkgs.mkShell {
-          DYLINT_LIBRARY_PATH = "${lints}/lib";
-          DYLINT_DRIVER_PATH = "${lints}/drivers";
-
-          buildInputs = [ cargo-dylint ];
+        devShells.default = rust-lints.lib.mkDevShell {
+          inherit pkgs;
+          packages = [ pkgs.just ];
         };
       }
     );
 }
 ```
 
-The consumer then runs `cargo dylint --all` as normal. No git clone, no rebuild,
-no rustup, no nightly toolchain. Their project can use stable Rust.
+The consumer then runs `cargo dylint --all` as normal. The helper shell provides
+the matching `cargo-dylint`, toolchain, `rustup` shim, and Dylint env vars. The
+consumer project can keep its own normal Rust workflow outside that shell.
 
 Configuration via `dylint.toml` works exactly as before — it's read at lint
 time, not build time.
+
+For advanced consumers, the flake still exposes:
+
+```nix
+rust-lints.lib.dylintVersion
+rust-lints.lib.dylint.forSystem system
+rust-lints.packages.${system}.default
+```
+
+Those are lower-level interfaces. `mkDevShell` is the supported path.
 
 ### Naming convention
 
@@ -231,8 +224,9 @@ artifacts.
 - **Non-nix consumers.** Teams using rustup can continue with `{ git = "..." }`
   — dylint builds from source and handles the driver automatically. For pre-built
   binaries outside nix, GitHub release artifacts are a separate concern.
-- **`cargo-dylint` installation.** Consumers still need `cargo-dylint` to invoke
-  the lints. It's a pure Rust binary with no rustup dependency.
+- **Pure Nix packaging of `cargo-dylint`.** The supported consumer interface is
+  the shell helper. Packaging `cargo-dylint` itself as a standalone derivation is
+  a separate concern.
 
 ## Implementation steps
 
@@ -254,5 +248,5 @@ artifacts.
    **stable** Rust, sets `DYLINT_LIBRARY_PATH` and `DYLINT_DRIVER_PATH`, runs
    `cargo dylint --all`, and asserts a lint fires. This is the acceptance
    criterion.
-8. Update README with nix consumer instructions.
+8. Update README with the public shell helper as the supported nix consumer interface.
 9. Set up binary cache (see [docs/nix-cachix.md](./nix-cachix.md)).

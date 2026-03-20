@@ -307,7 +307,7 @@ If you use Nix, prefer the flake package instead of the Git source. CI builds
 `packages.default` for Linux and macOS and pushes the result to
 `li-kai.cachix.org`. That package contains the prebuilt lint library and the
 matching `dylint-driver`, so consumers do not need `rustup` or the pinned
-nightly toolchain locally.
+nightly toolchain installed separately.
 
 In your `flake.nix`:
 
@@ -323,17 +323,11 @@ In your `flake.nix`:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        lints = rust-lints.packages.${system}.default;
-        dylintVersion = rust-lints.lib.dylintVersion;
-        cargo-dylint = pkgs.rustPlatform.buildRustPackage {
-          pname = "cargo-dylint";
-          version = dylintVersion;
-          # ... use `dylintVersion` here instead of hardcoding the CLI version
+      in {
+        devShells.default = rust-lints.lib.mkDevShell {
+          inherit pkgs;
+          packages = [ pkgs.just ];
         };
-      in pkgs.mkShell {
-        DYLINT_LIBRARY_PATH = "${lints}/lib";
-        DYLINT_DRIVER_PATH = "${lints}/drivers";
-        packages = [ cargo-dylint ];
       });
 }
 ```
@@ -344,9 +338,14 @@ Then run:
 cargo dylint --all
 ```
 
-`rust-lints.lib.dylintVersion` is the stable flake API for the matching
-`cargo-dylint` CLI version. Consumers should read that value instead of parsing
-this repository's source files.
+`rust-lints.lib.mkDevShell` is the supported Nix consumer interface. It wires in
+the matching `cargo-dylint`, toolchain, `rustup` shim, `DYLINT_LIBRARY_PATH`,
+and `DYLINT_DRIVER_PATH` so downstream repos do not need to reproduce this
+repository's internal shell logic.
+
+`rust-lints.lib.dylintVersion` remains stable for advanced consumers that need
+the raw CLI compatibility version. More detailed system-specific metadata is
+available from `rust-lints.lib.dylint.forSystem system`.
 
 See [docs/nix-packaging.md](docs/nix-packaging.md) for the package layout and
 [docs/nix-cachix.md](docs/nix-cachix.md) for the CI publishing flow.
