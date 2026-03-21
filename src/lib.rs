@@ -32,6 +32,7 @@ dylint_linting::dylint_library!();
 pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     dylint_linting::init_config(sess);
     lint_store.register_lints(&[
+        lints::acyclic_modules::ACYCLIC_MODULES,
         lints::suggest_builder::SUGGEST_BUILDER,
         lints::needless_builder::NEEDLESS_BUILDER,
         lints::bon_builder_collector::BON_BUILDER_COLLECTOR,
@@ -77,4 +78,5 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     });
     lint_store
         .register_late_pass(|_| Box::new(lints::module_dependencies::ModuleDependencies::new()));
+    lint_store.register_late_pass(|_| Box::new(lints::acyclic_modules::AcyclicModules::new()));
 }

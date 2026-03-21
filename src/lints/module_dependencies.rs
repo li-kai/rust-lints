@@ -1,14 +1,12 @@
 use clippy_utils::diagnostics::span_lint_and_help;
-use clippy_utils::is_in_test;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-use rustc_hir::def::Res;
-use rustc_hir::definitions::DefPathData;
-use rustc_hir::{Expr, ExprKind, HirId, Item, ItemKind};
-use rustc_lint::{LateContext, LateLintPass, LintContext as _};
+use rustc_hir::{Expr, HirId, Item};
+use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::TyCtxt;
 use rustc_span::def_id::DefId;
 use rustc_span::{Span, Symbol};
 
+use super::hir_refs;
 use crate::config::ModuleDependenciesConfig;
 
 rustc_session::declare_lint! {
@@ -78,12 +76,7 @@ impl ModuleDependencies {
     }
 
     fn check_dependency(&mut self, cx: &LateContext<'_>, def_id: DefId, hir_id: HirId, span: Span) {
-        if !self.is_configured()
-            || !def_id.is_local()
-            || span.from_expansion()
-            || cx.sess().is_test_crate()
-            || is_in_test(cx.tcx, hir_id)
-        {
+        if !self.is_configured() || hir_refs::should_skip_ref(cx, def_id, hir_id, span) {
             return;
         }
 
@@ -165,28 +158,9 @@ impl ModuleDependencies {
 rustc_session::impl_lint_pass!(ModuleDependencies => [MODULE_DEPENDENCIES, MODULE_DEPENDENCIES_UNLISTED, MODULE_DEPENDENCIES_DEAD_EDGE]);
 
 impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
-    #[expect(
-        clippy::wildcard_enum_match_arm,
-        reason = "only Path, Struct, and MethodCall carry cross-module references; all other variants are irrelevant"
-    )]
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
-        match &expr.kind {
-            ExprKind::Path(qpath) => {
-                if let Res::Def(_, def_id) = cx.qpath_res(qpath, expr.hir_id) {
-                    self.check_dependency(cx, def_id, expr.hir_id, expr.span);
-                }
-            }
-            ExprKind::Struct(qpath, _, _) => {
-                if let Res::Def(_, def_id) = cx.qpath_res(qpath, expr.hir_id) {
-                    self.check_dependency(cx, def_id, expr.hir_id, expr.span);
-                }
-            }
-            ExprKind::MethodCall(..) => {
-                if let Some(def_id) = cx.typeck_results().type_dependent_def_id(expr.hir_id) {
-                    self.check_dependency(cx, def_id, expr.hir_id, expr.span);
-                }
-            }
-            _ => {}
+        if let Some((def_id, hir_id, span)) = hir_refs::resolve_expr_def_id(cx, expr) {
+            self.check_dependency(cx, def_id, hir_id, span);
         }
     }
 
@@ -195,21 +169,15 @@ impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
         cx: &LateContext<'tcx>,
         ty: &'tcx rustc_hir::Ty<'tcx, rustc_hir::AmbigArg>,
     ) {
-        if let rustc_hir::TyKind::Path(ref qpath) = ty.kind
-            && let Res::Def(_, def_id) = cx.qpath_res(qpath, ty.hir_id)
-        {
-            self.check_dependency(cx, def_id, ty.hir_id, ty.span);
+        if let Some((def_id, hir_id, span)) = hir_refs::resolve_ty_def_id(cx, ty) {
+            self.check_dependency(cx, def_id, hir_id, span);
         }
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
-        if let ItemKind::Use(path, _) = &item.kind {
-            for res in path.res.iter().flatten() {
-                if let Res::Def(_, def_id) = res {
-                    self.check_dependency(cx, *def_id, item.hir_id(), item.span);
-                }
-            }
-        }
+        hir_refs::for_each_use_def_id(item, |def_id, hir_id, span| {
+            self.check_dependency(cx, def_id, hir_id, span);
+        });
     }
 
     fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
@@ -243,21 +211,11 @@ impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
 /// Extracts the top-level module name for a local `DefId`.
 ///
 /// Returns `None` for items at the crate root or external crate items.
-/// The first `TypeNs` component of the def path is the top-level module.
-#[expect(
-    clippy::wildcard_enum_match_arm,
-    reason = "only TypeNs represents a named module; all other DefPathData variants are irrelevant"
-)]
 fn top_level_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Symbol> {
     if !def_id.is_local() {
         return None;
     }
-    let def_path = tcx.def_path(def_id);
-    let first = def_path.data.first()?;
-    match first.data {
-        DefPathData::TypeNs(sym) => Some(sym),
-        _ => None,
-    }
+    hir_refs::def_path_segments(tcx, def_id).into_iter().next()
 }
 
 #[cfg(test)]

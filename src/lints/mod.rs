@@ -1,9 +1,11 @@
+pub mod acyclic_modules;
 pub mod blocking_in_async;
 pub mod bon_builder_collector;
 pub mod call_matching;
 pub mod debug_remnants;
 pub mod fallible_new;
 pub mod global_side_effect;
+mod hir_refs;
 pub mod map_init_then_insert;
 pub mod module_dependencies;
 pub mod needless_builder;

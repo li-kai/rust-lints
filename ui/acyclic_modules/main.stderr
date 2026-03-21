@@ -1,0 +1,42 @@
+error: cyclic dependency between sibling modules under `crate`:
+              `payments` → `server` → `payments`
+  --> $DIR/main.rs:13:21
+   |
+LL |             let _ = crate::server::auth::verify(); // payments → server
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `payments` → `server`
+...
+LL |             let _ = crate::payments::billing::create_invoice();
+   |                     ---------------------------------------- `server` → `payments`
+   |
+   = help: break this cycle by moving shared items to a module that both `payments` and `server` can depend on, or restructure so the dependency flows in one direction
+   = note: `#[deny(acyclic_modules)]` on by default
+
+error: cyclic dependency between sibling modules under `multi`:
+              `alpha` → `beta` → `alpha`
+  --> $DIR/main.rs:74:21
+   |
+LL |             let _ = crate::multi::beta::one(); // alpha → beta (first edge, reported)
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^ `alpha` → `beta`
+...
+LL |             crate::multi::alpha::first_ref(); // beta → alpha (first edge, reported)
+   |             ------------------------------ `beta` → `alpha`
+   |
+   = help: break this cycle by moving shared items to a module that both `alpha` and `beta` can depend on, or restructure so the dependency flows in one direction
+
+error: cyclic dependency between sibling modules under `shop`:
+              `billing` → `checkout` → `billing`
+  --> $DIR/main.rs:61:25
+   |
+LL |               let _ = crate::shop::billing::total();
+   |                       --------------------------- `checkout` → `billing`
+...
+LL |               let _item = crate::shop::checkout::CartItem {
+   |  _________________________^
+LL | |                 name: String::new(),
+LL | |             };
+   | |_____________^ `billing` → `checkout`
+   |
+   = help: break this cycle by moving shared items to a module that both `billing` and `checkout` can depend on, or restructure so the dependency flows in one direction
+
+error: aborting due to 3 previous errors
+
