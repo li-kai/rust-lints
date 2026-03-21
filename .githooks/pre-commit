@@ -89,7 +89,7 @@ done || true
 # 3. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
 #    The dylib name uses underscores (librust_lints@toolchain), so --lib must too.
 #    DYLINT_LIBRARY_PATH tells dylint where to find the pre-built cdylib.
-DYLINT_LIBRARY_PATH="$PWD/target/debug" cargo dylint --lib rust_lints || true
+DYLINT_LIBRARY_PATH="${DYLINT_LIBRARY_PATH:-$PWD/target/debug}" cargo dylint --lib rust_lints || true
 
 # 4. Format only staged .rs files.
 echo "$staged" | _grep '\.rs$' | xargs -r rustfmt || true
