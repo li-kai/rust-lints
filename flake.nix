@@ -45,17 +45,48 @@
               (map (entry: entry.to) replacements)
               (builtins.readFile path);
 
-          # Nightly toolchain pinned via rust-toolchain; rustc-dev required by dylint
-          rustToolchain = fenix.packages.${system}.fromToolchainFile {
-            file = ./rust-toolchain;
-            sha256 = "sha256-5XAIyRQMcynTWJvX5VkqErB0H4Oyg0AjeSefOyKSt7g=";
-          };
+          rustManifestSha256 = "sha256-5XAIyRQMcynTWJvX5VkqErB0H4Oyg0AjeSefOyKSt7g=";
+
+          # Parse channel from rust-toolchain to avoid duplicating the nightly date.
+          toolchainChannel = rustToolchainToml.toolchain.channel;
+
+          requiredRustComponents = [
+            "cargo"
+            "clippy"
+            "rust-std"
+            "rustc"
+            "rustfmt"
+            "rustc-dev"
+            "llvm-tools-preview"
+          ];
+
+          mkRustToolchain =
+            {
+              extraRustComponents ? [ ],
+              extraRustTargets ? [ ],
+            }:
+            let
+              fenixPkgs = fenix.packages.${system};
+              components = pkgs.lib.unique (requiredRustComponents ++ extraRustComponents);
+              # Build the host toolchain first, then layer target stdlibs with `combine`.
+              hostToolchain = (fenixPkgs.fromToolchainName {
+                name = toolchainChannel;
+                sha256 = rustManifestSha256;
+              }).withComponents components;
+              targetStdlibs = map (
+                target:
+                (fenixPkgs.targets.${target}.fromToolchainName {
+                  name = toolchainChannel;
+                  sha256 = rustManifestSha256;
+                }).rust-std
+              ) extraRustTargets;
+            in
+            fenixPkgs.combine ([ hostToolchain ] ++ targetStdlibs);
+
+          rustToolchain = mkRustToolchain { };
 
           # Target triple for this system, used in RUSTUP_TOOLCHAIN
           targetTriple = pkgs.stdenv.hostPlatform.rust.rustcTarget;
-
-          # Parse channel from rust-toolchain to avoid duplicating the nightly date
-          toolchainChannel = rustToolchainToml.toolchain.channel;
 
           # RUSTUP_TOOLCHAIN must include the target triple for dylint's parse_toolchain()
           toolchainFull = "${toolchainChannel}-${targetTriple}";
@@ -258,15 +289,22 @@
             {
               pkgs ? nixpkgs.legacyPackages.${system},
               packages ? [ ],
+              extraRustComponents ? [ ],
+              extraRustTargets ? [ ],
               shellHook ? "",
               extraEnv ? { },
             }:
+            let
+              shellRustToolchain = mkRustToolchain {
+                inherit extraRustComponents extraRustTargets;
+              };
+            in
             pkgs.mkShell (
               extraEnv
               // {
                 name = "rust-lints-dev-environment";
                 packages = [
-                  rustToolchain
+                  shellRustToolchain
                   rustupShim
                 ] ++ packages;
                 DYLINT_LIBRARY_PATH = "${rustLints}/lib";
@@ -276,7 +314,7 @@
                   renderTemplate ./nix/cargo-dylint-shell-hook.sh [
                     {
                       from = "@RUST_TOOLCHAIN_BIN@";
-                      to = "${rustToolchain}/bin";
+                      to = "${shellRustToolchain}/bin";
                     }
                     {
                       from = "@RUSTUP_SHIM_BIN@";
@@ -284,11 +322,11 @@
                     }
                     {
                       from = "@RUSTC_BIN@";
-                      to = "${rustToolchain}/bin/rustc";
+                      to = "${shellRustToolchain}/bin/rustc";
                     }
                     {
                       from = "@CARGO_BIN@";
-                      to = "${rustToolchain}/bin/cargo";
+                      to = "${shellRustToolchain}/bin/cargo";
                     }
                     {
                       from = "@DYLINT_VERSION@";
@@ -311,7 +349,7 @@
                 pkgs.cargo-watch # Auto-rebuild on file changes
                 pkgs.cargo-edit # cargo add/rm/upgrade commands
                 pkgs.cargo-audit # Security vulnerability scanning
-                pkgs.rust-analyzer # Rust language server
+                fenix.packages.${system}.rust-analyzer # Rust language server
                 pkgs.just # Command runner
 
                 # Development utilities
@@ -346,11 +384,20 @@
           {
             pkgs,
             packages ? [ ],
+            extraRustComponents ? [ ],
+            extraRustTargets ? [ ],
             shellHook ? "",
             extraEnv ? { },
           }:
           (mkSystem pkgs.system).mkDevShell {
-            inherit pkgs packages shellHook extraEnv;
+            inherit
+              pkgs
+              packages
+              extraRustComponents
+              extraRustTargets
+              shellHook
+              extraEnv
+              ;
           };
       };
     };

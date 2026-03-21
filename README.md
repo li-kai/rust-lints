@@ -326,6 +326,8 @@ In your `flake.nix`:
       in {
         devShells.default = rust-lints.lib.mkDevShell {
           inherit pkgs;
+          extraRustComponents = [ "rust-src" ];
+          extraRustTargets = [ "wasm32-unknown-unknown" ];
           packages = [ pkgs.just ];
         };
       });
@@ -341,7 +343,13 @@ cargo dylint --all
 `rust-lints.lib.mkDevShell` is the supported Nix consumer interface. It wires in
 the matching `cargo-dylint`, toolchain, `rustup` shim, `DYLINT_LIBRARY_PATH`,
 and `DYLINT_DRIVER_PATH` so downstream repos do not need to reproduce this
-repository's internal shell logic.
+repository's internal shell logic. Entering that shell means using the pinned
+nightly Rust toolchain and matching nightly `rust-analyzer`.
+
+`extraRustComponents` adds host-toolchain components on top of the required
+baseline for `cargo`, `clippy`, `rustfmt`, and the Dylint runtime.
+`extraRustTargets` adds target stdlibs such as `wasm32-unknown-unknown`.
+`cargo-dylint` remains managed by the shell hook; it is not a Rust component.
 
 `rust-lints.lib.dylintVersion` remains stable for advanced consumers that need
 the raw CLI compatibility version. More detailed system-specific metadata is
