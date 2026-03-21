@@ -6,6 +6,7 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 
 | Lint | Level | Description |
 |------|-------|-------------|
+| [`acyclic_modules`](#acyclic_modules) | deny | Cyclic dependencies between sibling modules at any depth |
 | [`blocking_in_async`](#blocking_in_async) | deny | Blocking operations inside `async fn` or `async {}` blocks |
 | [`debug_remnants`](#debug_remnants) | warn | Debug macros (`println!`, `eprintln!`, `dbg!`) in non-test code |
 | [`fallible_new`](#fallible_new) | deny | `fn new()` constructors that can panic |
@@ -26,6 +27,32 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | [`unstructured_log_fields`](#unstructured_log_fields) | warn | `tracing` macros using format args instead of structured fields |
 
 ---
+
+### `acyclic_modules`
+
+Flags cyclic dependencies between sibling modules at any depth of the module hierarchy. Builds a sibling dependency graph at every level and reports any cycle it finds.
+
+```
+error: cyclic dependency between sibling modules under `crate`:
+       `payments` → `server` → `payments`
+  --> src/payments/checkout.rs:5:5
+   |
+5  |     use crate::server::auth::verify;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `payments` → `server`
+   |
+  ::: src/server/auth.rs:12:9
+   |
+12 |     crate::payments::billing::create_invoice();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `server` → `payments`
+   |
+   = help: break this cycle by moving shared items to a module that both
+           `payments` and `server` can depend on, or restructure so the
+           dependency flows in one direction
+```
+
+Tracks path expressions, use statements, type annotations, and method calls. Parent-child references are excluded by construction (only siblings are compared). Does not fire inside `#[cfg(test)]` code or on macro-expanded spans.
+
+No configuration required. Use `#[expect(acyclic_modules, reason = "...")]` for per-site opt-out. Complementary to `module_dependencies` — see [docs/acyclic-modules.md](docs/acyclic-modules.md) for the full design.
 
 ### `blocking_in_async`
 
