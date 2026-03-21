@@ -1,4 +1,4 @@
-#![allow(dead_code, unknown_lints, unused_imports)]
+#![allow(dead_code, unknown_lints, unused_imports, topological_ordering)]
 
 fn main() {}
 

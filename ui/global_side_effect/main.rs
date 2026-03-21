@@ -3,7 +3,7 @@
     unknown_lints,
     unused_must_use,
     unused_variables,
-    clippy::allow_attributes_without_reason
+    clippy::allow_attributes_without_reason, topological_ordering
 )]
 // Tests for the `global_side_effect` lint group.
 

@@ -6,7 +6,7 @@
 //   utils = ["types", "errors"]
 //   payments = ["types", "errors", "utils"]
 //   server = ["types", "errors", "utils"]
-#![allow(dead_code, unknown_lints, proper_error_type, acyclic_modules)]
+#![allow(dead_code, unknown_lints, proper_error_type, acyclic_modules, topological_ordering)]
 
 // ── Module definitions ─────────────────────────────────────────────
 

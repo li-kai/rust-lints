@@ -1,4 +1,4 @@
-#![allow(dead_code, unknown_lints, clippy::allow_attributes_without_reason)]
+#![allow(dead_code, unknown_lints, clippy::allow_attributes_without_reason, topological_ordering)]
 // Tests for the `proper_error_type` lint.
 
 use std::fmt;

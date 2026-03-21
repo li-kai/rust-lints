@@ -6,6 +6,7 @@
 
 extern crate rustc_ast;
 extern crate rustc_data_structures;
+extern crate rustc_errors;
 extern crate rustc_hir;
 extern crate rustc_lint;
 extern crate rustc_middle;
@@ -54,6 +55,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::module_dependencies::MODULE_DEPENDENCIES,
         lints::module_dependencies::MODULE_DEPENDENCIES_UNLISTED,
         lints::module_dependencies::MODULE_DEPENDENCIES_DEAD_EDGE,
+        lints::topological_ordering::TOPOLOGICAL_ORDERING,
     ]);
     lint_store.register_pre_expansion_pass(|| {
         Box::new(lints::bon_builder_collector::BonBuilderCollector)
@@ -81,4 +83,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store
         .register_late_pass(|_| Box::new(lints::module_dependencies::ModuleDependencies::new()));
     lint_store.register_late_pass(|_| Box::new(lints::acyclic_modules::AcyclicModules::new()));
+    lint_store.register_late_pass(|_| {
+        Box::new(lints::topological_ordering::TopologicalOrdering::new())
+    });
 }

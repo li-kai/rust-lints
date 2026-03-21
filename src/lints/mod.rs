@@ -15,6 +15,7 @@ pub mod realtime_in_async_test;
 pub mod result_result;
 pub mod suggest_builder;
 mod suppression;
+pub mod topological_ordering;
 pub mod unclear_exports;
 pub mod unbounded_channel;
 pub mod unstructured_log_fields;

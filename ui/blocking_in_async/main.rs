@@ -1,5 +1,5 @@
 // Test cases for the `blocking_in_async` lint.
-#![allow(dead_code, unknown_lints)]
+#![allow(dead_code, unknown_lints, topological_ordering)]
 
 use std::time::Duration;
 

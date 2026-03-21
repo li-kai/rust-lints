@@ -116,3 +116,31 @@ pub struct SubLintConfig {
     /// If set, replaces built-in defaults entirely.
     pub paths: Option<Vec<String>>,
 }
+
+/// Whether items should appear before or after the items they reference.
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderingDirection {
+    /// Items appear before the items that reference them (bottom-up).
+    #[default]
+    CalleeFirst,
+    /// Items appear after the items that reference them (top-down).
+    CallerFirst,
+}
+
+/// Config for the `topological_ordering` lint.
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct TopologicalOrderingConfig {
+    pub direction: OrderingDirection,
+    pub group_inherent_impls: bool,
+}
+
+impl Default for TopologicalOrderingConfig {
+    fn default() -> Self {
+        Self {
+            direction: OrderingDirection::CalleeFirst,
+            group_inherent_impls: true,
+        }
+    }
+}

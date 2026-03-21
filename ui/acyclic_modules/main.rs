@@ -1,5 +1,5 @@
 // Test cases for the `acyclic_modules` lint.
-#![allow(dead_code, unknown_lints)]
+#![allow(dead_code, unknown_lints, topological_ordering)]
 
 // ── Mutual cycle at crate root: payments <-> server ──────────────
 
