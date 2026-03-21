@@ -18,7 +18,7 @@ consumer machine. This has two costs:
    and wrappers), but consumers of the library don't get those shims.
 
 2. **Every consumer rebuilds from source.** Building requires the exact pinned
-   nightly with `rustc-dev` and `llvm-tools-preview`, plus `dylint-link`. This
+   nightly with `rustc-dev`, plus `dylint-link`. This
    is slow and fragile.
 
 ## Background: how dylint loads and runs lints
@@ -177,7 +177,7 @@ The `packages.default` derivation must produce two things:
 | Dependency | Why | Source |
 |---|---|---|
 | Rust nightly (`nightly-2026-01-22`) | Compile the cdylib and driver against `rustc_private` APIs | fenix (already in our flake) |
-| `rustc-dev`, `llvm-tools-preview` | Provide `rustc_driver` and compiler internals for linking | fenix toolchain components |
+| `rustc-dev` | Provide `rustc_driver` and compiler internals for linking | fenix toolchain components |
 | `dylint-link` | Custom linker that produces `@toolchain`-tagged output | Built from crates.io |
 | `rustup` shim | `dylint-link` calls `rustup which rustc` internally | Already in our flake |
 

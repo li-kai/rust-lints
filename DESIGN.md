@@ -6,7 +6,7 @@ Create a dylint lint library crate called `rust-lints`. This is a reusable `cdyl
 - `clippy_utils` pinned to the git rev matching the nightly toolchain
 - `crate-type = ["cdylib"]`
 - `.cargo/config.toml` with `linker = dylint-link`
-- `rust-toolchain` pinned to a recent nightly with `rustc-dev` and `llvm-tools-preview` components
+- `rust-toolchain` pinned to a recent nightly with the `rustc-dev` component
 - `serde` dependency for lint configuration via `dylint.toml`
 - `[package.metadata.rust-analyzer] rustc_private = true`
 

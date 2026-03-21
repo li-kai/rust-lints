@@ -57,7 +57,6 @@
             "rustc"
             "rustfmt"
             "rustc-dev"
-            "llvm-tools-preview"
           ];
 
           mkRustToolchain =
