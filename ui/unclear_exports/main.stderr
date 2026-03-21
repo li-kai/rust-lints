@@ -1,0 +1,67 @@
+error: glob imports (`use foo::*`) are banned — list each imported name explicitly
+  --> $DIR/main.rs:20:5
+   |
+LL |     use inner::*;
+   |     ^^^^^^^^^^^^^
+   |
+   = help: replace `use foo::*` with an explicit list: `use foo::{Bar, Baz}`
+   = note: `#[deny(unclear_exports)]` on by default
+
+error: glob imports (`use foo::*`) are banned — list each imported name explicitly
+  --> $DIR/main.rs:24:5
+   |
+LL |     pub(crate) use inner::*;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: replace `use foo::*` with an explicit list: `use foo::{Bar, Baz}`
+
+error: glob imports (`use foo::*`) are banned — list each imported name explicitly
+  --> $DIR/main.rs:28:5
+   |
+LL |     pub(super) use inner::*;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: replace `use foo::*` with an explicit list: `use foo::{Bar, Baz}`
+
+error: glob imports (`use foo::*`) are banned — list each imported name explicitly
+  --> $DIR/main.rs:32:5
+   |
+LL |     pub use inner::*;
+   |     ^^^^^^^^^^^^^^^^^
+   |
+   = help: replace `use foo::*` with an explicit list: `use foo::{Bar, Baz}`
+
+error: glob imports (`use foo::*`) are banned — list each imported name explicitly
+  --> $DIR/main.rs:36:5
+   |
+LL |     use prelude::*;
+   |     ^^^^^^^^^^^^^^^
+   |
+   = help: replace `use foo::*` with an explicit list: `use foo::{Bar, Baz}`
+
+error: renamed imports (`use foo::Bar as Baz`) are banned — use the original name
+  --> $DIR/main.rs:51:5
+   |
+LL |     use inner::Foo as MyFoo;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: import the item under its original name, or create a type alias if a new name is truly needed
+
+error: renamed imports (`use foo::Bar as Baz`) are banned — use the original name
+  --> $DIR/main.rs:55:5
+   |
+LL |     pub use inner::Bar as MyBar;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: import the item under its original name, or create a type alias if a new name is truly needed
+
+error: renamed imports (`use foo::Bar as Baz`) are banned — use the original name
+  --> $DIR/main.rs:59:5
+   |
+LL |     pub(crate) use inner::Foo as CrateFoo;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: import the item under its original name, or create a type alias if a new name is truly needed
+
+error: aborting due to 8 previous errors
+

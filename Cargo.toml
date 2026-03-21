@@ -79,6 +79,10 @@ name = "suggest_builder"
 path = "ui/suggest_builder/main.rs"
 
 [[example]]
+name = "unclear_exports"
+path = "ui/unclear_exports/main.rs"
+
+[[example]]
 name = "unbounded_channel"
 path = "ui/unbounded_channel/main.rs"
 

@@ -47,6 +47,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::unbounded_channel::UNBOUNDED_CHANNEL,
         lints::blocking_in_async::BLOCKING_IN_ASYNC,
         lints::panic_in_drop::PANIC_IN_DROP,
+        lints::unclear_exports::UNCLEAR_EXPORTS,
         lints::result_result::RESULT_RESULT,
         lints::realtime_in_async_test::REALTIME_IN_ASYNC_TEST,
         lints::unstructured_log_fields::UNSTRUCTURED_LOG_FIELDS,
@@ -69,6 +70,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store.register_late_pass(|_| Box::new(lints::unbounded_channel::UnboundedChannel::new()));
     lint_store.register_late_pass(|_| Box::new(lints::blocking_in_async::BlockingInAsync::new()));
     lint_store.register_late_pass(|_| Box::new(lints::panic_in_drop::PanicInDrop::new()));
+    lint_store.register_late_pass(|_| Box::new(lints::unclear_exports::UnclearExports::new()));
     lint_store.register_late_pass(|_| Box::new(lints::result_result::ResultResult::new()));
     lint_store.register_late_pass(|_| {
         Box::new(lints::unstructured_log_fields::UnstructuredLogFields::new())
