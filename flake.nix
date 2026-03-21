@@ -39,26 +39,29 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           renderTemplate =
-            path: replacements:
+            path: vars:
             builtins.replaceStrings
-              (map (entry: entry.from) replacements)
-              (map (entry: entry.to) replacements)
+              (map (name: "@${name}@") (builtins.attrNames vars))
+              (builtins.attrValues vars)
               (builtins.readFile path);
 
-          rustManifestSha256 = "sha256-5XAIyRQMcynTWJvX5VkqErB0H4Oyg0AjeSefOyKSt7g=";
-
           # Parse channel from rust-toolchain to avoid duplicating the nightly date.
-          toolchainChannel = rustToolchainToml.toolchain.channel;
-
-          requiredRustComponents = [
-            "cargo"
-            "clippy"
-            "rust-src"
-            "rust-std"
-            "rustc"
-            "rustfmt"
-            "rustc-dev"
-          ];
+          toolchain = rec {
+            channel = rustToolchainToml.toolchain.channel;
+            sha256 = "sha256-5XAIyRQMcynTWJvX5VkqErB0H4Oyg0AjeSefOyKSt7g=";
+            target = pkgs.stdenv.hostPlatform.rust.rustcTarget;
+            # RUSTUP_TOOLCHAIN must include the target triple for dylint's parse_toolchain()
+            full = "${channel}-${target}";
+            components = [
+              "cargo"
+              "clippy"
+              "rust-src"
+              "rust-std"
+              "rustc"
+              "rustfmt"
+              "rustc-dev"
+            ];
+          };
 
           mkRustToolchain =
             {
@@ -67,17 +70,17 @@
             }:
             let
               fenixPkgs = fenix.packages.${system};
-              components = pkgs.lib.unique (requiredRustComponents ++ extraRustComponents);
+              components = pkgs.lib.unique (toolchain.components ++ extraRustComponents);
               # Build the host toolchain first, then layer target stdlibs with `combine`.
               hostToolchain = (fenixPkgs.fromToolchainName {
-                name = toolchainChannel;
-                sha256 = rustManifestSha256;
+                name = toolchain.channel;
+                sha256 = toolchain.sha256;
               }).withComponents components;
               targetStdlibs = map (
-                target:
-                (fenixPkgs.targets.${target}.fromToolchainName {
-                  name = toolchainChannel;
-                  sha256 = rustManifestSha256;
+                t:
+                (fenixPkgs.targets.${t}.fromToolchainName {
+                  name = toolchain.channel;
+                  sha256 = toolchain.sha256;
                 }).rust-std
               ) extraRustTargets;
             in
@@ -85,30 +88,17 @@
 
           rustToolchain = mkRustToolchain { };
 
-          # Target triple for this system, used in RUSTUP_TOOLCHAIN
-          targetTriple = pkgs.stdenv.hostPlatform.rust.rustcTarget;
-
-          # RUSTUP_TOOLCHAIN must include the target triple for dylint's parse_toolchain()
-          toolchainFull = "${toolchainChannel}-${targetTriple}";
-
           dylintMeta = {
             version = dylintVersion;
-            toolchain = {
-              channel = toolchainChannel;
-              target = targetTriple;
-              full = toolchainFull;
-            };
+            inherit toolchain;
           };
 
           # Shim that satisfies dylint's `rustup which <tool>` calls using
           # the nix-managed toolchain instead of a real rustup installation.
           rustupShim = pkgs.writeShellScriptBin "rustup" (
-            renderTemplate ./nix/rustup-shim.sh [
-              {
-                from = "@TOOLCHAIN_FULL@";
-                to = toolchainFull;
-              }
-            ]
+            renderTemplate ./nix/rustup-shim.sh {
+              TOOLCHAIN_FULL = toolchain.full;
+            }
           );
 
           # ---------------------------------------------------------------------------
@@ -139,7 +129,7 @@
           # Wrapper that injects RUSTUP_TOOLCHAIN when the nix-built dylint-link runs.
           # Used in both the cdylib package build and the dev shell.
           dylintLinkWrapper = pkgs.writeShellScriptBin "dylint-link" ''
-            export RUSTUP_TOOLCHAIN="''${RUSTUP_TOOLCHAIN:-${toolchainFull}}"
+            export RUSTUP_TOOLCHAIN="''${RUSTUP_TOOLCHAIN:-${toolchain.full}}"
             exec ${dylintLink}/bin/dylint-link "$@"
           '';
 
@@ -170,24 +160,12 @@
           # Git wrapper that intercepts clone/checkout of rust-clippy and serves
           # from the prefetched source instead. All other git operations pass through.
           gitClippyWrapper = pkgs.writeShellScriptBin "git" (
-            renderTemplate ./nix/git-clippy-wrapper.sh [
-              {
-                from = "@GREP@";
-                to = "${pkgs.gnugrep}/bin/grep";
-              }
-              {
-                from = "@REAL_GIT@";
-                to = "${pkgs.git}/bin/git";
-              }
-              {
-                from = "@CLIPPY_SRC@";
-                to = toString clippySrc;
-              }
-              {
-                from = "@TOOLCHAIN_CHANNEL@";
-                to = toolchainChannel;
-              }
-            ]
+            renderTemplate ./nix/git-clippy-wrapper.sh {
+              GREP = "${pkgs.gnugrep}/bin/grep";
+              REAL_GIT = "${pkgs.git}/bin/git";
+              CLIPPY_SRC = toString clippySrc;
+              TOOLCHAIN_CHANNEL = toolchain.channel;
+            }
           );
 
           # dylint-driver: the rustc driver binary shipped to consumers.
@@ -204,7 +182,7 @@
             cargoLock.lockFile = ./nix/dylint-driver/Cargo.lock;
             nativeBuildInputs = [ pkgs.pkg-config rustupShim gitClippyWrapper ];
             buildInputs = [ pkgs.openssl pkgs.zlib ] ++ darwinInputs;
-            RUSTUP_TOOLCHAIN = toolchainFull;
+            RUSTUP_TOOLCHAIN = toolchain.full;
             RUSTFLAGS =
               if pkgs.stdenv.isDarwin
               then "-C link-arg=-rpath -C link-arg=${rustToolchain}/lib"
@@ -251,7 +229,7 @@
             nativeBuildInputs = [ dylintLinkWrapper rustupShim ];
             buildInputs = [ pkgs.zlib ] ++ darwinInputs;
 
-            RUSTUP_TOOLCHAIN = toolchainFull;
+            RUSTUP_TOOLCHAIN = toolchain.full;
 
             # cdylib targets don't produce testable artifacts; skip cargo test.
             doCheck = false;
@@ -263,7 +241,7 @@
               # Assert that dylint-link tagged the dylib with @toolchain in the filename.
               if ! ls target/release/librust_lints@*.* 1>/dev/null 2>&1; then
                 echo "ERROR: No @toolchain-tagged dylib found in target/release/" >&2
-                echo "Expected: librust_lints@${toolchainFull}.<ext>" >&2
+                echo "Expected: librust_lints@${toolchain.full}.<ext>" >&2
                 echo "Found:" >&2
                 ls -la target/release/librust_lints* 2>&1 >&2 || true
                 exit 1
@@ -280,8 +258,8 @@
             name = "rust-lints";
             paths = [ rustLintsLib ];
             postBuild = ''
-              mkdir -p $out/drivers/${toolchainFull}
-              cp ${dylintDriver}/bin/dylint-driver $out/drivers/${toolchainFull}/
+              mkdir -p $out/drivers/${toolchain.full}
+              cp ${dylintDriver}/bin/dylint-driver $out/drivers/${toolchain.full}/
             '';
           };
 
@@ -309,30 +287,15 @@
                 ] ++ packages;
                 DYLINT_LIBRARY_PATH = "${rustLints}/lib";
                 DYLINT_DRIVER_PATH = "${rustLints}/drivers";
-                RUSTUP_TOOLCHAIN = toolchainFull;
+                RUSTUP_TOOLCHAIN = toolchain.full;
                 shellHook =
-                  renderTemplate ./nix/cargo-dylint-shell-hook.sh [
-                    {
-                      from = "@RUST_TOOLCHAIN_BIN@";
-                      to = "${shellRustToolchain}/bin";
-                    }
-                    {
-                      from = "@RUSTUP_SHIM_BIN@";
-                      to = "${rustupShim}/bin";
-                    }
-                    {
-                      from = "@RUSTC_BIN@";
-                      to = "${shellRustToolchain}/bin/rustc";
-                    }
-                    {
-                      from = "@CARGO_BIN@";
-                      to = "${shellRustToolchain}/bin/cargo";
-                    }
-                    {
-                      from = "@DYLINT_VERSION@";
-                      to = dylintVersion;
-                    }
-                  ]
+                  renderTemplate ./nix/cargo-dylint-shell-hook.sh {
+                    RUST_TOOLCHAIN_BIN = "${shellRustToolchain}/bin";
+                    RUSTUP_SHIM_BIN = "${rustupShim}/bin";
+                    RUSTC_BIN = "${shellRustToolchain}/bin/rustc";
+                    CARGO_BIN = "${shellRustToolchain}/bin/cargo";
+                    DYLINT_VERSION = dylintVersion;
+                  }
                 + pkgs.lib.optionalString (shellHook != "") "\n${shellHook}\n";
               }
             );
@@ -375,7 +338,6 @@
     flake-utils.lib.eachDefaultSystem (system: (mkSystem system).outputs)
     // {
       lib = {
-        dylintVersion = dylintVersion;
         dylint = {
           version = dylintVersion;
           forSystem = system: (mkSystem system).dylintMeta;
