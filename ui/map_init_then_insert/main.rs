@@ -8,10 +8,11 @@
 )]
 // Tests for the `map_init_then_insert` lint.
 
+use std::collections::{BTreeMap, HashMap};
+
 use ahash::AHashMap;
 use indexmap::IndexMap;
 use rustc_hash::FxHashMap;
-use std::collections::{BTreeMap, HashMap};
 
 // ══════════════════════════════════════════════════════════════════════
 // Should trigger: HashMap::new() + ≥2 inserts

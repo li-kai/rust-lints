@@ -1,8 +1,9 @@
+use core::ops::ControlFlow;
+
 use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::ty::implements_trait;
 use clippy_utils::visitors::for_each_expr_without_closures;
 use clippy_utils::{is_def_id_trait_method, is_entrypoint_fn, is_in_cfg_test, return_ty};
-use core::ops::ControlFlow;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::intravisit::FnKind;
 use rustc_hir::{Body, ExprKind, FnDecl, Item, ItemKind, LangItem};
