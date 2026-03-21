@@ -1,4 +1,5 @@
 #![allow(dead_code, unknown_lints, clippy::allow_attributes_without_reason)]
+use bon::{bon, builder};
 use std::marker::PhantomData;
 // Tests for the `suggest_builder` lint.
 // Threshold: 4 (from dylint.toml).
@@ -27,6 +28,20 @@ struct WithBuilder {
     port: u16,
     timeout: u32,
     retries: u8,
+}
+
+// Should NOT trigger: has a `#[bon] impl` with a `#[builder]` constructor.
+struct User {
+    id: u32,
+    name: String,
+}
+
+#[bon]
+impl User {
+    #[builder]
+    fn new(id: u32, name: String) -> Self {
+        Self { id, name }
+    }
 }
 
 // Should NOT trigger: 3 fields (below threshold).

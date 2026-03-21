@@ -1,5 +1,5 @@
-warning: struct `Config` has 4 fields but does not derive `bon::Builder`
-  --> $DIR/main.rs:7:1
+warning: struct `Config` has 4 fields; consider exposing a `#[builder]` constructor
+  --> $DIR/main.rs:8:1
    |
 LL | / struct Config {
 LL | |     host: String,
@@ -9,11 +9,11 @@ LL | |     retries: u8,
 LL | | }
    | |_^
    |
-   = help: add `#[derive(bon::Builder)]` to enable the builder pattern
+   = help: use the function builder style: `#[bon] impl` plus `#[builder] fn new(...) -> Self`
    = note: `#[warn(suggest_builder)]` on by default
 
-warning: struct `LargerConfig` has 5 fields but does not derive `bon::Builder`
-  --> $DIR/main.rs:15:1
+warning: struct `LargerConfig` has 5 fields; consider exposing a `#[builder]` constructor
+  --> $DIR/main.rs:16:1
    |
 LL | / struct LargerConfig {
 LL | |     host: String,
@@ -24,10 +24,10 @@ LL | |     verbose: bool,
 LL | | }
    | |_^
    |
-   = help: add `#[derive(bon::Builder)]` to enable the builder pattern
+   = help: use the function builder style: `#[bon] impl` plus `#[builder] fn new(...) -> Self`
 
-warning: struct `TypedContainer` has 4 fields but does not derive `bon::Builder`
-  --> $DIR/main.rs:106:1
+warning: struct `TypedContainer` has 4 fields; consider exposing a `#[builder]` constructor
+  --> $DIR/main.rs:121:1
    |
 LL | / struct TypedContainer<T, U> {
 LL | |     name: String,
@@ -38,7 +38,7 @@ LL | |     _u: PhantomData<fn(U)>,
 LL | | }
    | |_^
    |
-   = help: add `#[derive(bon::Builder)]` to enable the builder pattern
+   = help: use the function builder style: `#[bon] impl` plus `#[builder] fn new(...) -> Self`
 
 warning: 3 warnings emitted
 

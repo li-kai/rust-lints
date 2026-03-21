@@ -7,10 +7,10 @@ use rustc_span::Symbol;
 use crate::config::SuggestBuilderConfig;
 
 rustc_session::declare_lint! {
-    /// Suggests adding `#[derive(bon::Builder)]` to structs with many named fields.
+    /// Suggests using a `#[builder]` constructor in a `#[bon] impl` for structs with many named fields.
     pub SUGGEST_BUILDER,
     Warn,
-    "suggests adding `#[derive(bon::Builder)]` to structs with many fields"
+    "suggests using a function builder for structs with many fields"
 }
 
 pub struct SuggestBuilder {
@@ -99,9 +99,11 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
             cx,
             SUGGEST_BUILDER,
             item.span,
-            format!("struct `{ident}` has {field_count} fields but does not derive `bon::Builder`",),
+            format!(
+                "struct `{ident}` has {field_count} fields; consider exposing a `#[builder]` constructor"
+            ),
             None,
-            "add `#[derive(bon::Builder)]` to enable the builder pattern",
+            "use the function builder style: `#[bon] impl` plus `#[builder] fn new(...) -> Self`",
         );
     }
 }
