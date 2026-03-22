@@ -1,4 +1,7 @@
-#![allow(clippy::wildcard_enum_match_arm, reason = "only specific variants are relevant")]
+#![allow(
+    clippy::wildcard_enum_match_arm,
+    reason = "only specific variants are relevant"
+)]
 
 //! Shared helpers for resolving cross-module references from HIR nodes.
 

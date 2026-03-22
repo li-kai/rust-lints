@@ -226,10 +226,8 @@ fn is_panicking_guard<'tcx>(cx: &LateContext<'tcx>, cond: &Expr<'tcx>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_panic_in_drop() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "panic_in_drop").run();
+        crate::testing::run_ui_test("panic_in_drop", None, &[]);
     }
 }

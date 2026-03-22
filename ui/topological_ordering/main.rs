@@ -130,19 +130,11 @@ mod mutual_recursion {
 
     // parse_expr and parse_atom form an SCC -- no warning between them.
     fn parse_expr(depth: usize) -> u32 {
-        if leaf() {
-            parse_atom(depth + 1)
-        } else {
-            0
-        }
+        if leaf() { parse_atom(depth + 1) } else { 0 }
     }
 
     fn parse_atom(depth: usize) -> u32 {
-        if depth < 10 {
-            parse_expr(depth + 1)
-        } else {
-            1
-        }
+        if depth < 10 { parse_expr(depth + 1) } else { 1 }
     }
 }
 

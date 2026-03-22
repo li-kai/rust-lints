@@ -1,4 +1,10 @@
-#![allow(dead_code, unknown_lints, unused_variables, unused_imports, topological_ordering)]
+#![allow(
+    dead_code,
+    unknown_lints,
+    unused_variables,
+    unused_imports,
+    topological_ordering
+)]
 
 // ══════════════════════════════════════════════════════════════════════
 // SHOULD TRIGGER

@@ -3,7 +3,8 @@
     unknown_lints,
     unused_variables,
     unused_must_use,
-    clippy::allow_attributes_without_reason, topological_ordering
+    clippy::allow_attributes_without_reason,
+    topological_ordering
 )]
 // Tests for the `realtime_in_async_test` lint.
 

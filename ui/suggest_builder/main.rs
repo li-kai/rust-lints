@@ -1,4 +1,9 @@
-#![allow(dead_code, unknown_lints, clippy::allow_attributes_without_reason, topological_ordering)]
+#![allow(
+    dead_code,
+    unknown_lints,
+    clippy::allow_attributes_without_reason,
+    topological_ordering
+)]
 use std::marker::PhantomData;
 
 use bon::{bon, builder};

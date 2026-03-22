@@ -180,12 +180,8 @@ const fn is_bool_lit_true(expr: &Expr<'_>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_realtime_in_async_test() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "realtime_in_async_test")
-            .rustc_flags(["--test"])
-            .run();
+        crate::testing::run_ui_test("realtime_in_async_test", None, &["--test"]);
     }
 }

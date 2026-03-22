@@ -399,10 +399,8 @@ impl ProperErrorType {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_proper_error_type() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "proper_error_type").run();
+        crate::testing::run_ui_test("proper_error_type", None, &[]);
     }
 }

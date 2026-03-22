@@ -183,10 +183,8 @@ fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_blocking_in_async() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "blocking_in_async").run();
+        crate::testing::run_ui_test("blocking_in_async", None, &[]);
     }
 }

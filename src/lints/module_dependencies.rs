@@ -220,8 +220,6 @@ fn top_level_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Symbol> {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     const TOML: &str = "\
 [module_dependencies]\n\
 exhaustive = false\n\
@@ -236,8 +234,6 @@ server = [\"types\", \"errors\", \"utils\"]\n\
 
     #[test]
     fn ui_module_dependencies() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "module_dependencies")
-            .dylint_toml(TOML)
-            .run();
+        crate::testing::run_ui_test("module_dependencies", Some(TOML), &[]);
     }
 }

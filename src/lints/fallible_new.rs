@@ -168,10 +168,8 @@ impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_fallible_new() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "fallible_new").run();
+        crate::testing::run_ui_test("fallible_new", None, &[]);
     }
 }

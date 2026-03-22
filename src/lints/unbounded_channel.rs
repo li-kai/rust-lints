@@ -80,10 +80,8 @@ impl<'tcx> LateLintPass<'tcx> for UnboundedChannel {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_unbounded_channel() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "unbounded_channel").run();
+        crate::testing::run_ui_test("unbounded_channel", None, &[]);
     }
 }

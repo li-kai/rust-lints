@@ -40,18 +40,18 @@ LL |     use prelude::*;
    = help: replace `use foo::*` with an explicit list: `use foo::{Bar, Baz}`
 
 error: renamed imports (`use foo::Bar as Baz`) are banned — use the original name
-  --> $DIR/main.rs:51:5
+  --> $DIR/main.rs:54:5
    |
-LL |     use inner::Foo as MyFoo;
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+LL |     pub use inner::Bar as MyBar;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: import the item under its original name, or create a type alias if a new name is truly needed
 
 error: renamed imports (`use foo::Bar as Baz`) are banned — use the original name
   --> $DIR/main.rs:55:5
    |
-LL |     pub use inner::Bar as MyBar;
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL |     use inner::Foo as MyFoo;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: import the item under its original name, or create a type alias if a new name is truly needed
 

@@ -19,6 +19,10 @@ build *args:
 test *args:
     cargo test {{ args }}
 
+# Update expected UI test output (.stderr files)
+bless *args:
+    DYLINT_BLESS=1 cargo test {{ args }}
+
 # Check code with clippy (no modifications)
 check *args:
     cargo clippy --lib --tests --benches --bins {{ args }} -- -D warnings

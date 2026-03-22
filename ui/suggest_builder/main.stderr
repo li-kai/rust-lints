@@ -1,5 +1,5 @@
 warning: struct `Config` has 4 fields; consider exposing a `#[builder]` constructor
-  --> $DIR/main.rs:9:1
+  --> $DIR/main.rs:14:1
    |
 LL | / struct Config {
 LL | |     host: String,
@@ -13,7 +13,7 @@ LL | | }
    = note: `#[warn(suggest_builder)]` on by default
 
 warning: struct `LargerConfig` has 5 fields; consider exposing a `#[builder]` constructor
-  --> $DIR/main.rs:17:1
+  --> $DIR/main.rs:22:1
    |
 LL | / struct LargerConfig {
 LL | |     host: String,
@@ -27,7 +27,7 @@ LL | | }
    = help: use the function builder style: `#[bon] impl` plus `#[builder] fn new(...) -> Self`
 
 warning: struct `TypedContainer` has 4 fields; consider exposing a `#[builder]` constructor
-  --> $DIR/main.rs:122:1
+  --> $DIR/main.rs:127:1
    |
 LL | / struct TypedContainer<T, U> {
 LL | |     name: String,

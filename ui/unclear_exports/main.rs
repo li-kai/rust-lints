@@ -48,11 +48,11 @@ mod rename_triggers {
     }
 
     // -- Private rename --
-    use inner::Foo as MyFoo;
     //~^ ERROR: renamed imports (`use foo::Bar as Baz`) are banned
 
     // -- Public rename --
     pub use inner::Bar as MyBar;
+    use inner::Foo as MyFoo;
     //~^ ERROR: renamed imports (`use foo::Bar as Baz`) are banned
 
     // -- pub(crate) rename --
@@ -71,11 +71,8 @@ mod no_trigger {
     }
 
     // -- Explicit list import --
-    use inner::{Foo, Bar};
-
     // -- Single item import --
-    use inner::Foo as _;
-
     // -- Explicit pub re-export with original names --
-    pub use inner::{Foo as _, Bar as _};
+    pub use inner::{Bar as _, Foo as _};
+    use inner::{Bar, Foo as _, Foo};
 }

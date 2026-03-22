@@ -248,10 +248,8 @@ fn is_insert_on_binding(stmt: &Stmt<'_>, binding_id: HirId) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_map_init_then_insert() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "map_init_then_insert").run();
+        crate::testing::run_ui_test("map_init_then_insert", None, &[]);
     }
 }

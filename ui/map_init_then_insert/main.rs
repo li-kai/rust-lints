@@ -4,7 +4,8 @@
     debug_remnants,
     unused_variables,
     unused_mut,
-    clippy::allow_attributes_without_reason, topological_ordering
+    clippy::allow_attributes_without_reason,
+    topological_ordering
 )]
 // Tests for the `map_init_then_insert` lint.
 

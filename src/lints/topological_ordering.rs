@@ -1,4 +1,8 @@
-#![allow(clippy::indexing_slicing, reason = "graph algorithm indices are always in-bounds")]
+#![allow(
+    clippy::indexing_slicing,
+    reason = "graph algorithm indices are always in-bounds"
+)]
+#![allow(unclear_exports, reason = "internal lint crate, not a public API")]
 
 //! Lint enforcing topological ordering of items within a module.
 //!
@@ -17,16 +21,16 @@
 use clippy_utils::diagnostics::span_lint_hir_and_then;
 use clippy_utils::is_in_test;
 use rustc_data_structures::fx::FxHashMap;
+use rustc_errors::Applicability;
 use rustc_hir as hir;
 use rustc_hir::def::DefKind;
 use rustc_lint::{LateContext, LateLintPass, LintContext as _};
 use rustc_middle::ty::TyCtxt;
-use rustc_span::def_id::LocalDefId;
-use rustc_errors::Applicability;
 use rustc_span::Span;
+use rustc_span::def_id::LocalDefId;
 
-use crate::config::{OrderingDirection, TopologicalOrderingConfig};
 use super::hir_refs;
+use crate::config::{OrderingDirection, TopologicalOrderingConfig};
 
 rustc_session::declare_lint! {
     /// Flags items that appear out of topological order within a module.
@@ -99,7 +103,11 @@ impl TopologicalOrdering {
         }
     }
 
-    fn record_ref(&mut self, owner: LocalDefId, resolved: Option<(rustc_span::def_id::DefId, Span)>) {
+    fn record_ref(
+        &mut self,
+        owner: LocalDefId,
+        resolved: Option<(rustc_span::def_id::DefId, Span)>,
+    ) {
         if let Some((def_id, span)) = resolved {
             if let Some(local_id) = def_id.as_local() {
                 self.raw_refs.push(RawRef {
@@ -158,11 +166,14 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
             None
         };
 
-        let module_data = self.modules.entry(parent_local).or_insert_with(|| ModuleData {
-            body_span: item.span,
-            items: Vec::new(),
-            has_macro_items: false,
-        });
+        let module_data = self
+            .modules
+            .entry(parent_local)
+            .or_insert_with(|| ModuleData {
+                body_span: item.span,
+                items: Vec::new(),
+                has_macro_items: false,
+            });
 
         if from_expansion {
             module_data.has_macro_items = true;
@@ -193,17 +204,13 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
         }
     }
 
-    fn check_ty(
-        &mut self,
-        cx: &LateContext<'tcx>,
-        ty: &'tcx hir::Ty<'tcx, hir::AmbigArg>,
-    ) {
+    fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, hir::AmbigArg>) {
         if !self.enabled {
             return;
         }
         if !ty.span.from_expansion() {
-            let resolved = hir_refs::resolve_ty_def_id(cx, ty)
-                .map(|(def_id, _hir_id, span)| (def_id, span));
+            let resolved =
+                hir_refs::resolve_ty_def_id(cx, ty).map(|(def_id, _hir_id, span)| (def_id, span));
             self.record_ref(ty.hir_id.owner.def_id, resolved);
         }
     }
@@ -228,17 +235,20 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
         for raw_ref in &self.raw_refs {
             let source = *resolve_cache
                 .entry(raw_ref.source_owner)
-                .or_insert_with(|| find_module_item(cx.tcx, raw_ref.source_owner, &def_id_to_module_item));
-            let target = *resolve_cache
-                .entry(raw_ref.target)
-                .or_insert_with(|| find_module_item(cx.tcx, raw_ref.target, &def_id_to_module_item));
+                .or_insert_with(|| {
+                    find_module_item(cx.tcx, raw_ref.source_owner, &def_id_to_module_item)
+                });
+            let target = *resolve_cache.entry(raw_ref.target).or_insert_with(|| {
+                find_module_item(cx.tcx, raw_ref.target, &def_id_to_module_item)
+            });
 
             if let (Some((src_mod, src_idx)), Some((tgt_mod, tgt_idx))) = (source, target) {
                 if src_mod == tgt_mod && src_idx != tgt_idx {
-                    module_refs
-                        .entry(src_mod)
-                        .or_default()
-                        .push((src_idx, tgt_idx, raw_ref.ref_span));
+                    module_refs.entry(src_mod).or_default().push((
+                        src_idx,
+                        tgt_idx,
+                        raw_ref.ref_span,
+                    ));
                 }
             }
         }
@@ -256,8 +266,12 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
             let item_def_id_to_idx = build_def_id_to_idx(&module_data.items);
 
             // Apply inherent-impl grouping to refs (merge impl refs with type).
-            let remapped_refs =
-                remap_inherent_impl_refs(&module_data.items, &item_def_id_to_idx, resolved_refs, self.config.group_inherent_impls);
+            let remapped_refs = remap_inherent_impl_refs(
+                &module_data.items,
+                &item_def_id_to_idx,
+                resolved_refs,
+                self.config.group_inherent_impls,
+            );
 
             let n = module_data.items.len();
             let adj = build_adj_list(&remapped_refs, n);
@@ -305,9 +319,7 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Item classification helpers
-// ---------------------------------------------------------------------------
 
 fn is_relevant_item_kind(kind: &hir::ItemKind<'_>) -> bool {
     matches!(
@@ -348,7 +360,10 @@ fn item_display_name(cx: &LateContext<'_>, item: &hir::Item<'_>) -> String {
         .map(|s| s.to_string())
         .unwrap_or_else(|| "?".into());
 
-    #[allow(clippy::wildcard_enum_match_arm, reason = "only a few kinds get prefixes")]
+    #[allow(
+        clippy::wildcard_enum_match_arm,
+        reason = "only a few kinds get prefixes"
+    )]
     let prefix = match kind {
         DefKind::Fn => "fn",
         DefKind::Struct => "struct",
@@ -377,9 +392,7 @@ fn resolve_self_ty_def_id(cx: &LateContext<'_>, impl_block: &hir::Impl<'_>) -> O
     }
 }
 
-// ---------------------------------------------------------------------------
 // Reference resolution
-// ---------------------------------------------------------------------------
 
 /// Walk up the parent chain from `def_id` until we find a module-level item.
 fn find_module_item(
@@ -439,9 +452,7 @@ fn remap_inherent_impl_refs(
         .collect()
 }
 
-// ---------------------------------------------------------------------------
 // Graph construction & SCC computation
-// ---------------------------------------------------------------------------
 
 fn build_adj_list(refs: &[(usize, usize, Span)], n: usize) -> Vec<Vec<usize>> {
     let mut adj = vec![Vec::new(); n];
@@ -570,9 +581,7 @@ fn topo_sort_stable(
     order
 }
 
-// ---------------------------------------------------------------------------
 // Violation detection
-// ---------------------------------------------------------------------------
 
 /// A single ordering violation: an item that appears at the wrong position.
 struct OrderingViolation {
@@ -653,19 +662,19 @@ fn check_impl_grouping(
         } else {
             (impl_pos, type_idx)
         };
-        let has_unrelated = items[lo + 1..hi].iter().any(|i| {
-            i.def_id != self_ty_def_id
-                && i.inherent_impl_self_ty != Some(self_ty_def_id)
-        });
+        let has_unrelated = items[lo + 1..hi]
+            .iter()
+            .any(|i| i.def_id != self_ty_def_id && i.inherent_impl_self_ty != Some(self_ty_def_id));
 
         if has_unrelated {
             violations.push(GroupingViolation {
                 impl_def_id: item.def_id,
                 impl_span: item.span,
-                type_name: type_item.display_name.split_once(' ').map_or(
-                    type_item.display_name.as_str(),
-                    |(_, name)| name,
-                ).to_string(),
+                type_name: type_item
+                    .display_name
+                    .split_once(' ')
+                    .map_or(type_item.display_name.as_str(), |(_, name)| name)
+                    .to_string(),
                 type_span: type_item.span,
             });
         }
@@ -674,9 +683,7 @@ fn check_impl_grouping(
     violations
 }
 
-// ---------------------------------------------------------------------------
 // Expected order & autofix
-// ---------------------------------------------------------------------------
 
 fn compute_expected_order(
     items: &[ModuleItem],
@@ -779,10 +786,7 @@ fn compute_reordered_body(
     let source_map = cx.sess().source_map();
 
     // Check if the expected order is the same as the source order.
-    let is_already_ordered = expected_order
-        .iter()
-        .enumerate()
-        .all(|(i, &idx)| idx == i);
+    let is_already_ordered = expected_order.iter().enumerate().all(|(i, &idx)| idx == i);
     if is_already_ordered {
         return None;
     }
@@ -801,9 +805,7 @@ fn compute_reordered_body(
     Some(reordered.join("\n\n"))
 }
 
-// ---------------------------------------------------------------------------
 // Diagnostics
-// ---------------------------------------------------------------------------
 
 fn emit_autofix_or_help(
     diag: &mut rustc_errors::Diag<'_, ()>,
@@ -896,10 +898,8 @@ fn emit_module_diagnostic(
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_topological_ordering() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "topological_ordering").run();
+        crate::testing::run_ui_test("topological_ordering", None, &[]);
     }
 }

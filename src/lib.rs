@@ -15,6 +15,8 @@ extern crate rustc_span;
 
 mod config;
 mod lints;
+#[cfg(test)]
+mod testing;
 
 use rustc_lint::LintStore;
 use rustc_session::Session;
@@ -83,7 +85,6 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store
         .register_late_pass(|_| Box::new(lints::module_dependencies::ModuleDependencies::new()));
     lint_store.register_late_pass(|_| Box::new(lints::acyclic_modules::AcyclicModules::new()));
-    lint_store.register_late_pass(|_| {
-        Box::new(lints::topological_ordering::TopologicalOrdering::new())
-    });
+    lint_store
+        .register_late_pass(|_| Box::new(lints::topological_ordering::TopologicalOrdering::new()));
 }

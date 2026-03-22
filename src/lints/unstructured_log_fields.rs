@@ -208,10 +208,8 @@ fn has_structured_fields(before: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_unstructured_log_fields() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "unstructured_log_fields").run();
+        crate::testing::run_ui_test("unstructured_log_fields", None, &[]);
     }
 }

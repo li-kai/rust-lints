@@ -84,10 +84,8 @@ impl<'tcx> LateLintPass<'tcx> for DebugRemnants {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_debug_remnants() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "debug_remnants").run();
+        crate::testing::run_ui_test("debug_remnants", None, &[]);
     }
 }

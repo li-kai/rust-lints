@@ -16,8 +16,12 @@ serde = { version = "1", features = ["derive"] }
 [dev-dependencies]
 ahash = "0.8"
 bon = "3"
+cargo_metadata = "0.23"
+compiletest_rs = "0.11"
+dylint = "5.0.0"
 dylint_testing = "5.0.0"
 indexmap = "2"
+regex = "1"
 rustc-hash = "2"
 tokio = { version = "1", features = ["full", "test-util"] }
 tracing = "0.1"

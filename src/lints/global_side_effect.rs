@@ -197,10 +197,8 @@ impl<'tcx> LateLintPass<'tcx> for GlobalSideEffect {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_global_side_effect() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "global_side_effect").run();
+        crate::testing::run_ui_test("global_side_effect", None, &[]);
     }
 }

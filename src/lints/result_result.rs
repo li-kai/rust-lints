@@ -93,10 +93,8 @@ fn is_nested_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_result_result() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "result_result").run();
+        crate::testing::run_ui_test("result_result", None, &[]);
     }
 }

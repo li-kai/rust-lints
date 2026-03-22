@@ -1,5 +1,5 @@
 warning: items are not in topological order in this module
-  --> $DIR/main.rs:175:21
+  --> $DIR/main.rs:167:21
    |
 LL |     fn process(_id: Id) {} //~ WARN items are not in topological order
    |                     ^^ `fn process` references `type Id` but appears before it
@@ -17,7 +17,7 @@ LL + fn process(_id: Id) {}
    |
 
 warning: items are not in topological order in this module
-  --> $DIR/main.rs:255:9
+  --> $DIR/main.rs:247:9
    |
 LL |         leaf(); //~ WARN items are not in topological order
    |         ^^^^ `fn a` references `fn leaf` but appears before it
@@ -105,7 +105,7 @@ LL +     }
    |
 
 warning: items are not in topological order in this module
-  --> $DIR/main.rs:154:9
+  --> $DIR/main.rs:146:9
    |
 LL |         MAX_SIZE //~ WARN items are not in topological order
    |         ^^^^^^^^ `fn use_max` references `const MAX_SIZE` but appears before it

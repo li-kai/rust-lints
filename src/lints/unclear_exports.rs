@@ -69,10 +69,8 @@ impl<'tcx> LateLintPass<'tcx> for UnclearExports {
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_unclear_exports() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "unclear_exports").run();
+        crate::testing::run_ui_test("unclear_exports", None, &[]);
     }
 }

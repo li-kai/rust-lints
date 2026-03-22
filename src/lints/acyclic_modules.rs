@@ -1,4 +1,7 @@
-#![allow(clippy::indexing_slicing, reason = "graph algorithm indices are always in-bounds")]
+#![allow(
+    clippy::indexing_slicing,
+    reason = "graph algorithm indices are always in-bounds"
+)]
 
 use clippy_utils::diagnostics::span_lint_and_then;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
@@ -348,10 +351,8 @@ fn emit_cycle_diagnostic(
 
 #[cfg(test)]
 mod tests {
-    use dylint_testing::ui;
-
     #[test]
     fn ui_acyclic_modules() {
-        ui::Test::example(env!("CARGO_PKG_NAME"), "acyclic_modules").run();
+        crate::testing::run_ui_test("acyclic_modules", None, &[]);
     }
 }
