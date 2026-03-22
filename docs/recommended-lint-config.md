@@ -384,7 +384,7 @@ git config core.hooksPath .githooks
 set -euo pipefail
 
 # 1. Auto-fix idioms — always-correct machine-applicable fixes applied silently.
-cargo clippy --fix --allow-dirty --allow-staged -- \
+cargo clippy --all-targets --fix --allow-dirty --allow-staged -- \
   -W clippy::uninlined_format_args \
   -W clippy::redundant_closure_for_method_calls \
   -W clippy::manual_string_new \
@@ -402,7 +402,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
 
 # 2. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
 # Suppress intentional cases with #[allow(debug_remnants, reason = "intentional CLI output")].
-DYLINT_RUSTFLAGS="-W debug_remnants" cargo dylint --all
+DYLINT_RUSTFLAGS="-W debug_remnants" cargo dylint --all -- --all-targets
 
 # 3. Check for banned crates — catches additions at the point they enter Cargo.toml.
 # Crate name must match exactly as it appears as a key in Cargo.toml.
@@ -441,20 +441,20 @@ The grep pattern `^[[:space:]]*crate[[:space:]]*(=|\{)` matches both `crate = "1
 
 ## Auto-fixable lints
 
-All 350 lints below carry `applicability: MachineApplicable` — `cargo clippy --fix` applies them without human review.
+All 350 lints below carry `applicability: MachineApplicable` — `cargo clippy --all-targets --fix` applies them without human review.
 
 **Recommended workflow:**
 
 | Phase | Action |
 |---|---|
 | Development | Lints are `allow` (not configured) — no noise while writing code |
-| Pre-commit | `cargo clippy --fix` applies all fixes silently before the commit lands |
+| Pre-commit | `cargo clippy --all-targets --fix` applies all fixes silently before the commit lands |
 | CI | Same lints as `deny` — fails the build if any escaped the pre-commit step |
 
 **Pre-commit fix command** (replace the fix step in `.githooks/pre-commit`):
 
 ```bash
-cargo clippy --fix --allow-dirty --allow-staged -- \
+cargo clippy --all-targets --fix --allow-dirty --allow-staged -- \
   -W clippy::all \
   -W clippy::pedantic \
   -W clippy::nursery
@@ -465,7 +465,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
 **CI check command:**
 
 ```bash
-cargo clippy -- \
+cargo clippy --all-targets -- \
   -D clippy::all \
   -D clippy::pedantic \
   -D clippy::nursery

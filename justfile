@@ -21,13 +21,13 @@ test *args:
 
 # Check code with clippy (no modifications)
 check *args:
-    cargo clippy --lib --tests {{ args }} -- -D warnings
-    DYLINT_LIBRARY_PATH="$PWD/target/debug" cargo dylint --lib rust_lints
+    cargo clippy --lib --tests --benches --bins {{ args }} -- -D warnings
+    DYLINT_LIBRARY_PATH="$PWD/target/debug" cargo dylint --lib rust_lints -- --lib --tests --benches --bins
 
 # Auto-fix clippy issues and format code
 fix *args:
-    cargo clippy --lib --tests --fix --allow-dirty {{ args }} -- -D warnings
-    DYLINT_LIBRARY_PATH="$PWD/target/debug" cargo dylint --lib rust_lints
+    cargo clippy --lib --tests --benches --bins --fix --allow-dirty {{ args }} -- -D warnings
+    DYLINT_LIBRARY_PATH="$PWD/target/debug" cargo dylint --fix --lib rust_lints -- --allow-dirty --lib --tests --benches --bins
     just fmt
 
 # Format code (use --check to verify without changing)

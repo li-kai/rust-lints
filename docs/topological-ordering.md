@@ -282,7 +282,7 @@ This lint is designed for the same pre-commit workflow as the auto-fixable clipp
 
 ```bash
 # Topological ordering — auto-reorders items within modules
-DYLINT_RUSTFLAGS="-W topological_ordering" cargo dylint --all --fix -- --allow-dirty --allow-staged
+DYLINT_RUSTFLAGS="-W topological_ordering" cargo dylint --all --fix -- --all-targets --allow-dirty --allow-staged
 ```
 
 This runs after the clippy auto-fix step and before the check step. The workflow:
