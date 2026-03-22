@@ -81,21 +81,19 @@ if echo "$output" | _grep -q '^error|^warning\['; then
   echo "$output"
 fi
 
-# 2. Strip decorative comment dividers (language-agnostic — works on any //-comment language).
+# 2. Format code.
+just fmt || true
+
+# 3. Strip decorative comment dividers (language-agnostic — works on any //-comment language).
 echo "$staged" | _grep '\.(rs|ts|tsx|js|jsx)$' | while IFS= read -r f; do
   awk -f scripts/strip-decorative-comments.awk "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done || true
 
-# 3. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
-#    The dylib name uses underscores (librust_lints@toolchain), so --lib must too.
-#    DYLINT_LIBRARY_PATH tells dylint where to find the pre-built cdylib.
-DYLINT_LIBRARY_PATH="${DYLINT_LIBRARY_PATH:-$PWD/target/debug}" cargo dylint --lib rust_lints || true
-
-# 4. Format only staged .rs files.
-echo "$staged" | _grep '\.rs$' | xargs -r rustfmt || true
-
-# 5. Re-stage only originally-staged files modified by auto-fix and formatting.
+# 4. Re-stage only originally-staged files modified by auto-fix and formatting.
 echo "$staged" | xargs -r git add
+
+# 5. Check code with clippy, dylint, and tests — block commit on failure.
+just check-all
 
 # 6. Check for banned crates — catches additions at the point they enter Cargo.toml.
 declare -A BANNED=(
