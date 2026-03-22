@@ -17,10 +17,6 @@
         "cargo": {
           "features": "all",
         },
-        "check": {
-          "command": "clippy",
-          "extraArgs": ["--", "-D", "warnings"],
-        },
         "imports": {
           "granularity": {
             "enforce": true,
