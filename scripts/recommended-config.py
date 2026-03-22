@@ -136,6 +136,12 @@ EXCLUDED_FIXABLE_LINTS = {
     "separated_literal_suffix",    # contradicts unseparated_literal_suffix (keep unseparated)
 }
 
+# Dylint lints with MachineApplicable autofix — enabled via DYLINT_RUSTFLAGS
+# in the pre-commit hook after clippy fix.
+DYLINT_FIXABLE_LINTS: list[str] = [
+    "topological_ordering",
+]
+
 BANNED_CRATES: OrderedDict[str, str] = OrderedDict([
     ("lazy_static", "use std::sync::LazyLock (Rust 1.80+)"),
     ("once_cell", "use std::sync::OnceLock / LazyLock (Rust 1.70+/1.80+)"),
@@ -248,6 +254,20 @@ def emit_hook(fixable_lints_path: Path | None = None) -> str:
         *(f"  -W clippy::{lint}" for lint in restriction_lints),
     ])
 
+    # Dylint auto-fix commands — these lints default to `Allow` so they are
+    # silent in the editor; DYLINT_RUSTFLAGS overrides the level for the fix pass.
+    if DYLINT_FIXABLE_LINTS:
+        rustflags = " ".join(f"-W {lint}" for lint in DYLINT_FIXABLE_LINTS)
+        dylint_lines = [
+            "# 1b. Auto-fix dylint lints with MachineApplicable suggestions.",
+            "#    These lints default to Allow (silent in editor); DYLINT_RUSTFLAGS",
+            "#    overrides the level for the fix pass.",
+            f'DYLINT_RUSTFLAGS="{rustflags}" cargo dylint --all --fix -- --allow-dirty --allow-staged || true',
+        ]
+        dylint_fix_block = "\n".join(dylint_lines) + "\n\n"
+    else:
+        dylint_fix_block = ""
+
     banned_entries = "\n".join(
         f'  [{crate}]="{reason}"' for crate, reason in BANNED_CRATES.items()
     )
@@ -304,7 +324,7 @@ if echo "$output" | _grep -q '^error|^warning\\['; then
   echo "$output"
 fi
 
-# 2. Format code.
+{dylint_fix_block}# 2. Format code.
 just fmt || true
 
 # 3. Strip decorative comment dividers (language-agnostic — works on any //-comment language).

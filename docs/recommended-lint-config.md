@@ -402,7 +402,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
 
 # 2. Check for debug remnants — runs after auto-fix so cleaned-up code is checked too.
 # Suppress intentional cases with #[allow(debug_remnants, reason = "intentional CLI output")].
-cargo dylint debug_remnants --warn
+DYLINT_RUSTFLAGS="-W debug_remnants" cargo dylint --all
 
 # 3. Check for banned crates — catches additions at the point they enter Cargo.toml.
 # Crate name must match exactly as it appears as a key in Cargo.toml.

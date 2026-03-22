@@ -119,34 +119,42 @@ This is the only correct approach. Reporting a cycle as an error would be wrong 
 
 ```
 warning: items are not in topological order in this module
-  --> src/lib.rs:15:1
+  --> src/lib.rs:5:22
    |
-15 | fn process(x: Config) -> Output {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+5  |     fn process(_cfg: Config) {}
+   |                      ^^^^^^ `fn process` references `struct Config` but appears before it
    |
-   = note: `process` references `validate` (line 42) and `Config` (line 5),
-           but appears before `validate`
-   = help: move `process` after `validate` (line 42),
-           or move `validate` before `process`
-   = note: `#[warn(topological_ordering)]` on by default
+help: reorder items topologically
+   |
+LL ~     struct Config {
+LL +         value: u32,
+LL +     }
+LL +
+LL + fn process(_cfg: Config) {}
+   |
 ```
 
 For the "item group" violation (inherent impl not adjacent to type):
 
 ```
-warning: `impl Config` is separated from `struct Config` by unrelated items
-  --> src/lib.rs:30:1
+warning: `impl Widget` is separated from its type definition
+  --> src/lib.rs:30:5
    |
- 5 | struct Config { ... }
-   | --------------------- `Config` defined here
+LL | /     struct Widget {
+LL | |         name: String,
+LL | |     }
+   | |_____- `Widget` defined here
 ...
-15 | fn unrelated() { ... }
-   | ---------------------- unrelated item between type and impl
-...
-30 | impl Config { ... }
-   | ^^^^^^^^^^^^^^^^^^^
+LL | /     impl Widget {
+LL | |         fn new(name: String) -> Self {
+LL | |             Self { name }
+LL | |         }
+LL | |     }
+   | |_____^
    |
-   = help: move `impl Config` immediately after `struct Config`
+help: reorder items topologically
+   |
+   ...
 ```
 
 ### Autofix strategy
@@ -219,7 +227,7 @@ No item exclusion configuration. Use `#[allow(topological_ordering)]` on specifi
 
 ### Lint level
 
-`Warn` by default. This is a style/readability lint, not a correctness lint. Code with items in non-topological order compiles and runs correctly. Users who want stricter enforcement can set it to `deny`.
+`Allow` by default — silent in the editor. Enable with `#![warn(topological_ordering)]` at crate root, or set `DYLINT_RUSTFLAGS="-W topological_ordering"` when running `cargo dylint`. This is a style/readability lint, not a correctness lint. Code with items in non-topological order compiles and runs correctly. Users who want stricter enforcement can set the level to `deny`.
 
 ## Resolved Questions
 
@@ -274,16 +282,16 @@ This lint is designed for the same pre-commit workflow as the auto-fixable clipp
 
 ```bash
 # Topological ordering — auto-reorders items within modules
-cargo dylint topological_ordering --fix --allow-dirty --allow-staged
+DYLINT_RUSTFLAGS="-W topological_ordering" cargo dylint --all --fix -- --allow-dirty --allow-staged
 ```
 
 This runs after the clippy auto-fix step and before the check step. The workflow:
 
 | Phase | Action |
 |---|---|
-| Development | Lint is `warn` — developer sees squiggles but is not blocked |
-| Pre-commit | `cargo dylint --fix` applies the reordering automatically |
-| CI | Same lint as `deny` — fails the build if items are out of order |
+| Development | Lint is `Allow` — silent in the editor |
+| Pre-commit | `DYLINT_RUSTFLAGS="-W topological_ordering"` enables it for the fix pass |
+| CI | `DYLINT_RUSTFLAGS="-W topological_ordering"` (or `-D`) catches violations |
 
 The fix is idempotent: running it on already-ordered code produces no changes.
 
