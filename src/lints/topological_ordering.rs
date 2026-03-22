@@ -40,7 +40,7 @@ rustc_session::declare_lint! {
     /// Provides `MachineApplicable` autofix: `cargo fix` reorders items
     /// automatically.
     pub TOPOLOGICAL_ORDERING,
-    Warn,
+    Allow,
     "items are not in topological order within this module"
 }
 
@@ -84,6 +84,9 @@ pub struct TopologicalOrdering {
     modules: FxHashMap<LocalDefId, ModuleData>,
     /// Raw reference edges collected during `check_expr` / `check_ty`.
     raw_refs: Vec<RawRef>,
+    /// Cached lint-level check: `false` when lint is `Allow` at crate level.
+    /// Set once in `check_crate`; when `false`, all callbacks short-circuit.
+    enabled: bool,
 }
 
 impl TopologicalOrdering {
@@ -92,6 +95,7 @@ impl TopologicalOrdering {
             config: dylint_linting::config_or_default("topological_ordering"),
             modules: FxHashMap::default(),
             raw_refs: Vec::new(),
+            enabled: false,
         }
     }
 
@@ -111,7 +115,15 @@ impl TopologicalOrdering {
 rustc_session::impl_lint_pass!(TopologicalOrdering => [TOPOLOGICAL_ORDERING]);
 
 impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
+        self.enabled =
+            !clippy_utils::is_lint_allowed(cx, TOPOLOGICAL_ORDERING, rustc_hir::CRATE_HIR_ID);
+    }
+
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
+        if !self.enabled {
+            return;
+        }
         if !is_relevant_item_kind(&item.kind) {
             return;
         }
@@ -171,6 +183,9 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
+        if !self.enabled {
+            return;
+        }
         if !expr.span.from_expansion() {
             let resolved = hir_refs::resolve_expr_def_id(cx, expr)
                 .map(|(def_id, _hir_id, span)| (def_id, span));
@@ -183,6 +198,9 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
         cx: &LateContext<'tcx>,
         ty: &'tcx hir::Ty<'tcx, hir::AmbigArg>,
     ) {
+        if !self.enabled {
+            return;
+        }
         if !ty.span.from_expansion() {
             let resolved = hir_refs::resolve_ty_def_id(cx, ty)
                 .map(|(def_id, _hir_id, span)| (def_id, span));
@@ -191,6 +209,10 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
     }
 
     fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
+        if !self.enabled {
+            return;
+        }
+
         let mut def_id_to_module_item: FxHashMap<LocalDefId, (LocalDefId, usize)> =
             FxHashMap::default();
         for (&module_def_id, module_data) in &self.modules {

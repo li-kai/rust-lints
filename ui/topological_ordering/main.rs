@@ -3,6 +3,7 @@
 // Default mode: callee-first (referenced items should appear before
 // items that reference them).
 #![allow(dead_code, unknown_lints, unused_variables)]
+#![warn(topological_ordering)]
 
 // ── Case 1: Correct callee-first order ─────────────────────────────
 // No warnings expected: helper is defined before process, which is
