@@ -1,3 +1,5 @@
+#![allow(clippy::wildcard_enum_match_arm, reason = "only specific variants are relevant")]
+
 //! Shared helpers for resolving cross-module references from HIR nodes.
 
 use clippy_utils::is_in_test;

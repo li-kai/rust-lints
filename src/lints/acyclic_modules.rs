@@ -1,3 +1,5 @@
+#![allow(clippy::indexing_slicing, reason = "graph algorithm indices are always in-bounds")]
+
 use clippy_utils::diagnostics::span_lint_and_then;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def::DefKind;

@@ -1,3 +1,5 @@
+#![allow(clippy::indexing_slicing, reason = "graph algorithm indices are always in-bounds")]
+
 //! Lint enforcing topological ordering of items within a module.
 //!
 //! Items that reference other items in the same module should appear in an
@@ -324,6 +326,7 @@ fn item_display_name(cx: &LateContext<'_>, item: &hir::Item<'_>) -> String {
         .map(|s| s.to_string())
         .unwrap_or_else(|| "?".into());
 
+    #[allow(clippy::wildcard_enum_match_arm, reason = "only a few kinds get prefixes")]
     let prefix = match kind {
         DefKind::Fn => "fn",
         DefKind::Struct => "struct",
