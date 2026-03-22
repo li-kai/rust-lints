@@ -78,8 +78,7 @@ struct ModuleData {
 }
 
 pub struct TopologicalOrdering {
-    direction: OrderingDirection,
-    group_inherent_impls: bool,
+    config: TopologicalOrderingConfig,
     modules: FxHashMap<LocalDefId, ModuleData>,
     /// Raw reference edges collected during `check_expr` / `check_ty`.
     raw_refs: Vec<RawRef>,
@@ -87,12 +86,8 @@ pub struct TopologicalOrdering {
 
 impl TopologicalOrdering {
     pub fn new() -> Self {
-        let config: TopologicalOrderingConfig =
-            dylint_linting::config_or_default("topological_ordering");
-
         Self {
-            direction: config.direction,
-            group_inherent_impls: config.group_inherent_impls,
+            config: dylint_linting::config_or_default("topological_ordering"),
             modules: FxHashMap::default(),
             raw_refs: Vec::new(),
         }
@@ -238,7 +233,7 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
 
             // Apply inherent-impl grouping to refs (merge impl refs with type).
             let remapped_refs =
-                remap_inherent_impl_refs(&module_data.items, &item_def_id_to_idx, resolved_refs, self.group_inherent_impls);
+                remap_inherent_impl_refs(&module_data.items, &item_def_id_to_idx, resolved_refs, self.config.group_inherent_impls);
 
             let n = module_data.items.len();
             let adj = build_adj_list(&remapped_refs, n);
@@ -248,10 +243,10 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
                 &module_data.items,
                 &remapped_refs,
                 &item_to_scc,
-                self.direction,
+                self.config.direction,
             );
 
-            let grouping_violations = if self.group_inherent_impls {
+            let grouping_violations = if self.config.group_inherent_impls {
                 check_impl_grouping(&module_data.items, &item_def_id_to_idx)
             } else {
                 Vec::new()
@@ -269,8 +264,8 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
                     &adj,
                     &item_to_scc,
                     &sccs,
-                    self.direction,
-                    self.group_inherent_impls,
+                    self.config.direction,
+                    self.config.group_inherent_impls,
                 );
                 compute_reordered_body(cx, module_data, &expected_order)
             };
@@ -639,16 +634,13 @@ fn check_impl_grouping(
         });
 
         if has_unrelated {
-            let type_name = type_item
-                .display_name
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or(&type_item.display_name)
-                .to_string();
             violations.push(GroupingViolation {
                 impl_def_id: item.def_id,
                 impl_span: item.span,
-                type_name,
+                type_name: type_item.display_name.split_once(' ').map_or(
+                    type_item.display_name.as_str(),
+                    |(_, name)| name,
+                ).to_string(),
                 type_span: type_item.span,
             });
         }
@@ -788,6 +780,26 @@ fn compute_reordered_body(
 // Diagnostics
 // ---------------------------------------------------------------------------
 
+fn emit_autofix_or_help(
+    diag: &mut rustc_errors::Diag<'_, ()>,
+    module_data: &ModuleData,
+    reordered_body: Option<&str>,
+    manual_hint: &str,
+) {
+    if let Some(reordered) = reordered_body {
+        diag.span_suggestion(
+            module_data.body_span,
+            "reorder items topologically",
+            reordered,
+            Applicability::MachineApplicable,
+        );
+    } else if module_data.has_macro_items {
+        diag.help(format!(
+            "autofix unavailable for this module (contains macro-expanded items); {manual_hint}",
+        ));
+    }
+}
+
 fn emit_module_diagnostic(
     cx: &LateContext<'_>,
     module_data: &ModuleData,
@@ -795,7 +807,6 @@ fn emit_module_diagnostic(
     grouping_violations: &[GroupingViolation],
     reordered_body: Option<&str>,
 ) {
-    // Emit ordering violations as a single diagnostic per module.
     if !ordering_violations.is_empty() {
         let first = &ordering_violations[0];
         let hir_id = cx.tcx.local_def_id_to_hir_id(first.item_def_id);
@@ -818,20 +829,12 @@ fn emit_module_diagnostic(
                         );
                     }
                 }
-
-                if let Some(reordered) = reordered_body {
-                    diag.span_suggestion(
-                        module_data.body_span,
-                        "reorder items topologically",
-                        reordered,
-                        Applicability::MachineApplicable,
-                    );
-                } else if module_data.has_macro_items {
-                    diag.help(
-                        "autofix unavailable for this module (contains macro-expanded items); \
-                         reorder items manually so referenced items appear first",
-                    );
-                }
+                emit_autofix_or_help(
+                    diag,
+                    module_data,
+                    reordered_body,
+                    "reorder items manually so referenced items appear first",
+                );
             },
         );
     }
@@ -853,21 +856,13 @@ fn emit_module_diagnostic(
                     violation.type_span,
                     format!("`{}` defined here", violation.type_name),
                 );
-
                 if ordering_violations.is_empty() {
-                    if let Some(reordered) = reordered_body {
-                        diag.span_suggestion(
-                            module_data.body_span,
-                            "reorder items topologically",
-                            reordered,
-                            Applicability::MachineApplicable,
-                        );
-                    } else if module_data.has_macro_items {
-                        diag.help(
-                            "autofix unavailable for this module (contains macro-expanded items); \
-                             reorder items manually so the impl is adjacent to its type",
-                        );
-                    }
+                    emit_autofix_or_help(
+                        diag,
+                        module_data,
+                        reordered_body,
+                        "reorder items manually so the impl is adjacent to its type",
+                    );
                 }
             },
         );
