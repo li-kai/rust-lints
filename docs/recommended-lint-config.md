@@ -13,6 +13,10 @@ unused_must_use = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dylint_lib, values("rust_lints"))'] }
 
 [workspace.lints.clippy]
+# Enable opt-in lint groups — individual entries below override these.
+pedantic = { level = "warn", priority = -1 }
+nursery  = { level = "warn", priority = -1 }
+
 # --- Deny: always wrong in production ---
 await_holding_lock            = "deny"
 await_holding_refcell_ref     = "deny"
@@ -61,6 +65,7 @@ missing_panics_doc        = "warn"
 missing_fields_in_debug   = "warn"
 return_self_not_must_use  = "warn"
 should_panic_without_expect = "warn"
+allow_attributes          = "warn"
 allow_attributes_without_reason = "deny"
 ignore_without_reason     = "deny"
 
@@ -93,6 +98,14 @@ large_stack_arrays        = "warn"
 doc_link_with_quotes      = "warn"
 copy_iterator             = "warn"
 macro_use_imports         = "warn"
+
+# Disabled: enabled by group but too noisy or harmful
+module_name_repetitions   = "allow"
+option_if_let_else        = "allow"
+similar_names             = "allow"
+struct_excessive_bools    = "allow"
+struct_field_names        = "allow"
+too_many_lines            = "allow"
 ```
 
 **2. Add `clippy.toml` to the workspace root:**
@@ -115,6 +128,8 @@ workspace = true
 ---
 
 ## Lint Reference
+
+**Group enables** — `pedantic` and `nursery` are enabled at `priority = -1` so every lint in these groups defaults to warn. Individual entries at default priority override the group level. Non-fixable pedantic/nursery lints are visible in IDE, CI, and CLI — not just during the pre-commit hook.
 
 **Deny** — always wrong in production; no valid exception exists. **Warn** — usually wrong; suppression requires a documented reason (enforced by `allow_attributes_without_reason`).
 
@@ -294,6 +309,7 @@ Why each workspace lint is included, grouped by concern.
 | `missing_assert_message` | warn | Bare `assert!` produces unhelpful panic messages — always include context. |
 | `should_panic_without_expect` | warn | `#[should_panic]` without `expected = "..."` passes on *any* panic, not just the right one. |
 | `tests_outside_test_module` | warn | `#[test]` functions belong in `#[cfg(test)]` modules for organizational clarity. |
+| `allow_attributes` | warn | Flags `#[allow]` — use `#[expect]` instead so stale suppressions become warnings automatically. |
 | `allow_attributes_without_reason` | deny | Every suppression must carry a `reason` — prevents silent lint bypasses and keeps `#[expect]` stale-suppression detection meaningful. |
 | `ignore_without_reason` | deny | `#[ignore]` without rationale accumulates silently. |
 
@@ -326,6 +342,19 @@ Why each workspace lint is included, grouped by concern.
 | `branches_sharing_code` | warn | Duplicate code across if/else branches should be hoisted. |
 | `or_fun_call` | warn | `.unwrap_or(expensive_fn())` evaluates eagerly — use `.unwrap_or_else(closure)`. |
 | `unused_peekable` | warn | `.peekable()` where `.peek()` is never called — leftover from refactoring. |
+
+### Disabled lints
+
+Lints enabled by the `pedantic`/`nursery` group but explicitly turned off.
+
+| Lint | Group | Why disabled |
+|---|---|---|
+| `module_name_repetitions` | pedantic | Renaming types to drop the module prefix breaks public APIs and hurts readability when multiple types are imported (e.g., `FooError` vs bare `Error`). |
+| `option_if_let_else` | nursery | Suggests `map_or_else` which is less readable for multi-line arms, side effects, or early returns. `if let`/`else` is idiomatic Rust. |
+| `similar_names` | pedantic | Flags `req`/`res`, `item`/`items` — too many false positives to be useful. |
+| `struct_excessive_bools` | pedantic | Noisy on config/options structs where multiple bools are the natural representation. |
+| `struct_field_names` | pedantic | Shared prefixes/suffixes on fields are often intentional grouping, not redundancy. |
+| `too_many_lines` | pedantic | Arbitrary 100-line threshold — useful signal but not always actionable. |
 
 ---
 
@@ -493,9 +522,9 @@ cargo clippy --all-targets -- \
 
 `clear_with_drain` · `derive_partial_eq_without_eq` · `equatable_if_let` · `imprecise_flops` · `missing_const_for_fn` · `needless_collect` · `needless_type_cast` · `nonstandard_macro_braces` · `redundant_clone` · `redundant_pub_crate` · `search_is_some` · `string_lit_as_bytes` · `suboptimal_flops` · `suspicious_operation_groupings` · `too_long_first_doc_paragraph` · `trait_duplication_in_bounds` · `unnecessary_struct_initialization` · `unused_rounding` · `use_self`
 
-**restriction** (29 lints) — enable individually; four contradictory pairs resolved below
+**restriction** (27 lints) — enable individually; four contradictory pairs resolved below
 
-`alloc_instead_of_core` · `allow_attributes` · `as_pointer_underscore` · `as_underscore` · `assertions_on_result_states` · `dbg_macro` · `deref_by_slicing` · `doc_include_without_cfg` · `get_unwrap` · `if_then_some_else_none` · `lossy_float_literal` · `missing_asserts_for_indexing` · `needless_raw_strings` · `non_ascii_literal` · `non_zero_suggestions` · `precedence_bits` · `pub_with_shorthand` · `rest_pat_in_fully_bound_structs` · `return_and_then` · `semicolon_outside_block` · `std_instead_of_alloc` · `std_instead_of_core` · `str_to_string` · `string_lit_chars_any` · `try_err` · `unseparated_literal_suffix` · `unnecessary_safety_comment` · `unused_trait_names`
+`alloc_instead_of_core` · `as_pointer_underscore` · `as_underscore` · `assertions_on_result_states` · `dbg_macro` · `deref_by_slicing` · `doc_include_without_cfg` · `get_unwrap` · `if_then_some_else_none` · `lossy_float_literal` · `missing_asserts_for_indexing` · `needless_raw_strings` · `non_ascii_literal` · `non_zero_suggestions` · `precedence_bits` · `pub_with_shorthand` · `rest_pat_in_fully_bound_structs` · `return_and_then` · `semicolon_outside_block` · `std_instead_of_alloc` · `std_instead_of_core` · `str_to_string` · `string_lit_chars_any` · `try_err` · `unseparated_literal_suffix` · `unnecessary_safety_comment` · `unused_trait_names`
 
 *Contradictory pairs — one from each is omitted:*
 

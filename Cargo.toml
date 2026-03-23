@@ -106,6 +106,10 @@ unused_must_use = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dylint_lib, values("rust_lints"))'] }
 
 [lints.clippy]
+# Enable opt-in lint groups — individual entries below override these.
+pedantic                            = { level = "warn", priority = -1 }
+nursery                             = { level = "warn", priority = -1 }
+
 # --- Deny: always wrong in production ---
 await_holding_lock                  = "deny"
 await_holding_refcell_ref           = "deny"
@@ -152,6 +156,7 @@ missing_panics_doc                  = "warn"
 missing_fields_in_debug             = "warn"
 return_self_not_must_use            = "warn"
 should_panic_without_expect         = "warn"
+allow_attributes                    = "warn"
 allow_attributes_without_reason     = "deny"
 ignore_without_reason               = "deny"
 
@@ -189,6 +194,14 @@ large_stack_arrays                  = "warn"
 doc_link_with_quotes                = "warn"
 copy_iterator                       = "warn"
 macro_use_imports                   = "warn"
+
+# --- Disabled: enabled by group but too noisy or harmful ---
+module_name_repetitions             = "allow"
+option_if_let_else                  = "allow"
+similar_names                       = "allow"
+struct_excessive_bools              = "allow"
+struct_field_names                  = "allow"
+too_many_lines                      = "allow"
 
 # --- Auto-fixable lints: silent during dev, auto-fixed at commit time ---
 # complexity (103 lints)
@@ -405,7 +418,6 @@ useless_vec                         = "allow"
 waker_clone_wake                    = "allow"
 # restriction (27 lints)
 alloc_instead_of_core               = "allow"
-allow_attributes                    = "allow"
 as_pointer_underscore               = "allow"
 as_underscore                       = "allow"
 assertions_on_result_states         = "allow"

@@ -74,14 +74,14 @@ impl<'tcx> LateLintPass<'tcx> for RealtimeInAsyncTest {
     fn check_fn(
         &mut self,
         cx: &LateContext<'tcx>,
-        _kind: rustc_hir::intravisit::FnKind<'tcx>,
+        kind: rustc_hir::intravisit::FnKind<'tcx>,
         _decl: &'tcx rustc_hir::FnDecl<'tcx>,
         body: &'tcx Body<'tcx>,
         _span: rustc_span::Span,
         def_id: rustc_hir::def_id::LocalDefId,
     ) {
         // Only top-level test functions (skip closures, async blocks, etc.).
-        if !matches!(_kind, rustc_hir::intravisit::FnKind::ItemFn(..))
+        if !matches!(kind, rustc_hir::intravisit::FnKind::ItemFn(..))
             || !is_in_test(cx.tcx, cx.tcx.local_def_id_to_hir_id(def_id))
         {
             return;

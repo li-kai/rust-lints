@@ -86,6 +86,7 @@ CLIPPY_LINTS: OrderedDict[str, list[tuple[str, str]]] = OrderedDict([
         ("missing_fields_in_debug", "warn"),
         ("return_self_not_must_use", "warn"),
         ("should_panic_without_expect", "warn"),
+        ("allow_attributes", "warn"),
         ("allow_attributes_without_reason", "deny"),
         ("ignore_without_reason", "deny"),
     ]),
@@ -123,6 +124,14 @@ CLIPPY_LINTS: OrderedDict[str, list[tuple[str, str]]] = OrderedDict([
         ("doc_link_with_quotes", "warn"),
         ("copy_iterator", "warn"),
         ("macro_use_imports", "warn"),
+    ]),
+    ("Disabled: enabled by group but too noisy or harmful", [
+        ("module_name_repetitions", "allow"),
+        ("option_if_let_else", "allow"),
+        ("similar_names", "allow"),
+        ("struct_excessive_bools", "allow"),
+        ("struct_field_names", "allow"),
+        ("too_many_lines", "allow"),
     ]),
 ])
 
@@ -188,28 +197,25 @@ def emit_lints(fixable_lints_path: Path | None = None) -> str:
         "",
         "[lints.rust]",
     ]
-    pad = max(len(k) for k in RUST_LINTS)
     for lint, level in RUST_LINTS.items():
         if level.startswith("{"):
-            lines.append(f'{lint:<{pad}} = {level}')
+            lines.append(f'{lint} = {level}')
         else:
-            lines.append(f'{lint:<{pad}} = "{level}"')
+            lines.append(f'{lint} = "{level}"')
 
     lines += ["", "[lints.clippy]"]
 
-    # Gather all lint names for padding calculation
-    all_names = [lint for group_lints in CLIPPY_LINTS.values() for lint, _ in group_lints]
-    if fixable_lints_path:
-        fixable_groups = parse_fixable_lints(fixable_lints_path)
-        for group_lints in fixable_groups.values():
-            all_names.extend(group_lints)
-    pad = max(len(n) for n in all_names)
+    # Group enables — pedantic and nursery are opt-in; individual entries override.
+    lines.append("# Enable opt-in lint groups — individual entries below override these.")
+    lines.append('pedantic = { level = "warn", priority = -1 }')
+    lines.append('nursery = { level = "warn", priority = -1 }')
+    lines.append("")
 
     # Recommended lints (deny/warn)
     for section, group_lints in CLIPPY_LINTS.items():
         lines.append(f"# --- {section} ---")
         for lint, level in group_lints:
-            lines.append(f'{lint:<{pad}} = "{level}"')
+            lines.append(f'{lint} = "{level}"')
         lines.append("")
 
     # Fixable lints (allow) — skip any already covered by recommended
@@ -222,7 +228,7 @@ def emit_lints(fixable_lints_path: Path | None = None) -> str:
                 continue
             lines.append(f"# {group} ({len(filtered)} lints)")
             for lint in filtered:
-                lines.append(f'{lint:<{pad}} = "allow"')
+                lines.append(f'{lint} = "allow"')
         lines.append("")
 
     return "\n".join(lines)
@@ -231,27 +237,27 @@ def emit_lints(fixable_lints_path: Path | None = None) -> str:
 def emit_hook(fixable_lints_path: Path | None = None) -> str:
     """Emit the full recommended pre-commit hook.
 
-    clippy::all (style+complexity+perf+suspicious), pedantic, and nursery
-    are covered by group flags. Restriction lints have no group flag (the
-    group contains contradictory pairs), so fixable restriction lints get
-    individual -W flags. Blocking checks use `just check-all`.
+    Individual -W flags for each fixable lint (not group flags) so that
+    explicitly disabled lints in CLIPPY_LINTS are never overridden by CLI.
+    Blocking checks use `just check-all`.
     """
-    # Groups covered by group-level flags
-    GROUP_FLAGS = ["clippy::all", "clippy::pedantic", "clippy::nursery"]
-    GROUPS_COVERED = {"style", "complexity", "perf", "suspicious", "pedantic", "nursery",
-                      "correctness"}
+    recommended_names = {
+        lint
+        for group_lints in CLIPPY_LINTS.values()
+        for lint, _ in group_lints
+    }
 
-    restriction_lints: list[str] = []
+    fixable_lints: list[str] = []
     if fixable_lints_path:
         fixable_groups = parse_fixable_lints(fixable_lints_path)
-        for group, lints in fixable_groups.items():
-            if group.lower() not in GROUPS_COVERED:
-                restriction_lints.extend(lints)
+        for lints in fixable_groups.values():
+            fixable_lints.extend(
+                l for l in lints if l not in recommended_names
+            )
 
     fix_flags = " \\\n".join([
         "cargo clippy --fix --allow-dirty --allow-staged --",
-        *(f"  -W {flag}" for flag in GROUP_FLAGS),
-        *(f"  -W clippy::{lint}" for lint in restriction_lints),
+        *(f"  -W clippy::{lint}" for lint in fixable_lints),
     ])
 
     # Dylint auto-fix commands — these lints default to `Allow` so they are
@@ -316,7 +322,7 @@ trap '
 #    Fixed-point loop: --fix skips fixes with overlapping spans, so a single
 #    pass can leave unfixed code. Loop until clippy reports no more fixes.
 for (( i=0; i<5; i++ )); do
-  output=$({fix_flags} 2>&1)
+  output=$({fix_flags} 2>&1 || true)
   echo "$output" | _grep -q 'Fixed' || break
 done
 # Print only if there are unresolved diagnostics (errors or named warnings).

@@ -5,7 +5,7 @@
 pub use runner::run_ui_test;
 
 #[cfg(test)]
-#[allow(
+#[expect(
     unsafe_code,
     clippy::indexing_slicing,
     clippy::let_underscore_must_use,

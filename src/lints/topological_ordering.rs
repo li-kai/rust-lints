@@ -360,7 +360,7 @@ fn item_display_name(cx: &LateContext<'_>, item: &hir::Item<'_>) -> String {
         .map(|s| s.to_string())
         .unwrap_or_else(|| "?".into());
 
-    #[allow(
+    #[expect(
         clippy::wildcard_enum_match_arm,
         reason = "only a few kinds get prefixes"
     )]
