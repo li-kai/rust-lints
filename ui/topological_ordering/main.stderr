@@ -1,51 +1,14 @@
 warning: items are not in topological order in this module
-  --> $DIR/main.rs:167:21
-   |
-LL |     fn process(_id: Id) {} //~ WARN items are not in topological order
-   |                     ^^ `fn process` references `type Id` but appears before it
-   |
-note: the lint level is defined here
-  --> $DIR/main.rs:6:9
-   |
-LL | #![warn(topological_ordering)]
-   |         ^^^^^^^^^^^^^^^^^^^^
-help: reorder items topologically
-   |
-LL ~     type Id = u64;
-LL + 
-LL + fn process(_id: Id) {}
-   |
-
-warning: items are not in topological order in this module
-  --> $DIR/main.rs:247:9
-   |
-LL |         leaf(); //~ WARN items are not in topological order
-   |         ^^^^ `fn a` references `fn leaf` but appears before it
-   |
-help: reorder items topologically
-   |
-LL ~     fn leaf() {}
-LL + 
-LL + fn a() {
-LL +         b();
-LL +         leaf(); //~ WARN items are not in topological order
-LL +     }
-LL + 
-LL + fn b() {
-LL +         c();
-LL +     }
-LL + 
-LL + fn c() {
-LL +         a();
-LL +     }
-   |
-
-warning: items are not in topological order in this module
-  --> $DIR/main.rs:32:9
+  --> $DIR/main.rs:13:9
    |
 LL |         callee(); //~ WARN items are not in topological order
    |         ^^^^^^ `fn caller` references `fn callee` but appears before it
    |
+note: the lint level is defined here
+  --> $DIR/main.rs:5:9
+   |
+LL | #![warn(topological_ordering)]
+   |         ^^^^^^^^^^^^^^^^^^^^
 help: reorder items topologically
    |
 LL ~     fn callee() {}
@@ -56,7 +19,7 @@ LL +     }
    |
 
 warning: items are not in topological order in this module
-  --> $DIR/main.rs:42:22
+  --> $DIR/main.rs:23:22
    |
 LL |     fn process(_cfg: Config) {} //~ WARN items are not in topological order
    |                      ^^^^^^ `fn process` references `struct Config` but appears before it
@@ -71,7 +34,7 @@ LL + fn process(_cfg: Config) {}
    |
 
 warning: `impl Widget` is separated from its type definition
-  --> $DIR/main.rs:92:5
+  --> $DIR/main.rs:43:5
    |
 LL | /     struct Widget {
 LL | |         name: String,
@@ -104,20 +67,65 @@ LL +         0
 LL +     }
    |
 
-warning: items are not in topological order in this module
-  --> $DIR/main.rs:146:9
+warning: `impl std::fmt::Display for Point` is separated from its type definition
+  --> $DIR/main.rs:134:5
    |
-LL |         MAX_SIZE //~ WARN items are not in topological order
-   |         ^^^^^^^^ `fn use_max` references `const MAX_SIZE` but appears before it
+LL | /     struct Point {
+LL | |         x: f64,
+LL | |         y: f64,
+LL | |     }
+   | |_____- `Point` defined here
+...
+LL | /     impl std::fmt::Display for Point {
+LL | |         //~^ WARN `impl std::fmt::Display for Point` is separated from its type definition
+LL | |         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+LL | |             write!(f, "({}, {})", self.x, self.y)
+LL | |         }
+LL | |     }
+   | |_____^
    |
 help: reorder items topologically
    |
-LL ~     const MAX_SIZE: usize = 1024;
+LL ~     struct Point {
+LL +         x: f64,
+LL +         y: f64,
+LL +     }
 LL + 
-LL + fn use_max() -> usize {
-LL +         MAX_SIZE //~ WARN items are not in topological order
+LL + impl std::fmt::Display for Point {
+LL +         //~^ WARN `impl std::fmt::Display for Point` is separated from its type definition
+LL +         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+LL +             write!(f, "({}, {})", self.x, self.y)
+LL +         }
+LL +     }
+LL + 
+LL + fn compute(p: Point) -> f64 {
+LL +         p.x + p.y
 LL +     }
    |
 
-warning: 6 warnings emitted
+warning: items are not in topological order in this module
+  --> $DIR/main.rs:58:9
+   |
+LL |         leaf(); //~ WARN items are not in topological order
+   |         ^^^^ `fn a` references `fn leaf` but appears before it
+   |
+help: reorder items topologically
+   |
+LL ~     fn leaf() {}
+LL + 
+LL + fn a() {
+LL +         b();
+LL +         leaf(); //~ WARN items are not in topological order
+LL +     }
+LL + 
+LL + fn b() {
+LL +         c();
+LL +     }
+LL + 
+LL + fn c() {
+LL +         a();
+LL +     }
+   |
+
+warning: 5 warnings emitted
 

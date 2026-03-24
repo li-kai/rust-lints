@@ -7,21 +7,16 @@
 //! Lint enforcing topological ordering of items within a module.
 //!
 //! Items that reference other items in the same module should appear in an
-//! order consistent with their dependency graph.  By default, callees/referenced
-//! items appear before callers/referencing items (callee-first / bottom-up).
+//! order consistent with their dependency graph.  Callees/referenced items
+//! appear before callers/referencing items (callee-first / bottom-up).
 //!
 //! Cycles (mutual references) are handled by collapsing strongly connected
 //! components into single nodes -- items within an SCC are unordered relative
 //! to each other, but the SCC as a whole is ordered relative to outside items.
-//!
-//! **Autofix:** emits a single `MachineApplicable` suggestion per module that
-//! replaces the entire module body with the correctly ordered items.  Applied
-//! automatically by `cargo fix` / `cargo dylint --fix` in pre-commit.
 
 use clippy_utils::diagnostics::span_lint_hir_and_then;
 use clippy_utils::is_in_test;
 use rustc_data_structures::fx::FxHashMap;
-use rustc_errors::Applicability;
 use rustc_hir as hir;
 use rustc_hir::def::DefKind;
 use rustc_lint::{LateContext, LateLintPass, LintContext as _};
@@ -30,21 +25,17 @@ use rustc_span::Span;
 use rustc_span::def_id::LocalDefId;
 
 use super::hir_refs;
-use crate::config::{OrderingDirection, TopologicalOrderingConfig};
 
 rustc_session::declare_lint! {
     /// Flags items that appear out of topological order within a module.
     ///
-    /// By default (callee-first), an item should appear before any item that
-    /// references it.  Configurable to caller-first via `dylint.toml`.
+    /// Callee-first: an item should appear before any item that
+    /// references it.
     ///
     /// Cycles are tolerated: items in a strongly connected component are
     /// unordered relative to each other.
-    ///
-    /// Provides `MachineApplicable` autofix: `cargo fix` reorders items
-    /// automatically.
     pub TOPOLOGICAL_ORDERING,
-    Allow,
+    Warn,
     "items are not in topological order within this module"
 }
 
@@ -55,9 +46,9 @@ struct ModuleItem {
     span: Span,
     /// Human-readable name for diagnostics (e.g. "fn process", "struct Config").
     display_name: String,
-    /// For inherent impl blocks, the `LocalDefId` of the self type.
-    /// Used to group the impl with its type for ordering purposes.
-    inherent_impl_self_ty: Option<LocalDefId>,
+    /// For impl blocks whose self type is defined in this module, the
+    /// `LocalDefId` of the self type.  Used to group the impl with its type.
+    impl_self_ty: Option<LocalDefId>,
 }
 
 /// A raw reference collected during the lint pass, before resolution to
@@ -74,21 +65,15 @@ struct RawRef {
 /// Per-module collected data, built up during the lint pass and analyzed
 /// in `check_crate_post`.
 struct ModuleData {
-    /// Span covering all items in the module body (first item start to last item end).
-    /// Used as the replacement span for the autofix suggestion.
-    body_span: Span,
     /// Items in source order.
     items: Vec<ModuleItem>,
-    /// Whether any item has a span from macro expansion, which disables autofix.
-    has_macro_items: bool,
 }
 
 pub struct TopologicalOrdering {
-    config: TopologicalOrderingConfig,
     modules: FxHashMap<LocalDefId, ModuleData>,
     /// Raw reference edges collected during `check_expr` / `check_ty`.
     raw_refs: Vec<RawRef>,
-    /// Cached lint-level check: `false` when lint is `Allow` at crate level.
+    /// Cached lint-level check: `false` when the lint is disabled at crate level.
     /// Set once in `check_crate`; when `false`, all callbacks short-circuit.
     enabled: bool,
 }
@@ -96,7 +81,6 @@ pub struct TopologicalOrdering {
 impl TopologicalOrdering {
     pub fn new() -> Self {
         Self {
-            config: dylint_linting::config_or_default("topological_ordering"),
             modules: FxHashMap::default(),
             raw_refs: Vec::new(),
             enabled: false,
@@ -152,16 +136,10 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
             return;
         }
 
-        let from_expansion = item.span.from_expansion();
         let display_name = item_display_name(cx, item);
 
-        // Determine if this is an inherent impl.
-        let inherent_impl_self_ty = if let hir::ItemKind::Impl(impl_block) = &item.kind {
-            if impl_block.of_trait.is_none() {
-                resolve_self_ty_def_id(cx, impl_block)
-            } else {
-                None
-            }
+        let impl_self_ty = if let hir::ItemKind::Impl(impl_block) = &item.kind {
+            resolve_self_ty_def_id(cx, impl_block)
         } else {
             None
         };
@@ -169,27 +147,13 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
         let module_data = self
             .modules
             .entry(parent_local)
-            .or_insert_with(|| ModuleData {
-                body_span: item.span,
-                items: Vec::new(),
-                has_macro_items: false,
-            });
-
-        if from_expansion {
-            module_data.has_macro_items = true;
-        }
-
-        if module_data.items.is_empty() {
-            module_data.body_span = item.span;
-        } else {
-            module_data.body_span = module_data.body_span.to(item.span);
-        }
+            .or_insert_with(|| ModuleData { items: Vec::new() });
 
         module_data.items.push(ModuleItem {
             def_id: item_def_id,
             span: item.span,
             display_name,
-            inherent_impl_self_ty,
+            impl_self_ty,
         });
     }
 
@@ -265,56 +229,24 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
 
             let item_def_id_to_idx = build_def_id_to_idx(&module_data.items);
 
-            // Apply inherent-impl grouping to refs (merge impl refs with type).
-            let remapped_refs = remap_inherent_impl_refs(
-                &module_data.items,
-                &item_def_id_to_idx,
-                resolved_refs,
-                self.config.group_inherent_impls,
-            );
+            // Apply impl grouping to refs (merge impl refs with type).
+            let remapped_refs =
+                remap_impl_refs(&module_data.items, &item_def_id_to_idx, resolved_refs);
 
             let n = module_data.items.len();
             let adj = build_adj_list(&remapped_refs, n);
-            let (item_to_scc, sccs) = compute_sccs(&adj, n);
+            let item_to_scc = compute_sccs(&adj, n);
 
-            let ordering_violations = find_ordering_violations(
-                &module_data.items,
-                &remapped_refs,
-                &item_to_scc,
-                self.config.direction,
-            );
+            let ordering_violations =
+                find_ordering_violations(&module_data.items, &remapped_refs, &item_to_scc);
 
-            let grouping_violations = if self.config.group_inherent_impls {
-                check_impl_grouping(&module_data.items, &item_def_id_to_idx)
-            } else {
-                Vec::new()
-            };
+            let grouping_violations = check_impl_grouping(&module_data.items, &item_def_id_to_idx);
 
             if ordering_violations.is_empty() && grouping_violations.is_empty() {
                 continue;
             }
 
-            let autofix = if module_data.has_macro_items {
-                None
-            } else {
-                let expected_order = compute_expected_order(
-                    &module_data.items,
-                    &adj,
-                    &item_to_scc,
-                    &sccs,
-                    self.config.direction,
-                    self.config.group_inherent_impls,
-                );
-                compute_reordered_body(cx, module_data, &expected_order)
-            };
-
-            emit_module_diagnostic(
-                cx,
-                module_data,
-                &ordering_violations,
-                &grouping_violations,
-                autofix.as_deref(),
-            );
+            emit_module_diagnostic(cx, &ordering_violations, &grouping_violations);
         }
     }
 }
@@ -346,8 +278,13 @@ fn item_display_name(cx: &LateContext<'_>, item: &hir::Item<'_>) -> String {
                 .source_map()
                 .span_to_snippet(impl_block.self_ty.span)
                 .unwrap_or_else(|_| "?".into());
-            return if impl_block.of_trait.is_some() {
-                format!("impl .. for {ty_name}")
+            return if let Some(trait_ref) = &impl_block.of_trait {
+                let trait_name = cx
+                    .sess()
+                    .source_map()
+                    .span_to_snippet(trait_ref.trait_ref.path.span)
+                    .unwrap_or_else(|_| "..".into());
+                format!("impl {trait_name} for {ty_name}")
             } else {
                 format!("impl {ty_name}")
             };
@@ -383,6 +320,8 @@ fn item_display_name(cx: &LateContext<'_>, item: &hir::Item<'_>) -> String {
 }
 
 fn resolve_self_ty_def_id(cx: &LateContext<'_>, impl_block: &hir::Impl<'_>) -> Option<LocalDefId> {
+    // Cannot reuse `hir_refs::resolve_ty_def_id` due to `AmbigArg` type mismatch
+    // on `Impl::self_ty`.
     if let hir::TyKind::Path(ref qpath) = impl_block.self_ty.kind
         && let hir::def::Res::Def(_, def_id) = cx.qpath_res(qpath, impl_block.self_ty.hir_id)
     {
@@ -405,10 +344,10 @@ fn find_module_item(
     }
     let mut current = def_id.to_def_id();
     loop {
-        let parent = tcx.parent(current);
-        if parent == current {
+        let parent = tcx.opt_parent(current);
+        let Some(parent) = parent else {
             return None;
-        }
+        };
         if let Some(local) = parent.as_local() {
             if let Some(&result) = map.get(&local) {
                 return Some(result);
@@ -427,21 +366,16 @@ fn build_def_id_to_idx(items: &[ModuleItem]) -> FxHashMap<LocalDefId, usize> {
         .collect()
 }
 
-/// When `group_inherent_impls` is enabled, remap refs so that inherent impl
-/// items are treated as part of their type definition.
-fn remap_inherent_impl_refs(
+/// Remap refs so that impl items are treated as part of their type
+/// definition (when the self type is local to the module).
+fn remap_impl_refs(
     items: &[ModuleItem],
     def_id_to_idx: &FxHashMap<LocalDefId, usize>,
     refs: &[(usize, usize, Span)],
-    group: bool,
 ) -> Vec<(usize, usize, Span)> {
-    if !group {
-        return refs.to_vec();
-    }
-
     let remap = |idx: usize| -> usize {
         items[idx]
-            .inherent_impl_self_ty
+            .impl_self_ty
             .and_then(|self_ty| def_id_to_idx.get(&self_ty).copied())
             .unwrap_or(idx)
     };
@@ -466,7 +400,7 @@ fn build_adj_list(refs: &[(usize, usize, Span)], n: usize) -> Vec<Vec<usize>> {
     adj
 }
 
-fn compute_sccs(adj: &[Vec<usize>], n: usize) -> (Vec<usize>, Vec<Vec<usize>>) {
+fn compute_sccs(adj: &[Vec<usize>], n: usize) -> Vec<usize> {
     let sccs = tarjan_scc(adj, n);
     let mut item_to_scc = vec![0usize; n];
     for (scc_idx, scc) in sccs.iter().enumerate() {
@@ -474,11 +408,12 @@ fn compute_sccs(adj: &[Vec<usize>], n: usize) -> (Vec<usize>, Vec<Vec<usize>>) {
             item_to_scc[item_idx] = scc_idx;
         }
     }
-    (item_to_scc, sccs)
+    item_to_scc
 }
 
 // -- Tarjan's algorithm --
 
+#[expect(suggest_builder, reason = "internal algorithm state, not a public API")]
 struct TarjanState {
     index_counter: usize,
     stack: Vec<usize>,
@@ -534,53 +469,6 @@ fn strongconnect(v: usize, adj: &[Vec<usize>], state: &mut TarjanState) {
     }
 }
 
-// -- Topological sort with source-order tiebreaking --
-
-fn topo_sort_stable(
-    adj: &[Vec<usize>],
-    source_pos: &[usize],
-    n: usize,
-    reverse_edges: bool,
-) -> Vec<usize> {
-    use std::cmp::Reverse;
-    use std::collections::BinaryHeap;
-
-    let mut effective_adj = vec![Vec::new(); n];
-    let mut in_degree = vec![0u32; n];
-
-    for (from, targets) in adj.iter().enumerate() {
-        for &to in targets {
-            if reverse_edges {
-                effective_adj[to].push(from);
-                in_degree[from] += 1;
-            } else {
-                effective_adj[from].push(to);
-                in_degree[to] += 1;
-            }
-        }
-    }
-
-    let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
-    for i in 0..n {
-        if in_degree[i] == 0 {
-            heap.push(Reverse((source_pos[i], i)));
-        }
-    }
-
-    let mut order = Vec::with_capacity(n);
-    while let Some(Reverse((_, node))) = heap.pop() {
-        order.push(node);
-        for &next in &effective_adj[node] {
-            in_degree[next] -= 1;
-            if in_degree[next] == 0 {
-                heap.push(Reverse((source_pos[next], next)));
-            }
-        }
-    }
-
-    order
-}
-
 // Violation detection
 
 /// A single ordering violation: an item that appears at the wrong position.
@@ -594,11 +482,13 @@ struct OrderingViolation {
     witnesses: Vec<(String, Span)>,
 }
 
-/// A grouping violation: an inherent impl separated from its type.
+/// A grouping violation: an impl separated from its type.
 struct GroupingViolation {
     /// `LocalDefId` of the impl block (used for lint-level resolution).
     impl_def_id: LocalDefId,
     impl_span: Span,
+    /// Display name of the impl item (e.g. "impl Widget", "impl .. for Point").
+    impl_name: String,
     type_name: String,
     type_span: Span,
 }
@@ -607,7 +497,6 @@ fn find_ordering_violations(
     items: &[ModuleItem],
     refs: &[(usize, usize, Span)],
     item_to_scc: &[usize],
-    direction: OrderingDirection,
 ) -> Vec<OrderingViolation> {
     let mut violation_map: FxHashMap<usize, Vec<(String, Span)>> = FxHashMap::default();
 
@@ -616,10 +505,7 @@ fn find_ordering_violations(
             continue;
         }
 
-        let is_violation = match direction {
-            OrderingDirection::CalleeFirst => from < to,
-            OrderingDirection::CallerFirst => to < from,
-        };
+        let is_violation = from < to;
 
         if is_violation {
             violation_map
@@ -649,7 +535,7 @@ fn check_impl_grouping(
     let mut violations = Vec::new();
 
     for (impl_pos, item) in items.iter().enumerate() {
-        let Some(self_ty_def_id) = item.inherent_impl_self_ty else {
+        let Some(self_ty_def_id) = item.impl_self_ty else {
             continue;
         };
         let Some(&type_idx) = def_id_to_idx.get(&self_ty_def_id) else {
@@ -664,12 +550,13 @@ fn check_impl_grouping(
         };
         let has_unrelated = items[lo + 1..hi]
             .iter()
-            .any(|i| i.def_id != self_ty_def_id && i.inherent_impl_self_ty != Some(self_ty_def_id));
+            .any(|i| i.def_id != self_ty_def_id && i.impl_self_ty != Some(self_ty_def_id));
 
         if has_unrelated {
             violations.push(GroupingViolation {
                 impl_def_id: item.def_id,
                 impl_span: item.span,
+                impl_name: item.display_name.clone(),
                 type_name: type_item
                     .display_name
                     .split_once(' ')
@@ -683,156 +570,12 @@ fn check_impl_grouping(
     violations
 }
 
-// Expected order & autofix
-
-fn compute_expected_order(
-    items: &[ModuleItem],
-    adj: &[Vec<usize>],
-    item_to_scc: &[usize],
-    sccs: &[Vec<usize>],
-    direction: OrderingDirection,
-    group_inherent_impls: bool,
-) -> Vec<usize> {
-    let num_sccs = sccs.len();
-
-    // Build SCC DAG.
-    let mut scc_adj = vec![Vec::new(); num_sccs];
-    for (from, targets) in adj.iter().enumerate() {
-        for &to in targets {
-            let from_scc = item_to_scc[from];
-            let to_scc = item_to_scc[to];
-            if from_scc != to_scc {
-                scc_adj[from_scc].push(to_scc);
-            }
-        }
-    }
-    for list in &mut scc_adj {
-        list.sort_unstable();
-        list.dedup();
-    }
-
-    // Min item index per SCC for tiebreaking (index == source position).
-    let scc_min_pos: Vec<usize> = sccs
-        .iter()
-        .map(|scc| scc.iter().copied().min().unwrap_or(0))
-        .collect();
-
-    let callee_first = matches!(direction, OrderingDirection::CalleeFirst);
-    let scc_order = topo_sort_stable(&scc_adj, &scc_min_pos, num_sccs, callee_first);
-
-    let mut item_order = Vec::with_capacity(items.len());
-    for &scc_idx in &scc_order {
-        let mut scc_items = sccs[scc_idx].clone();
-        scc_items.sort_unstable();
-        item_order.extend(scc_items);
-    }
-
-    if group_inherent_impls {
-        // Build type_def_id → [impl indices] map for O(1) lookup.
-        let mut type_to_impls: FxHashMap<LocalDefId, Vec<usize>> = FxHashMap::default();
-        for &idx in &item_order {
-            if let Some(self_ty) = items[idx].inherent_impl_self_ty {
-                type_to_impls.entry(self_ty).or_default().push(idx);
-            }
-        }
-
-        let mut final_order = Vec::with_capacity(items.len());
-        let mut placed = vec![false; items.len()];
-
-        for &idx in &item_order {
-            if placed[idx] {
-                continue;
-            }
-            // Skip inherent impls here; they will be placed after their type.
-            if items[idx].inherent_impl_self_ty.is_some() {
-                continue;
-            }
-
-            final_order.push(idx);
-            placed[idx] = true;
-
-            // Add inherent impls of this type.
-            if let Some(impl_indices) = type_to_impls.get(&items[idx].def_id) {
-                for &impl_idx in impl_indices {
-                    if !placed[impl_idx] {
-                        final_order.push(impl_idx);
-                        placed[impl_idx] = true;
-                    }
-                }
-            }
-        }
-
-        // Add any remaining items (orphaned impls whose type is in another module).
-        for &idx in &item_order {
-            if !placed[idx] {
-                final_order.push(idx);
-            }
-        }
-
-        final_order
-    } else {
-        item_order
-    }
-}
-
-/// Compute the reordered module body as a string.
-///
-/// Returns `None` if any snippet extraction fails (e.g. synthetic spans).
-fn compute_reordered_body(
-    cx: &LateContext<'_>,
-    module_data: &ModuleData,
-    expected_order: &[usize],
-) -> Option<String> {
-    let source_map = cx.sess().source_map();
-
-    // Check if the expected order is the same as the source order.
-    let is_already_ordered = expected_order.iter().enumerate().all(|(i, &idx)| idx == i);
-    if is_already_ordered {
-        return None;
-    }
-
-    let mut snippets = Vec::with_capacity(module_data.items.len());
-    for item in &module_data.items {
-        let snippet = source_map.span_to_snippet(item.span).ok()?;
-        snippets.push(snippet);
-    }
-
-    let reordered: Vec<&str> = expected_order
-        .iter()
-        .map(|&idx| snippets[idx].as_str())
-        .collect();
-
-    Some(reordered.join("\n\n"))
-}
-
 // Diagnostics
-
-fn emit_autofix_or_help(
-    diag: &mut rustc_errors::Diag<'_, ()>,
-    module_data: &ModuleData,
-    reordered_body: Option<&str>,
-    manual_hint: &str,
-) {
-    if let Some(reordered) = reordered_body {
-        diag.span_suggestion(
-            module_data.body_span,
-            "reorder items topologically",
-            reordered,
-            Applicability::MachineApplicable,
-        );
-    } else if module_data.has_macro_items {
-        diag.help(format!(
-            "autofix unavailable for this module (contains macro-expanded items); {manual_hint}",
-        ));
-    }
-}
 
 fn emit_module_diagnostic(
     cx: &LateContext<'_>,
-    module_data: &ModuleData,
     ordering_violations: &[OrderingViolation],
     grouping_violations: &[GroupingViolation],
-    reordered_body: Option<&str>,
 ) {
     if !ordering_violations.is_empty() {
         let first = &ordering_violations[0];
@@ -856,11 +599,8 @@ fn emit_module_diagnostic(
                         );
                     }
                 }
-                emit_autofix_or_help(
-                    diag,
-                    module_data,
-                    reordered_body,
-                    "reorder items manually so referenced items appear first",
+                diag.help(
+                    "reorder items so referenced items appear before their referencing items",
                 );
             },
         );
@@ -875,8 +615,8 @@ fn emit_module_diagnostic(
             hir_id,
             violation.impl_span,
             format!(
-                "`impl {}` is separated from its type definition",
-                violation.type_name
+                "`{}` is separated from its type definition",
+                violation.impl_name
             ),
             |diag| {
                 diag.span_label(
@@ -884,12 +624,7 @@ fn emit_module_diagnostic(
                     format!("`{}` defined here", violation.type_name),
                 );
                 if ordering_violations.is_empty() {
-                    emit_autofix_or_help(
-                        diag,
-                        module_data,
-                        reordered_body,
-                        "reorder items manually so the impl is adjacent to its type",
-                    );
+                    diag.help("move the impl block adjacent to its type definition");
                 }
             },
         );

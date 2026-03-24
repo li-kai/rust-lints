@@ -403,11 +403,6 @@ if echo "$output" | _grep -q '^error|^warning\['; then
   echo "$output"
 fi
 
-# 1b. Auto-fix dylint lints with MachineApplicable suggestions.
-#    These lints default to Allow (silent in editor); DYLINT_RUSTFLAGS
-#    overrides the level for the fix pass.
-DYLINT_RUSTFLAGS="-W topological_ordering" cargo dylint --all --fix -- --allow-dirty --allow-staged || true
-
 # 2. Format code.
 just fmt || true
 
@@ -444,3 +439,4 @@ while IFS= read -r toml; do
 done < <(echo "$staged" | _grep 'Cargo\.toml$')
 
 exit $rc
+

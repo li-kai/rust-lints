@@ -148,7 +148,6 @@ EXCLUDED_FIXABLE_LINTS = {
 # Dylint lints with MachineApplicable autofix — enabled via DYLINT_RUSTFLAGS
 # in the pre-commit hook after clippy fix.
 DYLINT_FIXABLE_LINTS: list[str] = [
-    "topological_ordering",
 ]
 
 BANNED_CRATES: OrderedDict[str, str] = OrderedDict([

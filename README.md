@@ -23,7 +23,7 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | [`result_result`](#result_result) | warn | Nested `Result<Result<T, E1>, E2>` in function signatures |
 | [`suggest_builder`](#suggest_builder) | warn | Structs with ≥ 6 named fields that could use a `#[builder]` constructor |
 | [`suggest_fn_builder`](#suggest_fn_builder) | warn | Functions with many parameters that could use `#[bon::builder]` |
-| [`topological_ordering`](#topological_ordering) | allow | Items within a module not ordered by their dependency graph |
+| [`topological_ordering`](#topological_ordering) | warn | Items within a module not ordered by their dependency graph |
 | [`unbounded_channel`](#unbounded_channel) | deny | Creation of unbounded channels that can exhaust memory |
 | [`unclear_exports`](#unclear_exports) | deny | Glob imports (`use foo::*`) and renamed imports (`use foo::Bar as Baz`) |
 | [`unstructured_log_fields`](#unstructured_log_fields) | warn | `tracing` macros using format args instead of structured fields |
@@ -277,7 +277,7 @@ Does not fire on functions that already have `#[bon::builder]`, trait impl metho
 
 ### `topological_ordering`
 
-Flags items within a module that violate topological order based on the reference graph. In the default callee-first mode, an item must appear before any item that references it — leaf functions at the top, composition roots at the bottom.
+Flags items within a module that violate topological order based on the reference graph. An item must appear before any item that references it (callee-first) — leaf functions at the top, composition roots at the bottom.
 
 ```
 warning: items are not in topological order in this module
@@ -286,21 +286,14 @@ warning: items are not in topological order in this module
 5  |     fn process(_cfg: Config) {}
    |                      ^^^^^^ `fn process` references `struct Config` but appears before it
    |
-help: reorder items topologically
-   |
-LL ~     struct Config {
-LL +         value: u32,
-LL +     }
-LL +
-LL + fn process(_cfg: Config) {}
-   |
+   = help: reorder items so referenced items appear before their referencing items
 ```
 
 A struct/enum and its inherent `impl` blocks are treated as one unit; separating them with unrelated items triggers a diagnostic. Trait impl blocks are ordered independently.
 
 Mutual recursion is handled via strongly connected components — items in a cycle are unconstrained relative to each other, but the cycle as a whole is ordered relative to outside items.
 
-`Allow` by default — silent in the editor. Enable with `#![warn(topological_ordering)]` at crate root, or set `DYLINT_RUSTFLAGS="-W topological_ordering"` when running `cargo dylint`. Does not fire inside `#[cfg(test)]` modules or on macro-expanded items. Provides `MachineApplicable` autofix via `cargo fix`. See [docs/topological-ordering.md](docs/topological-ordering.md) for the full design.
+Does not fire inside `#[cfg(test)]` modules or on macro-expanded items. Suppress with `#[allow(topological_ordering)]` on specific items or modules. See [docs/topological-ordering.md](docs/topological-ordering.md) for the full design.
 
 ### `unbounded_channel`
 
@@ -488,11 +481,6 @@ exhaustive = true
 # errors = ["types"]
 # utils = ["types", "errors"]
 # payments = ["types", "errors", "utils"]
-
-[topological_ordering]
-# "callee_first" (default) or "caller_first"
-# direction = "callee_first"
-# group_inherent_impls = true
 
 [realtime_in_async_test]
 # allowed_paths = ["my_crate::time::sleep"]

@@ -6,7 +6,7 @@
 )]
 use std::marker::PhantomData;
 
-use bon::{bon, builder};
+use bon::bon;
 // Tests for the `suggest_builder` lint.
 // Threshold: 4 (from dylint.toml).
 

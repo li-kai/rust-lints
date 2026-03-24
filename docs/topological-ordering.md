@@ -12,29 +12,23 @@ Formatting tools (rustfmt) control whitespace and syntax style. They do not cont
 
 ### Relationship to dylint's `non_topologically_sorted_functions`
 
-dylint has an existing lint that covers functions only. This lint extends the concept to all items: structs, enums, traits, type aliases, constants, and their impl blocks. It also addresses grouping (a struct and its inherent impl should be treated as one unit) and provides a configurable direction choice.
+dylint has an existing lint that covers functions only. This lint extends the concept to all items: structs, enums, traits, type aliases, constants, and their impl blocks. It also addresses grouping (a struct and its inherent impl should be treated as one unit).
 
 ## Design
 
-### Direction: callee-first (bottom-up) as default
+### Direction: callee-first (bottom-up)
 
-There are two valid conventions:
+An item appears before any item that references it. Leaf functions are at the top of the file, composition roots at the bottom. This is the C convention (historically required by the compiler). Reading top-to-bottom reveals building blocks before their compositions.
 
-**Callee-first (bottom-up):** An item appears before any item that references it. Leaf functions are at the top of the file, composition roots at the bottom. This is the C convention (historically required by the compiler). Reading top-to-bottom reveals building blocks before their compositions.
+Callee-first is the only supported direction. There is no caller-first option.
 
-**Caller-first (top-down):** An item appears before the items it references. Entry points are at the top of the file, implementation details at the bottom. This is the newspaper convention -- headline first, details later.
+**Rationale:**
 
-Trade-offs:
+1. **Natural fit with Rust's type system.** Types are defined before the functions that use them. `struct Config` appears before `fn process(cfg: Config)`, so the reader (or agent) understands the type before encountering its use.
 
-| Aspect | Callee-first | Caller-first |
-|---|---|---|
-| Familiar from | C, Go (convention), Pascal | Java (convention), newspaper style |
-| Good for | Library modules with many leaf utilities | Application modules with clear entry points |
-| First thing you see | Building blocks, types, helpers | Public API, orchestration |
-| Matches Rust convention | Partially -- `main` is often last | Partially -- `mod` declarations are often first |
-| dylint precedent | Yes -- dylint's lint uses callee-first | No |
+2. **Matches existing Rust conventions.** `main()` and `pub fn` entry points conventionally appear at the bottom of a file, after internal machinery. dylint's prior `non_topologically_sorted_functions` lint also uses callee-first.
 
-**Decision:** Default to callee-first (matching dylint's precedent), configurable to caller-first. The rationale: callee-first has a natural affinity with Rust's type system -- types are defined before the functions that use them. It also matches the pattern where `main()` or `pub fn` entry points appear at the bottom of a file, after the internal machinery.
+3. **Better for AI coding agents.** Transformer-based models attend to all tokens in context, but recency bias means tokens near the end of the context window carry more weight. With callee-first ordering, the agent finishes reading a file with the high-level orchestration code freshest -- the composition that references all the building blocks defined earlier. This is the most useful context for planning edits, since the agent can see how pieces connect while still resolving earlier type/function definitions by name.
 
 ### What items are covered
 
@@ -59,16 +53,14 @@ Not covered:
 
 ### Grouping: structs and their impl blocks
 
-A struct/enum and its inherent `impl` blocks are logically one unit. Separating them with unrelated items is confusing. The lint treats each type and its inherent `impl` blocks as a single "item group" for ordering purposes.
+A struct/enum and all its `impl` blocks are logically one unit. Separating them with unrelated items is confusing. The lint treats each type and its `impl` blocks as a single "item group" for ordering purposes.
 
 **Specifically:**
 
-1. A struct/enum and all its inherent `impl` blocks (not trait impls) are one group.
+1. A struct/enum and all its `impl` blocks (inherent and trait) are one group, provided the self type is defined in the same module.
 2. The group's position is determined by the struct/enum definition.
-3. Inherent `impl` blocks must appear immediately after their struct/enum (no unrelated items in between).
-4. Trait impl blocks (`impl Trait for Type`) are separate items. They reference both the trait and the type, and their ordering follows normal topological rules.
-
-**Why only inherent impls:** Trait impls often exist to satisfy an external requirement (e.g., `impl Display for MyType`). Forcing them adjacent to the type definition would conflict with grouping trait impls together (e.g., all `Display` impls in one place). Inherent impls are the type's own API -- they belong with the type.
+3. All `impl` blocks must appear immediately after their struct/enum (no unrelated items in between).
+4. `impl` blocks for types defined in other modules are independent items and follow normal topological rules.
 
 ### What constitutes a "reference"
 
@@ -123,15 +115,6 @@ warning: items are not in topological order in this module
    |
 5  |     fn process(_cfg: Config) {}
    |                      ^^^^^^ `fn process` references `struct Config` but appears before it
-   |
-help: reorder items topologically
-   |
-LL ~     struct Config {
-LL +         value: u32,
-LL +     }
-LL +
-LL + fn process(_cfg: Config) {}
-   |
 ```
 
 For the "item group" violation (inherent impl not adjacent to type):
@@ -151,83 +134,11 @@ LL | |             Self { name }
 LL | |         }
 LL | |     }
    | |_____^
-   |
-help: reorder items topologically
-   |
-   ...
 ```
-
-### Autofix strategy
-
-**Decision: provide `MachineApplicable` autofix via whole-module-body replacement.**
-
-The lint emits a single suggestion per out-of-order module that replaces the entire module body with the correctly ordered items. `cargo fix` / `cargo dylint --fix` applies it automatically. This integrates with the pre-commit hook workflow (see [Pre-commit integration](#pre-commit-integration)).
-
-#### Why whole-module replacement
-
-Per-item suggestions (move item X to line Y) fail because:
-- `rustfix` applies suggestions sequentially; moving one item invalidates spans of all subsequent items
-- Multiple move suggestions within the same module produce overlapping spans, causing `rustfix` to abort
-
-A single replacement of the entire module body sidesteps both problems -- one span, one replacement, no conflicts. This is conceptually the same approach rustfmt uses: rewrite the whole unit.
-
-#### How it works
-
-1. **Extract item text blocks.** For each item, use `cx.sess().source_map().span_to_snippet()` to get the source text. The span must include the item's leading attributes and doc comments. Use `cx.tcx.hir().attrs(item.hir_id())` to find the earliest attribute span and extend backward from there. For freestanding `//` comments immediately preceding an item (no blank line between), extend the span backward line-by-line through the source map.
-
-2. **Compute the target order.** After SCC computation and topological sort, produce the permutation of items.
-
-3. **Reassemble.** Concatenate the extracted text blocks in the new order, preserving the original blank-line spacing between items (one blank line between items, matching the original).
-
-4. **Emit one suggestion.** Use `diag.span_suggestion()` with `Applicability::MachineApplicable` on the span covering the entire module body (from first item to last item), with the reassembled text as the replacement.
-
-#### Edge cases and escape hatches
-
-| Case | Behavior |
-|---|---|
-| **Macro-expanded items** | If any item in the module has a span from macro expansion (`span.from_expansion()`), skip autofix for that module. Still emit the warning with a note: "autofix skipped: module contains macro-expanded items". |
-| **`#[cfg]` items** | Order what the current compilation sees. `#[cfg]` items absent from the current build are not in the HIR and cannot conflict. If a different cfg produces a different topological order, the lint fires again under that cfg and fixes it then. |
-| **Comments between items** | Freestanding comments (not doc comments or attrs) that are separated from the next item by a blank line are treated as "section separators" and kept in place. Comments with no blank line before the next item travel with that item. |
-| **`span_to_snippet` fails** | If the source map cannot produce a snippet for any item (e.g., synthetic spans), skip autofix for that module. |
-
-#### Diagnostic format with autofix
-
-```
-warning: items are not in topological order in this module
-  --> src/lib.rs:15:1
-   |
-15 | / fn process(x: Config) -> Output {
-   | |     ...
-42 | | fn validate(x: &Config) -> bool {
-   | |     ...
-   | |_
-   |
-   = note: `process` references `validate` (line 42) but appears before it
-   = help: reorder items so referenced items appear first
-   = note: autofix available: run `cargo fix` to reorder automatically
-```
-
-When `cargo fix` applies the suggestion, the entire module body is replaced with the correctly ordered version.
-
-### Configuration
-
-```toml
-[topological_ordering]
-# "callee_first" (default) or "caller_first"
-direction = "callee_first"
-
-# Whether to require inherent impl blocks adjacent to their type definition.
-# Default: true
-group_inherent_impls = true
-```
-
-Read from `dylint.toml` via `dylint_linting::config_or_default("topological_ordering")`.
-
-No item exclusion configuration. Use `#[allow(topological_ordering)]` on specific items or modules where the convention does not apply (e.g., a module where items are ordered alphabetically by convention, or a module with extensive mutual recursion where the SCC is the entire module).
 
 ### Lint level
 
-`Allow` by default — silent in the editor. Enable with `#![warn(topological_ordering)]` at crate root, or set `DYLINT_RUSTFLAGS="-W topological_ordering"` when running `cargo dylint`. This is a style/readability lint, not a correctness lint. Code with items in non-topological order compiles and runs correctly. Users who want stricter enforcement can set the level to `deny`.
+`Warn` by default. This is a style/readability lint, not a correctness lint. Code with items in non-topological order compiles and runs correctly. Use `#[allow(topological_ordering)]` on specific items or modules where the convention does not apply. Users who want stricter enforcement can set the level to `deny`.
 
 ## Resolved Questions
 
@@ -235,9 +146,9 @@ No item exclusion configuration. Use `#[allow(topological_ordering)]` on specifi
 
 dylint's `non_topologically_sorted_functions` only covers functions. But types are part of the dependency graph. A function that takes a `Config` parameter depends on `Config`. If `Config` is defined 200 lines below the function, the reader cannot understand the function signature without scrolling. Covering all items makes the ordering holistic.
 
-### 2. Why not enforce ordering of trait impls relative to the trait?
+### 2. Why group trait impls with the type?
 
-A trait impl (`impl Display for Config`) references both `Display` (external) and `Config` (local). Its position in the topological order is determined by these edges like any other item. Forcing it adjacent to `Config` would conflict with cases where a developer groups all `Display` impls together, or where `impl Trait for Type` depends on other local items. The topological ordering already places it correctly.
+A trait impl (`impl Display for Config`) references both `Display` (possibly external) and `Config` (local). When `Config` is defined in the same module, the impl belongs with `Config` -- it is part of `Config`'s API surface. Grouping all impls with their type keeps the type's full interface in one place, which aids both human and agent comprehension.
 
 ### 3. Why SCCs instead of just ignoring all cycles?
 
@@ -260,7 +171,6 @@ Some codebases put all `pub` items first (or last). This lint does not enforce t
 ```
 src/lints/
   topological_ordering.rs   # lint implementation
-src/config.rs               # add TopologicalOrderingConfig
 
 ui/topological_ordering/
   main.rs                   # UI test cases
@@ -276,41 +186,31 @@ Registration in `src/lints/mod.rs`:
 
 Add `[[example]]` entry in `Cargo.toml` for the UI test.
 
-## Pre-commit integration
+## CI integration
 
-This lint is designed for the same pre-commit workflow as the auto-fixable clippy lints documented in `docs/recommended-lint-config.md`. Add to the pre-commit hook:
+Enable the lint in CI to catch violations:
 
 ```bash
-# Topological ordering — auto-reorders items within modules
-DYLINT_RUSTFLAGS="-W topological_ordering" cargo dylint --all --fix -- --all-targets --allow-dirty --allow-staged
+cargo dylint --all -- --all-targets
 ```
-
-This runs after the clippy auto-fix step and before the check step. The workflow:
 
 | Phase | Action |
 |---|---|
-| Development | Lint is `Allow` — silent in the editor |
-| Pre-commit | `DYLINT_RUSTFLAGS="-W topological_ordering"` enables it for the fix pass |
-| CI | `DYLINT_RUSTFLAGS="-W topological_ordering"` (or `-D`) catches violations |
-
-The fix is idempotent: running it on already-ordered code produces no changes.
+| Development | Lint is `Warn` — shows warnings in the editor |
+| CI | `DYLINT_RUSTFLAGS="-D topological_ordering"` to promote to errors |
 
 ## Test Cases
 
-1. **Basic callee-first ordering:** helper function before caller -- no warning.
-2. **Basic violation:** caller before callee -- warning.
-3. **Struct before function that uses it:** no warning.
-4. **Function before struct it references:** warning.
-5. **Inherent impl adjacent to struct:** no warning.
-6. **Inherent impl separated from struct:** warning.
-7. **Trait impl not required to be adjacent:** no warning regardless of position.
-8. **Mutual recursion (cycle):** no warning for items in the SCC, but SCC ordered relative to other items.
-9. **Multi-item SCC:** three mutually recursive functions, all unconstrained relative to each other.
-10. **Constant referenced by function:** constant should appear before function.
-11. **Type alias referenced in function signature:** alias should appear before function.
-12. **`#[allow(topological_ordering)]` suppresses the warning.**
-13. **`#[cfg(test)] mod tests` is excluded entirely.**
-14. **Macro-expanded items are skipped.**
-15. **Items with no references to other local items:** unconstrained, no warning regardless of position.
-16. **Cross-module references do not create ordering edges.**
-17. **Caller-first mode (configured):** reverses the expected order.
+1. **Basic violation:** caller before callee -- warning.
+2. **Type reference violation:** function before struct it references -- warning.
+3. **Inherent impl separated from struct:** warning.
+4. **SCC with outside dependency:** SCC before its dependency -- warning.
+5. **Correct callee-first ordering:** helper before caller -- no warning.
+6. **Correct order with struct and function:** struct before function -- no warning.
+7. **Inherent impl adjacent to struct:** no warning.
+8. **Trait impl separated from type:** warning when separated by unrelated items.
+9. **Mutual recursion (cycle):** no warning for items in the SCC, SCC ordered relative to other items.
+10. **Items with no local references:** unconstrained, no warning regardless of position.
+11. **`#[allow(topological_ordering)]` suppresses the warning.**
+12. **`#[cfg(test)] mod tests` is excluded entirely.**
+13. **Cross-module references do not create ordering edges.**
