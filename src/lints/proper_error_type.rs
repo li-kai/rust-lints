@@ -11,6 +11,27 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, ExistentialPredicate, Ty};
 use rustc_span::{Span, Symbol, sym};
 
+struct ErrorImplInfo {
+    span: Span,
+    has_source: bool,
+    /// Fields of self type that implement Error (for step 3 cross-ref).
+    source_field_names: Vec<Symbol>,
+}
+
+struct DisplayImplInfo {
+    span: Span,
+    /// `LocalDefId` of the `fmt` method, for body inspection in step 3.
+    fmt_def_id: Option<rustc_hir::def_id::LocalDefId>,
+}
+
+/// Describes which kind of unstructured error was detected.
+enum UnstructuredKind {
+    /// String, &str, Cow<str>, Box<dyn Error>
+    Basic(&'static str),
+    /// `anyhow::Error` or `miette::Report`
+    ErasedCrate(&'static str),
+}
+
 rustc_session::declare_lint! {
     /// Flags error types in public APIs that are incomplete, unstructured,
     /// or missing error chain information.
@@ -48,28 +69,7 @@ impl Default for ProperErrorType {
     }
 }
 
-struct ErrorImplInfo {
-    span: Span,
-    has_source: bool,
-    /// Fields of self type that implement Error (for step 3 cross-ref).
-    source_field_names: Vec<Symbol>,
-}
-
-struct DisplayImplInfo {
-    span: Span,
-    /// `LocalDefId` of the `fmt` method, for body inspection in step 3.
-    fmt_def_id: Option<rustc_hir::def_id::LocalDefId>,
-}
-
 rustc_session::impl_lint_pass!(ProperErrorType => [PROPER_ERROR_TYPE]);
-
-/// Describes which kind of unstructured error was detected.
-enum UnstructuredKind {
-    /// String, &str, Cow<str>, Box<dyn Error>
-    Basic(&'static str),
-    /// `anyhow::Error` or `miette::Report`
-    ErasedCrate(&'static str),
-}
 
 impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
     // Step 1: Unstructured error types
