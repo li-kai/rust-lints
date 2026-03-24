@@ -5,6 +5,13 @@
 
 set -u
 
+# Strip `+toolchain` prefix (e.g. `rustup +stable which cargo`).
+# In a Nix-managed environment the toolchain selector is meaningless —
+# there is only one toolchain on PATH.
+case "${1-}" in
+  +*) shift ;;
+esac
+
 case "$1" in
   which)
     exec which "$2"
