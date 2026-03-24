@@ -37,7 +37,7 @@
       mkSystem =
         system:
         let
-          pkgs = nixpkgs.legacyPackages.${system};
+          pkgs = import nixpkgs { localSystem = system; };
           renderTemplate =
             path: vars:
             builtins.replaceStrings
@@ -265,7 +265,7 @@
 
           mkDevShell =
             {
-              pkgs ? nixpkgs.legacyPackages.${system},
+              pkgs ? import nixpkgs { localSystem = system; },
               packages ? [ ],
               extraRustComponents ? [ ],
               extraRustTargets ? [ ],
@@ -351,7 +351,7 @@
             shellHook ? "",
             extraEnv ? { },
           }:
-          (mkSystem pkgs.system).mkDevShell {
+          (mkSystem pkgs.stdenv.hostPlatform.system).mkDevShell {
             inherit
               pkgs
               packages
