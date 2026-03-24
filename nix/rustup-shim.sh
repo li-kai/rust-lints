@@ -17,7 +17,7 @@ case "$1" in
     exec which "$2"
     ;;
   show)
-    echo "nix-managed: $(rustc --version)"
+    echo "nix-managed $(rustc --version)"
     ;;
   toolchain)
     echo "@TOOLCHAIN_FULL@ (nix-managed)"
