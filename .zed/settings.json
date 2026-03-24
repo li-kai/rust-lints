@@ -11,11 +11,21 @@
   "lsp": {
     "rust-analyzer": {
       "initialization_options": {
+        "check": {
+          "overrideCommand": [
+            "bash",
+            "./scripts/ra-check.sh",
+            "--message-format=json"
+          ],
+        },
         "files": {
           "exclude": ["ui"],
         },
         "cargo": {
           "features": "all",
+        },
+        "rustc": {
+          "source": "discover",
         },
         "imports": {
           "granularity": {
