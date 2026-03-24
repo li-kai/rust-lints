@@ -1,0 +1,14 @@
+{
+  "name": "rust-lints",
+  "owner": {
+    "name": "li-kai"
+  },
+  "plugins": [
+    {
+      "name": "rust-analyzer",
+      "source": "./rust-analyzer",
+      "description": "Rust LSP (navigation only, diagnostics via hook)",
+      "version": "0.1.0"
+    }
+  ]
+}

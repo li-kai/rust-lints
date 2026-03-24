@@ -1,4 +1,7 @@
 /target
 /.direnv
-/.claude
+/.claude/*
+!/.claude/plugins/
+!/.claude/settings.json
+!/.claude/skills/
 result

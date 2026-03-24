@@ -486,6 +486,41 @@ exhaustive = true
 # allowed_paths = ["my_crate::time::sleep"]
 ```
 
+## Editor Setup
+
+### Zed
+
+Copy the relevant settings from `.zed/settings.json` into your project's Zed
+settings. Key options:
+
+- `check.overrideCommand` — runs clippy + dylint via `scripts/ra-check.sh`
+- `rustc.source: "discover"` — resolves `rustc_private` crates from the sysroot
+  (requires the `rustc-dev` component in your toolchain)
+
+### Claude Code
+
+This repo ships a `rust-analyzer` LSP plugin that disables `checkOnSave`
+(navigation only — diagnostics come from hooks). This avoids conflicts with the
+custom check command used by dylint.
+
+```sh
+# Register the marketplace (once per machine)
+claude plugin marketplace add github:li-kai/rust-lints
+
+# Install the plugin
+claude plugin install rust-analyzer@rust-lints
+```
+
+Then enable it in your repo's `.claude/settings.json`:
+
+```json
+{
+  "enabledPlugins": {
+    "rust-analyzer@rust-lints": true
+  }
+}
+```
+
 ## Development
 
 Requires `dylint-link`:

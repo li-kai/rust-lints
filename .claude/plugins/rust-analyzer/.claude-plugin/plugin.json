@@ -1,0 +1,5 @@
+{
+  "name": "rust-analyzer",
+  "version": "0.1.0",
+  "description": "Rust LSP (navigation only, diagnostics via hook)"
+}
