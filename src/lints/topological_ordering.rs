@@ -39,218 +39,6 @@ rustc_session::declare_lint! {
     "items are not in topological order within this module"
 }
 
-/// Represents a top-level item (or item group) within a single module,
-/// tracked for ordering analysis.
-struct ModuleItem {
-    def_id: LocalDefId,
-    span: Span,
-    /// Human-readable name for diagnostics (e.g. "fn process", "struct Config").
-    display_name: String,
-    /// For impl blocks whose self type is defined in this module, the
-    /// `LocalDefId` of the self type.  Used to group the impl with its type.
-    impl_self_ty: Option<LocalDefId>,
-}
-
-/// A raw reference collected during the lint pass, before resolution to
-/// module-level items.
-struct RawRef {
-    /// The owner (function/method/const) containing the reference.
-    source_owner: LocalDefId,
-    /// The `DefId` being referenced (may be a nested item like a method).
-    target: LocalDefId,
-    /// Span of the reference site, for diagnostic labels.
-    ref_span: Span,
-}
-
-/// Per-module collected data, built up during the lint pass and analyzed
-/// in `check_crate_post`.
-struct ModuleData {
-    /// Items in source order.
-    items: Vec<ModuleItem>,
-}
-
-pub struct TopologicalOrdering {
-    modules: FxHashMap<LocalDefId, ModuleData>,
-    /// Raw reference edges collected during `check_expr` / `check_ty`.
-    raw_refs: Vec<RawRef>,
-    /// Cached lint-level check: `false` when the lint is disabled at crate level.
-    /// Set once in `check_crate`; when `false`, all callbacks short-circuit.
-    enabled: bool,
-}
-
-impl TopologicalOrdering {
-    pub fn new() -> Self {
-        Self {
-            modules: FxHashMap::default(),
-            raw_refs: Vec::new(),
-            enabled: false,
-        }
-    }
-
-    fn record_ref(
-        &mut self,
-        owner: LocalDefId,
-        resolved: Option<(rustc_span::def_id::DefId, Span)>,
-    ) {
-        if let Some((def_id, span)) = resolved {
-            if let Some(local_id) = def_id.as_local() {
-                self.raw_refs.push(RawRef {
-                    source_owner: owner,
-                    target: local_id,
-                    ref_span: span,
-                });
-            }
-        }
-    }
-}
-
-rustc_session::impl_lint_pass!(TopologicalOrdering => [TOPOLOGICAL_ORDERING]);
-
-impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
-    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        self.enabled =
-            !clippy_utils::is_lint_allowed(cx, TOPOLOGICAL_ORDERING, rustc_hir::CRATE_HIR_ID);
-    }
-
-    fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
-        if !self.enabled {
-            return;
-        }
-        if !is_relevant_item_kind(&item.kind) {
-            return;
-        }
-
-        let item_def_id = item.owner_id.def_id;
-
-        // Only process direct children of modules.
-        let parent_def_id = cx.tcx.parent(item_def_id.to_def_id());
-        let Some(parent_local) = parent_def_id.as_local() else {
-            return;
-        };
-        if cx.tcx.def_kind(parent_local) != DefKind::Mod {
-            return;
-        }
-
-        // Skip items in test code.
-        if is_in_test(cx.tcx, item.hir_id()) {
-            return;
-        }
-
-        let display_name = item_display_name(cx, item);
-
-        let impl_self_ty = if let hir::ItemKind::Impl(impl_block) = &item.kind {
-            resolve_self_ty_def_id(cx, impl_block)
-        } else {
-            None
-        };
-
-        let module_data = self
-            .modules
-            .entry(parent_local)
-            .or_insert_with(|| ModuleData { items: Vec::new() });
-
-        module_data.items.push(ModuleItem {
-            def_id: item_def_id,
-            span: item.span,
-            display_name,
-            impl_self_ty,
-        });
-    }
-
-    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
-        if !self.enabled {
-            return;
-        }
-        if !expr.span.from_expansion() {
-            let resolved = hir_refs::resolve_expr_def_id(cx, expr)
-                .map(|(def_id, _hir_id, span)| (def_id, span));
-            self.record_ref(expr.hir_id.owner.def_id, resolved);
-        }
-    }
-
-    fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, hir::AmbigArg>) {
-        if !self.enabled {
-            return;
-        }
-        if !ty.span.from_expansion() {
-            let resolved =
-                hir_refs::resolve_ty_def_id(cx, ty).map(|(def_id, _hir_id, span)| (def_id, span));
-            self.record_ref(ty.hir_id.owner.def_id, resolved);
-        }
-    }
-
-    fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
-        if !self.enabled {
-            return;
-        }
-
-        let mut def_id_to_module_item: FxHashMap<LocalDefId, (LocalDefId, usize)> =
-            FxHashMap::default();
-        for (&module_def_id, module_data) in &self.modules {
-            for (idx, item) in module_data.items.iter().enumerate() {
-                def_id_to_module_item.insert(item.def_id, (module_def_id, idx));
-            }
-        }
-
-        let mut module_refs: FxHashMap<LocalDefId, Vec<(usize, usize, Span)>> =
-            FxHashMap::default();
-        let mut resolve_cache: FxHashMap<LocalDefId, Option<(LocalDefId, usize)>> =
-            FxHashMap::default();
-        for raw_ref in &self.raw_refs {
-            let source = *resolve_cache
-                .entry(raw_ref.source_owner)
-                .or_insert_with(|| {
-                    find_module_item(cx.tcx, raw_ref.source_owner, &def_id_to_module_item)
-                });
-            let target = *resolve_cache.entry(raw_ref.target).or_insert_with(|| {
-                find_module_item(cx.tcx, raw_ref.target, &def_id_to_module_item)
-            });
-
-            if let (Some((src_mod, src_idx)), Some((tgt_mod, tgt_idx))) = (source, target) {
-                if src_mod == tgt_mod && src_idx != tgt_idx {
-                    module_refs.entry(src_mod).or_default().push((
-                        src_idx,
-                        tgt_idx,
-                        raw_ref.ref_span,
-                    ));
-                }
-            }
-        }
-
-        for (&module_def_id, module_data) in &self.modules {
-            if module_data.items.len() <= 1 {
-                continue;
-            }
-
-            let resolved_refs = module_refs
-                .get(&module_def_id)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
-
-            let item_def_id_to_idx = build_def_id_to_idx(&module_data.items);
-
-            // Apply impl grouping to refs (merge impl refs with type).
-            let remapped_refs =
-                remap_impl_refs(&module_data.items, &item_def_id_to_idx, resolved_refs);
-
-            let n = module_data.items.len();
-            let adj = build_adj_list(&remapped_refs, n);
-            let item_to_scc = compute_sccs(&adj, n);
-
-            let ordering_violations =
-                find_ordering_violations(&module_data.items, &remapped_refs, &item_to_scc);
-
-            let grouping_violations = check_impl_grouping(&module_data.items, &item_def_id_to_idx);
-
-            if ordering_violations.is_empty() && grouping_violations.is_empty() {
-                continue;
-            }
-
-            emit_module_diagnostic(cx, &ordering_violations, &grouping_violations);
-        }
-    }
-}
-
 // Item classification helpers
 
 fn is_relevant_item_kind(kind: &hir::ItemKind<'_>) -> bool {
@@ -357,6 +145,18 @@ fn find_module_item(
     }
 }
 
+/// Represents a top-level item (or item group) within a single module,
+/// tracked for ordering analysis.
+struct ModuleItem {
+    def_id: LocalDefId,
+    span: Span,
+    /// Human-readable name for diagnostics (e.g. "fn process", "struct Config").
+    display_name: String,
+    /// For impl blocks whose self type is defined in this module, the
+    /// `LocalDefId` of the self type.  Used to group the impl with its type.
+    impl_self_ty: Option<LocalDefId>,
+}
+
 /// Build a map from `LocalDefId` → item index for O(1) lookups.
 fn build_def_id_to_idx(items: &[ModuleItem]) -> FxHashMap<LocalDefId, usize> {
     items
@@ -400,17 +200,6 @@ fn build_adj_list(refs: &[(usize, usize, Span)], n: usize) -> Vec<Vec<usize>> {
     adj
 }
 
-fn compute_sccs(adj: &[Vec<usize>], n: usize) -> Vec<usize> {
-    let sccs = tarjan_scc(adj, n);
-    let mut item_to_scc = vec![0usize; n];
-    for (scc_idx, scc) in sccs.iter().enumerate() {
-        for &item_idx in scc {
-            item_to_scc[item_idx] = scc_idx;
-        }
-    }
-    item_to_scc
-}
-
 // -- Tarjan's algorithm --
 
 #[expect(suggest_builder, reason = "internal algorithm state, not a public API")]
@@ -421,23 +210,6 @@ struct TarjanState {
     index: Vec<usize>,
     lowlink: Vec<usize>,
     sccs: Vec<Vec<usize>>,
-}
-
-fn tarjan_scc(adj: &[Vec<usize>], n: usize) -> Vec<Vec<usize>> {
-    let mut state = TarjanState {
-        index_counter: 0,
-        stack: Vec::new(),
-        on_stack: vec![false; n],
-        index: vec![usize::MAX; n],
-        lowlink: vec![0; n],
-        sccs: Vec::new(),
-    };
-    for v in 0..n {
-        if state.index[v] == usize::MAX {
-            strongconnect(v, adj, &mut state);
-        }
-    }
-    state.sccs
 }
 
 fn strongconnect(v: usize, adj: &[Vec<usize>], state: &mut TarjanState) {
@@ -467,6 +239,34 @@ fn strongconnect(v: usize, adj: &[Vec<usize>], state: &mut TarjanState) {
         }
         state.sccs.push(scc);
     }
+}
+
+fn tarjan_scc(adj: &[Vec<usize>], n: usize) -> Vec<Vec<usize>> {
+    let mut state = TarjanState {
+        index_counter: 0,
+        stack: Vec::new(),
+        on_stack: vec![false; n],
+        index: vec![usize::MAX; n],
+        lowlink: vec![0; n],
+        sccs: Vec::new(),
+    };
+    for v in 0..n {
+        if state.index[v] == usize::MAX {
+            strongconnect(v, adj, &mut state);
+        }
+    }
+    state.sccs
+}
+
+fn compute_sccs(adj: &[Vec<usize>], n: usize) -> Vec<usize> {
+    let sccs = tarjan_scc(adj, n);
+    let mut item_to_scc = vec![0usize; n];
+    for (scc_idx, scc) in sccs.iter().enumerate() {
+        for &item_idx in scc {
+            item_to_scc[item_idx] = scc_idx;
+        }
+    }
+    item_to_scc
 }
 
 // Violation detection
@@ -628,6 +428,209 @@ fn emit_module_diagnostic(
                 }
             },
         );
+    }
+}
+
+/// A raw reference collected during the lint pass, before resolution to
+/// module-level items.
+struct RawRef {
+    /// The owner (function/method/const) containing the reference.
+    source_owner: LocalDefId,
+    /// The `DefId` being referenced (may be a nested item like a method).
+    target: LocalDefId,
+    /// Span of the reference site, for diagnostic labels.
+    ref_span: Span,
+}
+
+/// Per-module collected data, built up during the lint pass and analyzed
+/// in `check_crate_post`.
+struct ModuleData {
+    /// Items in source order.
+    items: Vec<ModuleItem>,
+}
+
+pub struct TopologicalOrdering {
+    modules: FxHashMap<LocalDefId, ModuleData>,
+    /// Raw reference edges collected during `check_expr` / `check_ty`.
+    raw_refs: Vec<RawRef>,
+    /// Cached lint-level check: `false` when the lint is disabled at crate level.
+    /// Set once in `check_crate`; when `false`, all callbacks short-circuit.
+    enabled: bool,
+}
+
+impl TopologicalOrdering {
+    pub fn new() -> Self {
+        Self {
+            modules: FxHashMap::default(),
+            raw_refs: Vec::new(),
+            enabled: false,
+        }
+    }
+
+    fn record_ref(
+        &mut self,
+        owner: LocalDefId,
+        resolved: Option<(rustc_span::def_id::DefId, Span)>,
+    ) {
+        if let Some((def_id, span)) = resolved {
+            if let Some(local_id) = def_id.as_local() {
+                self.raw_refs.push(RawRef {
+                    source_owner: owner,
+                    target: local_id,
+                    ref_span: span,
+                });
+            }
+        }
+    }
+}
+
+rustc_session::impl_lint_pass!(TopologicalOrdering => [TOPOLOGICAL_ORDERING]);
+
+impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
+        self.enabled =
+            !clippy_utils::is_lint_allowed(cx, TOPOLOGICAL_ORDERING, rustc_hir::CRATE_HIR_ID);
+    }
+
+    fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
+        if !self.enabled {
+            return;
+        }
+        if item.span.from_expansion() {
+            return;
+        }
+        if !is_relevant_item_kind(&item.kind) {
+            return;
+        }
+
+        let item_def_id = item.owner_id.def_id;
+
+        // Only process direct children of modules.
+        let parent_def_id = cx.tcx.parent(item_def_id.to_def_id());
+        let Some(parent_local) = parent_def_id.as_local() else {
+            return;
+        };
+        if cx.tcx.def_kind(parent_local) != DefKind::Mod {
+            return;
+        }
+
+        // Skip items in test code.
+        if is_in_test(cx.tcx, item.hir_id()) {
+            return;
+        }
+
+        let display_name = item_display_name(cx, item);
+
+        let impl_self_ty = if let hir::ItemKind::Impl(impl_block) = &item.kind {
+            resolve_self_ty_def_id(cx, impl_block)
+        } else {
+            None
+        };
+
+        let module_data = self
+            .modules
+            .entry(parent_local)
+            .or_insert_with(|| ModuleData { items: Vec::new() });
+
+        module_data.items.push(ModuleItem {
+            def_id: item_def_id,
+            span: item.span,
+            display_name,
+            impl_self_ty,
+        });
+    }
+
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
+        if !self.enabled {
+            return;
+        }
+        if !expr.span.from_expansion() {
+            let resolved = hir_refs::resolve_expr_def_id(cx, expr)
+                .map(|(def_id, _hir_id, span)| (def_id, span));
+            self.record_ref(expr.hir_id.owner.def_id, resolved);
+        }
+    }
+
+    fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, hir::AmbigArg>) {
+        if !self.enabled {
+            return;
+        }
+        if !ty.span.from_expansion() {
+            let resolved =
+                hir_refs::resolve_ty_def_id(cx, ty).map(|(def_id, _hir_id, span)| (def_id, span));
+            self.record_ref(ty.hir_id.owner.def_id, resolved);
+        }
+    }
+
+    fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
+        if !self.enabled {
+            return;
+        }
+
+        let mut def_id_to_module_item: FxHashMap<LocalDefId, (LocalDefId, usize)> =
+            FxHashMap::default();
+        for (&module_def_id, module_data) in &self.modules {
+            for (idx, item) in module_data.items.iter().enumerate() {
+                def_id_to_module_item.insert(item.def_id, (module_def_id, idx));
+            }
+        }
+
+        let mut module_refs: FxHashMap<LocalDefId, Vec<(usize, usize, Span)>> =
+            FxHashMap::default();
+        let mut resolve_cache: FxHashMap<LocalDefId, Option<(LocalDefId, usize)>> =
+            FxHashMap::default();
+        for raw_ref in &self.raw_refs {
+            let source = *resolve_cache
+                .entry(raw_ref.source_owner)
+                .or_insert_with(|| {
+                    find_module_item(cx.tcx, raw_ref.source_owner, &def_id_to_module_item)
+                });
+            let target = *resolve_cache.entry(raw_ref.target).or_insert_with(|| {
+                find_module_item(cx.tcx, raw_ref.target, &def_id_to_module_item)
+            });
+
+            if let (Some((src_mod, src_idx)), Some((tgt_mod, tgt_idx))) = (source, target) {
+                if src_mod == tgt_mod && src_idx != tgt_idx {
+                    module_refs.entry(src_mod).or_default().push((
+                        src_idx,
+                        tgt_idx,
+                        raw_ref.ref_span,
+                    ));
+                }
+            }
+        }
+
+        for (&module_def_id, module_data) in &self.modules {
+            if module_data.items.len() <= 1 {
+                continue;
+            }
+
+            let resolved_refs = module_refs
+                .get(&module_def_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+
+            let item_def_id_to_idx = build_def_id_to_idx(&module_data.items);
+
+            // Apply impl grouping to refs (merge impl refs with type).
+            let remapped_refs =
+                remap_impl_refs(&module_data.items, &item_def_id_to_idx, resolved_refs);
+
+            let n = module_data.items.len();
+            let adj = build_adj_list(&remapped_refs, n);
+            let item_to_scc = compute_sccs(&adj, n);
+
+            let ordering_violations =
+                find_ordering_violations(&module_data.items, &remapped_refs, &item_to_scc);
+
+            let grouping_violations = check_impl_grouping(&module_data.items, &item_def_id_to_idx);
+
+            if ordering_violations.is_empty() && grouping_violations.is_empty() {
+                continue;
+            }
+
+            emit_module_diagnostic(cx, &ordering_violations, &grouping_violations);
+        }
     }
 }
 
