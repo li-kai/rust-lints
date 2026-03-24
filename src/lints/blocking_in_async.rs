@@ -61,57 +61,6 @@ const SPAWN_BLOCKING_PATHS: &[&str] = &[
 const HELP: &str = "use an async-aware alternative, or wrap the blocking call \
                      in `tokio::task::spawn_blocking()`";
 
-pub struct BlockingInAsync {
-    paths: Vec<String>,
-}
-
-impl BlockingInAsync {
-    pub fn new() -> Self {
-        let config: SubLintConfig = dylint_linting::config_or_default("blocking_in_async");
-
-        Self {
-            paths: build_path_list(DEFAULT_PATHS, &config),
-        }
-    }
-}
-
-rustc_session::impl_lint_pass!(BlockingInAsync => [BLOCKING_IN_ASYNC]);
-
-impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
-    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
-        // Skip macro-generated code.
-        if expr.span.from_expansion() {
-            return;
-        }
-
-        let Some(def_id) = resolve_callee_def_id(cx, expr) else {
-            return;
-        };
-
-        let callee_path = cx.tcx.def_path_str(def_id);
-
-        let Some(matched_path) = find_matching_path(&callee_path, &self.paths) else {
-            return;
-        };
-
-        if !is_in_async_context(cx, expr)
-            || is_in_test_zone(cx, expr)
-            || is_inside_spawn_blocking(cx, expr)
-        {
-            return;
-        }
-
-        span_lint_and_help(
-            cx,
-            BLOCKING_IN_ASYNC,
-            expr.span,
-            format!("blocking call to `{matched_path}()` inside async context"),
-            None,
-            HELP,
-        );
-    }
-}
-
 /// Returns `true` if `expr` is syntactically inside an `async fn` or
 /// `async {}` block.
 ///
@@ -179,6 +128,57 @@ fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
         }
     }
     false
+}
+
+pub struct BlockingInAsync {
+    paths: Vec<String>,
+}
+
+impl BlockingInAsync {
+    pub fn new() -> Self {
+        let config: SubLintConfig = dylint_linting::config_or_default("blocking_in_async");
+
+        Self {
+            paths: build_path_list(DEFAULT_PATHS, &config),
+        }
+    }
+}
+
+rustc_session::impl_lint_pass!(BlockingInAsync => [BLOCKING_IN_ASYNC]);
+
+impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
+        // Skip macro-generated code.
+        if expr.span.from_expansion() {
+            return;
+        }
+
+        let Some(def_id) = resolve_callee_def_id(cx, expr) else {
+            return;
+        };
+
+        let callee_path = cx.tcx.def_path_str(def_id);
+
+        let Some(matched_path) = find_matching_path(&callee_path, &self.paths) else {
+            return;
+        };
+
+        if !is_in_async_context(cx, expr)
+            || is_in_test_zone(cx, expr)
+            || is_inside_spawn_blocking(cx, expr)
+        {
+            return;
+        }
+
+        span_lint_and_help(
+            cx,
+            BLOCKING_IN_ASYNC,
+            expr.span,
+            format!("blocking call to `{matched_path}()` inside async context"),
+            None,
+            HELP,
+        );
+    }
 }
 
 #[cfg(test)]

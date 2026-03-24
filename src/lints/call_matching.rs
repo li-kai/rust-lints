@@ -51,18 +51,6 @@ pub fn is_in_suppression_zone(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     is_entrypoint_fn(cx, enclosing_def_id.to_def_id())
 }
 
-/// Checks if `callee_path` (from `def_path_str`) matches any configured path.
-/// Returns the matched path string for use in the diagnostic message.
-pub fn find_matching_path<'a>(callee_path: &str, paths: &'a [String]) -> Option<&'a str> {
-    let normalized = strip_generic_args(callee_path);
-
-    // def_path_str returns e.g. "std::env::var" — direct string comparison.
-    paths
-        .iter()
-        .find(|p| p.as_str() == normalized)
-        .map(String::as_str)
-}
-
 fn strip_generic_args(path: &str) -> String {
     let mut normalized = String::with_capacity(path.len());
     let mut chars = path.chars().peekable();
@@ -95,6 +83,31 @@ fn strip_generic_args(path: &str) -> String {
     normalized
 }
 
+/// Checks if `callee_path` (from `def_path_str`) matches any configured path.
+/// Returns the matched path string for use in the diagnostic message.
+pub fn find_matching_path<'a>(callee_path: &str, paths: &'a [String]) -> Option<&'a str> {
+    let normalized = strip_generic_args(callee_path);
+
+    // def_path_str returns e.g. "std::env::var" — direct string comparison.
+    paths
+        .iter()
+        .find(|p| p.as_str() == normalized)
+        .map(String::as_str)
+}
+
+/// Builds the effective path list from defaults and config overrides.
+/// If `config.paths` is `Some`, it replaces defaults entirely.
+/// Otherwise, defaults are merged with `config.additional_paths`.
+pub fn build_path_list(defaults: &[&str], config: &SubLintConfig) -> Vec<String> {
+    if let Some(ref overrides) = config.paths {
+        overrides.clone()
+    } else {
+        let mut merged: Vec<String> = defaults.iter().map(|&s| s.to_owned()).collect();
+        merged.extend(config.additional_paths.iter().cloned());
+        merged
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::strip_generic_args;
@@ -112,18 +125,5 @@ mod tests {
             "foo::Bar::quux"
         );
         assert_eq!(strip_generic_args("std::env::var"), "std::env::var");
-    }
-}
-
-/// Builds the effective path list from defaults and config overrides.
-/// If `config.paths` is `Some`, it replaces defaults entirely.
-/// Otherwise, defaults are merged with `config.additional_paths`.
-pub fn build_path_list(defaults: &[&str], config: &SubLintConfig) -> Vec<String> {
-    if let Some(ref overrides) = config.paths {
-        overrides.clone()
-    } else {
-        let mut merged: Vec<String> = defaults.iter().map(|&s| s.to_owned()).collect();
-        merged.extend(config.additional_paths.iter().cloned());
-        merged
     }
 }

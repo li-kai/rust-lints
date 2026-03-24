@@ -35,6 +35,16 @@ rustc_session::declare_lint! {
     "allowlist edge has no corresponding dependency in code"
 }
 
+/// Extracts the top-level module name for a local `DefId`.
+///
+/// Returns `None` for items at the crate root or external crate items.
+fn top_level_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Symbol> {
+    if !def_id.is_local() {
+        return None;
+    }
+    hir_refs::def_path_segments(tcx, def_id).into_iter().next()
+}
+
 pub struct ModuleDependencies {
     exhaustive: bool,
     allow: FxHashMap<Symbol, FxHashSet<Symbol>>,
@@ -206,16 +216,6 @@ impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
             }
         }
     }
-}
-
-/// Extracts the top-level module name for a local `DefId`.
-///
-/// Returns `None` for items at the crate root or external crate items.
-fn top_level_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Symbol> {
-    if !def_id.is_local() {
-        return None;
-    }
-    hir_refs::def_path_segments(tcx, def_id).into_iter().next()
 }
 
 #[cfg(test)]

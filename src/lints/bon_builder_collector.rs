@@ -21,6 +21,28 @@ rustc_session::declare_lint! {
     "internal: collects structs deriving bon::Builder"
 }
 
+/// Extracts the last path segment of every trait in `#[derive(...)]` attributes.
+fn collect_derive_names(attrs: &[rustc_ast::Attribute]) -> Vec<Symbol> {
+    let mut names = Vec::new();
+    for attr in attrs {
+        if !attr.has_name(sym::derive) {
+            continue;
+        }
+        let Some(list) = attr.meta_item_list() else {
+            continue;
+        };
+        for item in list {
+            let MetaItemInner::MetaItem(meta) = item else {
+                continue;
+            };
+            if let Some(last) = meta.path.segments.last() {
+                names.push(last.ident.name);
+            }
+        }
+    }
+    names
+}
+
 pub struct BonBuilderCollector;
 
 rustc_session::impl_lint_pass!(BonBuilderCollector => [BON_BUILDER_COLLECTOR]);
@@ -47,26 +69,4 @@ impl EarlyLintPass for BonBuilderCollector {
                 .extend(derives);
         });
     }
-}
-
-/// Extracts the last path segment of every trait in `#[derive(...)]` attributes.
-fn collect_derive_names(attrs: &[rustc_ast::Attribute]) -> Vec<Symbol> {
-    let mut names = Vec::new();
-    for attr in attrs {
-        if !attr.has_name(sym::derive) {
-            continue;
-        }
-        let Some(list) = attr.meta_item_list() else {
-            continue;
-        };
-        for item in list {
-            let MetaItemInner::MetaItem(meta) = item else {
-                continue;
-            };
-            if let Some(last) = meta.path.segments.last() {
-                names.push(last.ident.name);
-            }
-        }
-    }
-    names
 }

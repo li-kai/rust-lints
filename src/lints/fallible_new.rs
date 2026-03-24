@@ -16,76 +16,6 @@ rustc_session::declare_lint! {
     "constructor `new` can panic \u{2014} consider returning `Result` or renaming to `try_new`"
 }
 
-pub struct FallibleNew {
-    check_new_variants: bool,
-}
-
-impl FallibleNew {
-    pub fn new() -> Self {
-        let config: FallibleNewConfig = dylint_linting::config_or_default("fallible_new");
-        Self {
-            check_new_variants: config.check_new_variants,
-        }
-    }
-}
-
-rustc_session::impl_lint_pass!(FallibleNew => [FALLIBLE_NEW]);
-
-impl<'tcx> LateLintPass<'tcx> for FallibleNew {
-    fn check_impl_item(&mut self, cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) {
-        let ImplItemKind::Fn(_sig, body_id) = &impl_item.kind else {
-            return;
-        };
-
-        if impl_item.span.from_expansion() {
-            return;
-        }
-
-        let name = impl_item.ident.as_str();
-
-        if name != "new" && !(self.check_new_variants && name.starts_with("new_")) {
-            return;
-        }
-
-        // Skip private constructors (internal invariants) and
-        // trait impls (signature dictated by trait).
-        if !is_sufficiently_visible(cx, impl_item)
-            || is_trait_impl_item(cx, impl_item.hir_id())
-            || returns_result(cx, impl_item)
-        {
-            return;
-        }
-
-        let body = cx.tcx.hir_body(*body_id);
-        let mut finder = PanicFinder {
-            cx,
-            findings: Vec::new(),
-        };
-        intravisit::walk_body(&mut finder, body);
-
-        if finder.findings.is_empty() {
-            return;
-        }
-
-        span_lint_and_then(
-            cx,
-            FALLIBLE_NEW,
-            impl_item.span,
-            format!(
-                "constructor `{name}` can panic \u{2014} consider returning `Result` or renaming to `try_{name}`"
-            ),
-            |diag| {
-                for (span, desc) in &finder.findings {
-                    diag.span_note(
-                        *span,
-                        format!("`{desc}` can panic \u{2014} use `?` with a `Result` return type instead"),
-                    );
-                }
-            },
-        );
-    }
-}
-
 /// Returns `true` if the method is `pub` or `pub(crate)`.
 fn is_sufficiently_visible<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
     // Use effective visibility: lint pub and pub(crate), skip private/pub(super).
@@ -163,6 +93,76 @@ impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
         }
 
         intravisit::walk_expr(self, expr);
+    }
+}
+
+pub struct FallibleNew {
+    check_new_variants: bool,
+}
+
+impl FallibleNew {
+    pub fn new() -> Self {
+        let config: FallibleNewConfig = dylint_linting::config_or_default("fallible_new");
+        Self {
+            check_new_variants: config.check_new_variants,
+        }
+    }
+}
+
+rustc_session::impl_lint_pass!(FallibleNew => [FALLIBLE_NEW]);
+
+impl<'tcx> LateLintPass<'tcx> for FallibleNew {
+    fn check_impl_item(&mut self, cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) {
+        let ImplItemKind::Fn(_sig, body_id) = &impl_item.kind else {
+            return;
+        };
+
+        if impl_item.span.from_expansion() {
+            return;
+        }
+
+        let name = impl_item.ident.as_str();
+
+        if name != "new" && !(self.check_new_variants && name.starts_with("new_")) {
+            return;
+        }
+
+        // Skip private constructors (internal invariants) and
+        // trait impls (signature dictated by trait).
+        if !is_sufficiently_visible(cx, impl_item)
+            || is_trait_impl_item(cx, impl_item.hir_id())
+            || returns_result(cx, impl_item)
+        {
+            return;
+        }
+
+        let body = cx.tcx.hir_body(*body_id);
+        let mut finder = PanicFinder {
+            cx,
+            findings: Vec::new(),
+        };
+        intravisit::walk_body(&mut finder, body);
+
+        if finder.findings.is_empty() {
+            return;
+        }
+
+        span_lint_and_then(
+            cx,
+            FALLIBLE_NEW,
+            impl_item.span,
+            format!(
+                "constructor `{name}` can panic \u{2014} consider returning `Result` or renaming to `try_{name}`"
+            ),
+            |diag| {
+                for (span, desc) in &finder.findings {
+                    diag.span_note(
+                        *span,
+                        format!("`{desc}` can panic \u{2014} use `?` with a `Result` return type instead"),
+                    );
+                }
+            },
+        );
     }
 }
 

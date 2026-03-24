@@ -14,6 +14,30 @@ rustc_session::declare_lint! {
     "nested `Result<Result<_, _>, _>` \u{2014} consider flattening into a single Result"
 }
 
+const MSG: &str =
+    "nested `Result<Result<_, _>, _>` \u{2014} consider flattening into a single Result";
+const HELP: &str =
+    "use `.and_then()` to chain fallible operations, or unify the error types into a single enum";
+
+/// Returns `true` if `ty` is `Result<Result<_, _>, _>` using `DefId` resolution.
+///
+/// Assumption: generic type params (e.g. `T` in `Result<T, E>`) are opaque
+/// and won't match — no false positives from `fn wrap<T>(v: T) -> Result<T, E>`.
+fn is_nested_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
+    let ty::Adt(outer_adt, outer_args) = ty.kind() else {
+        return false;
+    };
+    if !cx.tcx.is_diagnostic_item(sym::Result, outer_adt.did()) {
+        return false;
+    }
+
+    let ok_ty = outer_args.type_at(0);
+    let ty::Adt(inner_adt, _) = ok_ty.kind() else {
+        return false;
+    };
+    cx.tcx.is_diagnostic_item(sym::Result, inner_adt.did())
+}
+
 pub struct ResultResult;
 
 impl ResultResult {
@@ -23,11 +47,6 @@ impl ResultResult {
 }
 
 rustc_session::impl_lint_pass!(ResultResult => [RESULT_RESULT]);
-
-const MSG: &str =
-    "nested `Result<Result<_, _>, _>` \u{2014} consider flattening into a single Result";
-const HELP: &str =
-    "use `.and_then()` to chain fallible operations, or unify the error types into a single enum";
 
 impl<'tcx> LateLintPass<'tcx> for ResultResult {
     fn check_fn(
@@ -70,25 +89,6 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
             span_lint_and_help(cx, RESULT_RESULT, item.span, MSG, None, HELP);
         }
     }
-}
-
-/// Returns `true` if `ty` is `Result<Result<_, _>, _>` using `DefId` resolution.
-///
-/// Assumption: generic type params (e.g. `T` in `Result<T, E>`) are opaque
-/// and won't match — no false positives from `fn wrap<T>(v: T) -> Result<T, E>`.
-fn is_nested_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
-    let ty::Adt(outer_adt, outer_args) = ty.kind() else {
-        return false;
-    };
-    if !cx.tcx.is_diagnostic_item(sym::Result, outer_adt.did()) {
-        return false;
-    }
-
-    let ok_ty = outer_args.type_at(0);
-    let ty::Adt(inner_adt, _) = ok_ty.kind() else {
-        return false;
-    };
-    cx.tcx.is_diagnostic_item(sym::Result, inner_adt.did())
 }
 
 #[cfg(test)]

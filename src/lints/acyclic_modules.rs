@@ -34,86 +34,6 @@ struct Edge {
     span: Span,
 }
 
-pub struct AcyclicModules {
-    edges: Vec<Edge>,
-}
-
-impl AcyclicModules {
-    pub const fn new() -> Self {
-        Self { edges: Vec::new() }
-    }
-
-    /// Record an edge if the source and target belong to different module
-    /// subtrees.  Skips external crate items, test code, and macro expansions.
-    fn record_edge(&mut self, cx: &LateContext<'_>, def_id: DefId, hir_id: HirId, span: Span) {
-        if hir_refs::should_skip_ref(cx, def_id, hir_id, span) {
-            return;
-        }
-
-        let source_mod_def_id = cx.tcx.parent_module(hir_id).to_def_id();
-        let target_mod_def_id = item_module_def_id(cx.tcx, def_id);
-
-        // Fast path: skip intra-module references without allocating paths.
-        if source_mod_def_id == target_mod_def_id {
-            return;
-        }
-
-        let source_path = hir_refs::def_path_segments(cx.tcx, source_mod_def_id);
-        let target_path = hir_refs::def_path_segments(cx.tcx, target_mod_def_id);
-
-        self.edges.push(Edge {
-            source: source_path,
-            target: target_path,
-            span,
-        });
-    }
-}
-
-rustc_session::impl_lint_pass!(AcyclicModules => [ACYCLIC_MODULES]);
-
-impl<'tcx> LateLintPass<'tcx> for AcyclicModules {
-    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
-        if let Some((def_id, hir_id, span)) = hir_refs::resolve_expr_def_id(cx, expr) {
-            self.record_edge(cx, def_id, hir_id, span);
-        }
-    }
-
-    fn check_ty(
-        &mut self,
-        cx: &LateContext<'tcx>,
-        ty: &'tcx rustc_hir::Ty<'tcx, rustc_hir::AmbigArg>,
-    ) {
-        if let Some((def_id, hir_id, span)) = hir_refs::resolve_ty_def_id(cx, ty) {
-            self.record_edge(cx, def_id, hir_id, span);
-        }
-    }
-
-    fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
-        hir_refs::for_each_use_def_id(item, |def_id, hir_id, span| {
-            self.record_edge(cx, def_id, hir_id, span);
-        });
-    }
-
-    fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
-        let sibling_graphs = build_sibling_graphs(&self.edges);
-
-        let mut parents: Vec<_> = sibling_graphs.keys().collect();
-        parents.sort_by(|a, b| {
-            a.iter()
-                .map(Symbol::as_str)
-                .cmp(b.iter().map(Symbol::as_str))
-        });
-
-        for parent in parents {
-            let sibling_edges = &sibling_graphs[parent];
-            let cycles = detect_cycles(sibling_edges);
-            for cycle in &cycles {
-                emit_cycle_diagnostic(cx, parent, cycle, sibling_edges);
-            }
-        }
-    }
-}
-
 /// Returns the `DefId` of the nearest module ancestor for a local item.
 ///
 /// If `def_id` is itself a module, returns it unchanged.
@@ -178,52 +98,6 @@ enum Color {
     Black,
 }
 
-/// Runs DFS on a sibling graph to find all cycles.
-///
-/// Uses Gray (on stack) / Black (finished) coloring with absence meaning
-/// unvisited.  Returns cycles normalized and deduplicated.
-fn detect_cycles(graph: &[SiblingEdge]) -> Vec<Cycle> {
-    // Build adjacency list, deduplicating edges.
-    let mut adj: FxHashMap<Symbol, Vec<Symbol>> = FxHashMap::default();
-    let mut node_set: FxHashSet<Symbol> = FxHashSet::default();
-    let mut seen_edges: FxHashSet<(Symbol, Symbol)> = FxHashSet::default();
-
-    for edge in graph {
-        node_set.insert(edge.from);
-        node_set.insert(edge.to);
-        if seen_edges.insert((edge.from, edge.to)) {
-            adj.entry(edge.from).or_default().push(edge.to);
-        }
-    }
-
-    // Sort nodes and adjacency lists for deterministic output.
-    let mut nodes: Vec<Symbol> = node_set.into_iter().collect();
-    nodes.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-    for neighbors in adj.values_mut() {
-        neighbors.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-    }
-
-    let mut cycles = Vec::new();
-    let mut color: FxHashMap<Symbol, Color> = FxHashMap::default();
-
-    for &node in &nodes {
-        if !color.contains_key(&node) {
-            let mut path = Vec::new();
-            dfs(node, &adj, &mut color, &mut path, &mut cycles);
-        }
-    }
-
-    // Normalize, sort, and deduplicate.
-    let mut result: Vec<Cycle> = cycles.into_iter().map(|c| normalize_cycle(&c)).collect();
-    result.sort_by(|a, b| {
-        a.iter()
-            .map(Symbol::as_str)
-            .cmp(b.iter().map(Symbol::as_str))
-    });
-    result.dedup();
-    result
-}
-
 fn dfs(
     node: Symbol,
     adj: &FxHashMap<Symbol, Vec<Symbol>>,
@@ -269,6 +143,52 @@ fn normalize_cycle(cycle: &[Symbol]) -> Cycle {
     let mut result = Vec::with_capacity(cycle.len());
     result.extend_from_slice(&cycle[min_pos..]);
     result.extend_from_slice(&cycle[..min_pos]);
+    result
+}
+
+/// Runs DFS on a sibling graph to find all cycles.
+///
+/// Uses Gray (on stack) / Black (finished) coloring with absence meaning
+/// unvisited.  Returns cycles normalized and deduplicated.
+fn detect_cycles(graph: &[SiblingEdge]) -> Vec<Cycle> {
+    // Build adjacency list, deduplicating edges.
+    let mut adj: FxHashMap<Symbol, Vec<Symbol>> = FxHashMap::default();
+    let mut node_set: FxHashSet<Symbol> = FxHashSet::default();
+    let mut seen_edges: FxHashSet<(Symbol, Symbol)> = FxHashSet::default();
+
+    for edge in graph {
+        node_set.insert(edge.from);
+        node_set.insert(edge.to);
+        if seen_edges.insert((edge.from, edge.to)) {
+            adj.entry(edge.from).or_default().push(edge.to);
+        }
+    }
+
+    // Sort nodes and adjacency lists for deterministic output.
+    let mut nodes: Vec<Symbol> = node_set.into_iter().collect();
+    nodes.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    for neighbors in adj.values_mut() {
+        neighbors.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    }
+
+    let mut cycles = Vec::new();
+    let mut color: FxHashMap<Symbol, Color> = FxHashMap::default();
+
+    for &node in &nodes {
+        if !color.contains_key(&node) {
+            let mut path = Vec::new();
+            dfs(node, &adj, &mut color, &mut path, &mut cycles);
+        }
+    }
+
+    // Normalize, sort, and deduplicate.
+    let mut result: Vec<Cycle> = cycles.into_iter().map(|c| normalize_cycle(&c)).collect();
+    result.sort_by(|a, b| {
+        a.iter()
+            .map(Symbol::as_str)
+            .cmp(b.iter().map(Symbol::as_str))
+    });
+    result.dedup();
     result
 }
 
@@ -347,6 +267,86 @@ fn emit_cycle_diagnostic(
             }
         },
     );
+}
+
+pub struct AcyclicModules {
+    edges: Vec<Edge>,
+}
+
+impl AcyclicModules {
+    pub const fn new() -> Self {
+        Self { edges: Vec::new() }
+    }
+
+    /// Record an edge if the source and target belong to different module
+    /// subtrees.  Skips external crate items, test code, and macro expansions.
+    fn record_edge(&mut self, cx: &LateContext<'_>, def_id: DefId, hir_id: HirId, span: Span) {
+        if hir_refs::should_skip_ref(cx, def_id, hir_id, span) {
+            return;
+        }
+
+        let source_mod_def_id = cx.tcx.parent_module(hir_id).to_def_id();
+        let target_mod_def_id = item_module_def_id(cx.tcx, def_id);
+
+        // Fast path: skip intra-module references without allocating paths.
+        if source_mod_def_id == target_mod_def_id {
+            return;
+        }
+
+        let source_path = hir_refs::def_path_segments(cx.tcx, source_mod_def_id);
+        let target_path = hir_refs::def_path_segments(cx.tcx, target_mod_def_id);
+
+        self.edges.push(Edge {
+            source: source_path,
+            target: target_path,
+            span,
+        });
+    }
+}
+
+rustc_session::impl_lint_pass!(AcyclicModules => [ACYCLIC_MODULES]);
+
+impl<'tcx> LateLintPass<'tcx> for AcyclicModules {
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
+        if let Some((def_id, hir_id, span)) = hir_refs::resolve_expr_def_id(cx, expr) {
+            self.record_edge(cx, def_id, hir_id, span);
+        }
+    }
+
+    fn check_ty(
+        &mut self,
+        cx: &LateContext<'tcx>,
+        ty: &'tcx rustc_hir::Ty<'tcx, rustc_hir::AmbigArg>,
+    ) {
+        if let Some((def_id, hir_id, span)) = hir_refs::resolve_ty_def_id(cx, ty) {
+            self.record_edge(cx, def_id, hir_id, span);
+        }
+    }
+
+    fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
+        hir_refs::for_each_use_def_id(item, |def_id, hir_id, span| {
+            self.record_edge(cx, def_id, hir_id, span);
+        });
+    }
+
+    fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
+        let sibling_graphs = build_sibling_graphs(&self.edges);
+
+        let mut parents: Vec<_> = sibling_graphs.keys().collect();
+        parents.sort_by(|a, b| {
+            a.iter()
+                .map(Symbol::as_str)
+                .cmp(b.iter().map(Symbol::as_str))
+        });
+
+        for parent in parents {
+            let sibling_edges = &sibling_graphs[parent];
+            let cycles = detect_cycles(sibling_edges);
+            for cycle in &cycles {
+                emit_cycle_diagnostic(cx, parent, cycle, sibling_edges);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

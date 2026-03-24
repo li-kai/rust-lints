@@ -55,6 +55,68 @@ const DEFAULT_TIME_PATHS: &[&str] = &[
 const HELP: &str = "switch to `#[tokio::test(start_paused = true)]` to resolve \
                      sleeps instantly; use `tokio::time::advance()` for precise control";
 
+/// Returns `true` if `expr` is a boolean literal `true`.
+const fn is_bool_lit_true(expr: &Expr<'_>) -> bool {
+    if let ExprKind::Lit(lit) = &expr.kind {
+        matches!(lit.node, rustc_ast::LitKind::Bool(true))
+    } else {
+        false
+    }
+}
+
+/// Returns `true` if `expr` is a method call `.start_paused(true)`.
+fn is_start_paused_true(expr: &Expr<'_>) -> bool {
+    if let ExprKind::MethodCall(method, _receiver, args, _span) = &expr.kind
+        && method.ident.as_str() == "start_paused"
+        && let [arg] = args
+        && is_bool_lit_true(arg)
+    {
+        return true;
+    }
+    false
+}
+
+/// Walks a function body looking for tokio time calls and `start_paused(true)`.
+struct TimeCallVisitor<'a, 'tcx> {
+    cx: &'a LateContext<'tcx>,
+    time_paths: &'a [String],
+    /// Span of the first tokio time call found (for diagnostic pointing).
+    first_time_call_span: Option<rustc_span::Span>,
+    /// Whether `.start_paused(true)` was found in the body.
+    has_start_paused_true: bool,
+}
+
+impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
+    type NestedFilter = nested_filter::OnlyBodies;
+
+    fn maybe_tcx(&mut self) -> Self::MaybeTyCtxt {
+        self.cx.tcx
+    }
+
+    fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
+        // Short-circuit: once we have both signals, the outcome is determined.
+        if self.first_time_call_span.is_some() && self.has_start_paused_true {
+            return;
+        }
+
+        // Check for tokio time calls (only until we find the first one).
+        if self.first_time_call_span.is_none()
+            && let Some(def_id) = resolve_callee_def_id(self.cx, expr)
+        {
+            let callee_path = self.cx.tcx.def_path_str(def_id);
+            if find_matching_path(&callee_path, self.time_paths).is_some() {
+                self.first_time_call_span = Some(expr.span);
+            }
+        }
+
+        if !self.has_start_paused_true && is_start_paused_true(expr) {
+            self.has_start_paused_true = true;
+        }
+
+        intravisit::walk_expr(self, expr);
+    }
+}
+
 pub struct RealtimeInAsyncTest {
     time_paths: Vec<String>,
 }
@@ -113,68 +175,6 @@ impl<'tcx> LateLintPass<'tcx> for RealtimeInAsyncTest {
             None,
             HELP,
         );
-    }
-}
-
-/// Walks a function body looking for tokio time calls and `start_paused(true)`.
-struct TimeCallVisitor<'a, 'tcx> {
-    cx: &'a LateContext<'tcx>,
-    time_paths: &'a [String],
-    /// Span of the first tokio time call found (for diagnostic pointing).
-    first_time_call_span: Option<rustc_span::Span>,
-    /// Whether `.start_paused(true)` was found in the body.
-    has_start_paused_true: bool,
-}
-
-impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
-    type NestedFilter = nested_filter::OnlyBodies;
-
-    fn maybe_tcx(&mut self) -> Self::MaybeTyCtxt {
-        self.cx.tcx
-    }
-
-    fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        // Short-circuit: once we have both signals, the outcome is determined.
-        if self.first_time_call_span.is_some() && self.has_start_paused_true {
-            return;
-        }
-
-        // Check for tokio time calls (only until we find the first one).
-        if self.first_time_call_span.is_none()
-            && let Some(def_id) = resolve_callee_def_id(self.cx, expr)
-        {
-            let callee_path = self.cx.tcx.def_path_str(def_id);
-            if find_matching_path(&callee_path, self.time_paths).is_some() {
-                self.first_time_call_span = Some(expr.span);
-            }
-        }
-
-        if !self.has_start_paused_true && is_start_paused_true(expr) {
-            self.has_start_paused_true = true;
-        }
-
-        intravisit::walk_expr(self, expr);
-    }
-}
-
-/// Returns `true` if `expr` is a method call `.start_paused(true)`.
-fn is_start_paused_true(expr: &Expr<'_>) -> bool {
-    if let ExprKind::MethodCall(method, _receiver, args, _span) = &expr.kind
-        && method.ident.as_str() == "start_paused"
-        && let [arg] = args
-        && is_bool_lit_true(arg)
-    {
-        return true;
-    }
-    false
-}
-
-/// Returns `true` if `expr` is a boolean literal `true`.
-const fn is_bool_lit_true(expr: &Expr<'_>) -> bool {
-    if let ExprKind::Lit(lit) = &expr.kind {
-        matches!(lit.node, rustc_ast::LitKind::Bool(true))
-    } else {
-        false
     }
 }
 

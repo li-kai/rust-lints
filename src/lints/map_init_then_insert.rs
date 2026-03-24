@@ -16,135 +16,36 @@ rustc_session::declare_lint! {
     "immediately inserting into a newly created map \u{2014} consider using `Type::from([..])`"
 }
 
-pub struct MapInitThenInsert {
-    // Cached symbols for third-party map detection (no diagnostic items exist).
-    // Interned once in `new()` to avoid per-statement re-interning.
-    sym_indexmap_crate: Symbol,
-    sym_indexmap_type: Symbol,
-    sym_ahash_crate: Symbol,
-    sym_ahashmap_type: Symbol,
-}
-
-impl MapInitThenInsert {
-    pub fn new() -> Self {
-        Self {
-            sym_indexmap_crate: Symbol::intern("indexmap"),
-            sym_indexmap_type: Symbol::intern("IndexMap"),
-            sym_ahash_crate: Symbol::intern("ahash"),
-            sym_ahashmap_type: Symbol::intern("AHashMap"),
-        }
-    }
-}
-
-rustc_session::impl_lint_pass!(MapInitThenInsert => [MAP_INIT_THEN_INSERT]);
-
-/// Minimum number of consecutive `.insert()` calls required to fire the lint.
-/// A single insert isn't worth rewriting.
-const MIN_INSERTS: usize = 2;
-
-impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "indices are bounds-checked by the while condition"
-    )]
-    fn check_block(&mut self, cx: &LateContext<'tcx>, block: &'tcx Block<'tcx>) {
-        let stmts = block.stmts;
-        let mut i = 0;
-
-        while i < stmts.len() {
-            let Some((binding_id, map_type_name)) = map_init_binding(
-                cx,
-                &stmts[i],
-                self.sym_indexmap_crate,
-                self.sym_indexmap_type,
-                self.sym_ahash_crate,
-                self.sym_ahashmap_type,
-            ) else {
-                i += 1;
-                continue;
-            };
-
-            let insert_start = i + 1;
-            let insert_count = count_consecutive_inserts(&stmts[insert_start..], binding_id);
-
-            if insert_count >= MIN_INSERTS {
-                let init_span = stmts[i].span;
-                let last_insert_span = stmts[insert_start + insert_count - 1].span;
-                let full_span = init_span.to(last_insert_span);
-
-                span_lint_and_help(
-                    cx,
-                    MAP_INIT_THEN_INSERT,
-                    full_span,
-                    format!(
-                        "immediately inserting into a newly created map \
-                         \u{2014} consider using `{map_type_name}::from([..])`"
-                    ),
-                    None,
-                    format!(
-                        "use `let m = {map_type_name}::from([..])` to initialize the map inline"
-                    ),
-                );
-            }
-
-            i = insert_start + insert_count;
-        }
-    }
-}
-
-/// If `stmt` is `let [mut] <name> = <MapType>::new()` (or `::default()` or
-/// `::with_capacity(_)`), returns the binding's `HirId` and a display name
-/// for the map type.
-///
-/// The display name is taken from the callee path (what the user wrote, e.g.
-/// `"FxHashMap"`) so that type aliases of `HashMap` produce the correct
-/// suggestion. Falls back to the resolved type name when the callee is a
-/// plain `Default::default()` call without a type qualifier.
-fn map_init_binding<'tcx>(
-    cx: &LateContext<'tcx>,
-    stmt: &Stmt<'tcx>,
-    sym_indexmap_crate: Symbol,
-    sym_indexmap_type: Symbol,
-    sym_ahash_crate: Symbol,
-    sym_ahashmap_type: Symbol,
-) -> Option<(HirId, String)> {
-    let StmtKind::Let(local) = &stmt.kind else {
-        return None;
+/// Returns `true` if `stmt` is `<binding>.insert(k, v)` — a semicolon
+/// expression statement calling the `insert` method on the given binding.
+fn is_insert_on_binding(stmt: &Stmt<'_>, binding_id: HirId) -> bool {
+    let StmtKind::Semi(expr) = &stmt.kind else {
+        return false;
     };
-    let init = local.init?;
 
     if stmt.span.from_expansion() {
-        return None;
+        return false;
     }
 
-    let ExprKind::Call(callee, _args) = &init.kind else {
-        return None;
+    // MethodCall fields: (PathSegment, receiver, args, span).
+    let ExprKind::MethodCall(method, receiver, args, _) = &expr.kind else {
+        return false;
     };
 
-    let ty = cx.typeck_results().expr_ty(init);
-    let fallback_name = recognized_map_type(
-        cx,
-        ty,
-        sym_indexmap_crate,
-        sym_indexmap_type,
-        sym_ahash_crate,
-        sym_ahashmap_type,
-    )?;
-
-    if !is_map_constructor(cx, callee) {
-        return None;
+    if method.ident.as_str() != "insert" || args.len() != 2 {
+        return false;
     }
 
-    // Prefer the name the user wrote so that type aliases (e.g. `FxHashMap`,
-    // `AHashMap`) produce `FxHashMap::from([..])` rather than `HashMap::from([..])`.
-    let type_name =
-        callee_type_name(callee).map_or_else(|| fallback_name.to_owned(), |s| s.to_string());
+    path_to_local_with_projections(receiver) == Some(binding_id)
+}
 
-    let PatKind::Binding(_, hir_id, _, _) = local.pat.kind else {
-        return None;
-    };
-
-    Some((hir_id, type_name))
+/// Counts how many consecutive statements are `.insert(k, v)` calls on the
+/// binding identified by `binding_id`. Stops at the first non-insert statement.
+fn count_consecutive_inserts(stmts: &[Stmt<'_>], binding_id: HirId) -> usize {
+    stmts
+        .iter()
+        .take_while(|stmt| is_insert_on_binding(stmt, binding_id))
+        .count()
 }
 
 /// Extracts the type name segment written by the user from a `Type::method`
@@ -214,36 +115,135 @@ fn is_map_constructor(cx: &LateContext<'_>, callee: &Expr<'_>) -> bool {
     matches!(name.as_str(), "new" | "default" | "with_capacity")
 }
 
-/// Counts how many consecutive statements are `.insert(k, v)` calls on the
-/// binding identified by `binding_id`. Stops at the first non-insert statement.
-fn count_consecutive_inserts(stmts: &[Stmt<'_>], binding_id: HirId) -> usize {
-    stmts
-        .iter()
-        .take_while(|stmt| is_insert_on_binding(stmt, binding_id))
-        .count()
-}
-
-/// Returns `true` if `stmt` is `<binding>.insert(k, v)` — a semicolon
-/// expression statement calling the `insert` method on the given binding.
-fn is_insert_on_binding(stmt: &Stmt<'_>, binding_id: HirId) -> bool {
-    let StmtKind::Semi(expr) = &stmt.kind else {
-        return false;
+/// If `stmt` is `let [mut] <name> = <MapType>::new()` (or `::default()` or
+/// `::with_capacity(_)`), returns the binding's `HirId` and a display name
+/// for the map type.
+///
+/// The display name is taken from the callee path (what the user wrote, e.g.
+/// `"FxHashMap"`) so that type aliases of `HashMap` produce the correct
+/// suggestion. Falls back to the resolved type name when the callee is a
+/// plain `Default::default()` call without a type qualifier.
+fn map_init_binding<'tcx>(
+    cx: &LateContext<'tcx>,
+    stmt: &Stmt<'tcx>,
+    sym_indexmap_crate: Symbol,
+    sym_indexmap_type: Symbol,
+    sym_ahash_crate: Symbol,
+    sym_ahashmap_type: Symbol,
+) -> Option<(HirId, String)> {
+    let StmtKind::Let(local) = &stmt.kind else {
+        return None;
     };
+    let init = local.init?;
 
     if stmt.span.from_expansion() {
-        return false;
+        return None;
     }
 
-    // MethodCall fields: (PathSegment, receiver, args, span).
-    let ExprKind::MethodCall(method, receiver, args, _) = &expr.kind else {
-        return false;
+    let ExprKind::Call(callee, _args) = &init.kind else {
+        return None;
     };
 
-    if method.ident.as_str() != "insert" || args.len() != 2 {
-        return false;
+    let ty = cx.typeck_results().expr_ty(init);
+    let fallback_name = recognized_map_type(
+        cx,
+        ty,
+        sym_indexmap_crate,
+        sym_indexmap_type,
+        sym_ahash_crate,
+        sym_ahashmap_type,
+    )?;
+
+    if !is_map_constructor(cx, callee) {
+        return None;
     }
 
-    path_to_local_with_projections(receiver) == Some(binding_id)
+    // Prefer the name the user wrote so that type aliases (e.g. `FxHashMap`,
+    // `AHashMap`) produce `FxHashMap::from([..])` rather than `HashMap::from([..])`.
+    let type_name =
+        callee_type_name(callee).map_or_else(|| fallback_name.to_owned(), |s| s.to_string());
+
+    let PatKind::Binding(_, hir_id, _, _) = local.pat.kind else {
+        return None;
+    };
+
+    Some((hir_id, type_name))
+}
+
+/// Minimum number of consecutive `.insert()` calls required to fire the lint.
+/// A single insert isn't worth rewriting.
+const MIN_INSERTS: usize = 2;
+
+pub struct MapInitThenInsert {
+    // Cached symbols for third-party map detection (no diagnostic items exist).
+    // Interned once in `new()` to avoid per-statement re-interning.
+    sym_indexmap_crate: Symbol,
+    sym_indexmap_type: Symbol,
+    sym_ahash_crate: Symbol,
+    sym_ahashmap_type: Symbol,
+}
+
+impl MapInitThenInsert {
+    pub fn new() -> Self {
+        Self {
+            sym_indexmap_crate: Symbol::intern("indexmap"),
+            sym_indexmap_type: Symbol::intern("IndexMap"),
+            sym_ahash_crate: Symbol::intern("ahash"),
+            sym_ahashmap_type: Symbol::intern("AHashMap"),
+        }
+    }
+}
+
+rustc_session::impl_lint_pass!(MapInitThenInsert => [MAP_INIT_THEN_INSERT]);
+
+impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "indices are bounds-checked by the while condition"
+    )]
+    fn check_block(&mut self, cx: &LateContext<'tcx>, block: &'tcx Block<'tcx>) {
+        let stmts = block.stmts;
+        let mut i = 0;
+
+        while i < stmts.len() {
+            let Some((binding_id, map_type_name)) = map_init_binding(
+                cx,
+                &stmts[i],
+                self.sym_indexmap_crate,
+                self.sym_indexmap_type,
+                self.sym_ahash_crate,
+                self.sym_ahashmap_type,
+            ) else {
+                i += 1;
+                continue;
+            };
+
+            let insert_start = i + 1;
+            let insert_count = count_consecutive_inserts(&stmts[insert_start..], binding_id);
+
+            if insert_count >= MIN_INSERTS {
+                let init_span = stmts[i].span;
+                let last_insert_span = stmts[insert_start + insert_count - 1].span;
+                let full_span = init_span.to(last_insert_span);
+
+                span_lint_and_help(
+                    cx,
+                    MAP_INIT_THEN_INSERT,
+                    full_span,
+                    format!(
+                        "immediately inserting into a newly created map \
+                         \u{2014} consider using `{map_type_name}::from([..])`"
+                    ),
+                    None,
+                    format!(
+                        "use `let m = {map_type_name}::from([..])` to initialize the map inline"
+                    ),
+                );
+            }
+
+            i = insert_start + insert_count;
+        }
+    }
 }
 
 #[cfg(test)]

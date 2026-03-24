@@ -12,6 +12,15 @@ rustc_session::declare_lint! {
     "unclear exports — glob imports and renamed imports are banned"
 }
 
+const GLOB_MSG: &str =
+    "glob imports (`use foo::*`) are banned — list each imported name explicitly";
+const GLOB_HELP: &str = "replace `use foo::*` with an explicit list: `use foo::{Bar, Baz}`";
+
+const RENAME_MSG: &str =
+    "renamed imports (`use foo::Bar as Baz`) are banned — use the original name";
+const RENAME_HELP: &str =
+    "import the item under its original name, or create a type alias if a new name is truly needed";
+
 pub struct UnclearExports;
 
 impl UnclearExports {
@@ -21,15 +30,6 @@ impl UnclearExports {
 }
 
 rustc_session::impl_lint_pass!(UnclearExports => [UNCLEAR_EXPORTS]);
-
-const GLOB_MSG: &str =
-    "glob imports (`use foo::*`) are banned — list each imported name explicitly";
-const GLOB_HELP: &str = "replace `use foo::*` with an explicit list: `use foo::{Bar, Baz}`";
-
-const RENAME_MSG: &str =
-    "renamed imports (`use foo::Bar as Baz`) are banned — use the original name";
-const RENAME_HELP: &str =
-    "import the item under its original name, or create a type alias if a new name is truly needed";
 
 impl<'tcx> LateLintPass<'tcx> for UnclearExports {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
