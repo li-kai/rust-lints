@@ -1,2 +1,0 @@
-[check]
-overrideCommand = ["bash", "./scripts/ra-check.sh", "--all-targets"]
