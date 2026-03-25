@@ -1,6 +1,7 @@
 /target
 /.direnv
 /.claude/*
+!/.claude/hooks/
 !/.claude/plugins/
 !/.claude/settings.json
 !/.claude/skills/
