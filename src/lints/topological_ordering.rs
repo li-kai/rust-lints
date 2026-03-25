@@ -16,7 +16,7 @@
 
 use clippy_utils::diagnostics::span_lint_hir_and_then;
 use clippy_utils::is_in_test;
-use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir as hir;
 use rustc_hir::def::DefKind;
 use rustc_lint::{LateContext, LateLintPass, LintContext as _};
@@ -150,6 +150,9 @@ fn find_module_item(
 struct ModuleItem {
     def_id: LocalDefId,
     span: Span,
+    /// Tight span covering just the declaration head (e.g. `fn callee` or
+    /// `struct Config`), used for "defined here" labels.
+    ident_span: Span,
     /// Human-readable name for diagnostics (e.g. "fn process", "struct Config").
     display_name: String,
     /// For impl blocks whose self type is defined in this module, the
@@ -278,8 +281,8 @@ struct OrderingViolation {
     /// Span of the first reference that demonstrates the violation.
     ref_span: Span,
     item_name: String,
-    /// (referenced item name, ref_span)
-    witnesses: Vec<(String, Span)>,
+    /// (referenced item name, ref_span, def_span)
+    witnesses: Vec<(String, Span, Span)>,
 }
 
 /// A grouping violation: an impl separated from its type.
@@ -298,20 +301,18 @@ fn find_ordering_violations(
     refs: &[(usize, usize, Span)],
     item_to_scc: &[usize],
 ) -> Vec<OrderingViolation> {
-    let mut violation_map: FxHashMap<usize, Vec<(String, Span)>> = FxHashMap::default();
+    let mut violation_map: FxHashMap<usize, Vec<(String, Span, Span)>> = FxHashMap::default();
 
     for &(from, to, ref_span) in refs {
         if item_to_scc[from] == item_to_scc[to] {
             continue;
         }
 
-        let is_violation = from < to;
-
-        if is_violation {
+        if from < to {
             violation_map
                 .entry(from)
                 .or_default()
-                .push((items[to].display_name.clone(), ref_span));
+                .push((items[to].display_name.clone(), ref_span, items[to].ident_span));
         }
     }
 
@@ -323,6 +324,7 @@ fn find_ordering_violations(
             item_name: items[from_idx].display_name.clone(),
             witnesses,
         })
+
         .collect();
     violations.sort_by_key(|v| v.ref_span.lo());
     violations
@@ -388,15 +390,22 @@ fn emit_module_diagnostic(
             first.ref_span,
             "items are not in topological order in this module",
             |diag| {
+                let mut seen_defs = FxHashSet::default();
                 for violation in ordering_violations {
-                    for (name, span) in &violation.witnesses {
+                    for (name, ref_span, def_span) in &violation.witnesses {
                         diag.span_label(
-                            *span,
+                            *ref_span,
                             format!(
                                 "`{}` references `{name}` but appears before it",
                                 violation.item_name,
                             ),
                         );
+                        if seen_defs.insert(*def_span) {
+                            diag.span_label(
+                                *def_span,
+                                format!("`{name}` defined here"),
+                            );
+                        }
                     }
                 }
                 diag.help(
@@ -423,6 +432,8 @@ fn emit_module_diagnostic(
                     violation.type_span,
                     format!("`{}` defined here", violation.type_name),
                 );
+                // Suppress when ordering violations exist: the reorder
+                // fix will implicitly place impls next to their types.
                 if ordering_violations.is_empty() {
                     diag.help("move the impl block adjacent to its type definition");
                 }
@@ -442,15 +453,10 @@ struct RawRef {
     ref_span: Span,
 }
 
-/// Per-module collected data, built up during the lint pass and analyzed
-/// in `check_crate_post`.
-struct ModuleData {
-    /// Items in source order.
-    items: Vec<ModuleItem>,
-}
-
 pub struct TopologicalOrdering {
-    modules: FxHashMap<LocalDefId, ModuleData>,
+    /// Per-module items in source order, built up during the lint pass and
+    /// analyzed in `check_crate_post`.
+    modules: FxHashMap<LocalDefId, Vec<ModuleItem>>,
     /// Raw reference edges collected during `check_expr` / `check_ty`.
     raw_refs: Vec<RawRef>,
     /// Cached lint-level check: `false` when the lint is disabled at crate level.
@@ -527,14 +533,16 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
             None
         };
 
-        let module_data = self
-            .modules
-            .entry(parent_local)
-            .or_insert_with(|| ModuleData { items: Vec::new() });
+        let ident_span = cx
+            .tcx
+            .def_ident_span(item_def_id.to_def_id())
+            .map(|id_sp| item.span.with_hi(id_sp.hi()))
+            .unwrap_or(item.span);
 
-        module_data.items.push(ModuleItem {
+        self.modules.entry(parent_local).or_default().push(ModuleItem {
             def_id: item_def_id,
             span: item.span,
+            ident_span,
             display_name,
             impl_self_ty,
         });
@@ -569,8 +577,8 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
 
         let mut def_id_to_module_item: FxHashMap<LocalDefId, (LocalDefId, usize)> =
             FxHashMap::default();
-        for (&module_def_id, module_data) in &self.modules {
-            for (idx, item) in module_data.items.iter().enumerate() {
+        for (&module_def_id, items) in &self.modules {
+            for (idx, item) in items.iter().enumerate() {
                 def_id_to_module_item.insert(item.def_id, (module_def_id, idx));
             }
         }
@@ -600,8 +608,8 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
             }
         }
 
-        for (&module_def_id, module_data) in &self.modules {
-            if module_data.items.len() <= 1 {
+        for (&module_def_id, items) in &self.modules {
+            if items.len() <= 1 {
                 continue;
             }
 
@@ -610,20 +618,20 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
 
-            let item_def_id_to_idx = build_def_id_to_idx(&module_data.items);
+            let item_def_id_to_idx = build_def_id_to_idx(items);
 
             // Apply impl grouping to refs (merge impl refs with type).
             let remapped_refs =
-                remap_impl_refs(&module_data.items, &item_def_id_to_idx, resolved_refs);
+                remap_impl_refs(items, &item_def_id_to_idx, resolved_refs);
 
-            let n = module_data.items.len();
+            let n = items.len();
             let adj = build_adj_list(&remapped_refs, n);
             let item_to_scc = compute_sccs(&adj, n);
 
             let ordering_violations =
-                find_ordering_violations(&module_data.items, &remapped_refs, &item_to_scc);
+                find_ordering_violations(items, &remapped_refs, &item_to_scc);
 
-            let grouping_violations = check_impl_grouping(&module_data.items, &item_def_id_to_idx);
+            let grouping_violations = check_impl_grouping(items, &item_def_id_to_idx);
 
             if ordering_violations.is_empty() && grouping_violations.is_empty() {
                 continue;

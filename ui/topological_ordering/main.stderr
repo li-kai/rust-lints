@@ -3,6 +3,9 @@ warning: items are not in topological order in this module
    |
 LL |         callee(); //~ WARN items are not in topological order
    |         ^^^^^^ `fn caller` references `fn callee` but appears before it
+...
+LL |     fn callee() {}
+   |     --------- `fn callee` defined here
    |
    = help: reorder items so referenced items appear before their referencing items
 note: the lint level is defined here
@@ -16,6 +19,9 @@ warning: items are not in topological order in this module
    |
 LL |     fn process(_cfg: Config) {} //~ WARN items are not in topological order
    |                      ^^^^^^ `fn process` references `struct Config` but appears before it
+LL |
+LL |     struct Config {
+   |     ------------- `struct Config` defined here
    |
    = help: reorder items so referenced items appear before their referencing items
 
@@ -61,6 +67,9 @@ warning: items are not in topological order in this module
    |
 LL |         leaf(); //~ WARN items are not in topological order
    |         ^^^^ `fn a` references `fn leaf` but appears before it
+...
+LL |     fn leaf() {}
+   |     ------- `fn leaf` defined here
    |
    = help: reorder items so referenced items appear before their referencing items
 
