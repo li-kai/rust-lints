@@ -62,41 +62,6 @@ fn callee_type_name(callee: &Expr<'_>) -> Option<rustc_span::Symbol> {
     path.segments.last().map(|seg| seg.ident.name)
 }
 
-/// Returns the display name if `ty` is a recognized map type, `None` otherwise.
-///
-/// HashMap/BTreeMap use `is_diagnostic_item` (robust, compiler-provided).
-/// `IndexMap` uses `crate_name` + `item_name` matching (no diagnostic item
-/// exists for third-party crates). Follows the same pattern as
-/// `proper_error_type.rs` for anyhow/miette detection.
-fn recognized_map_type<'tcx>(
-    cx: &LateContext<'tcx>,
-    ty: Ty<'tcx>,
-    sym_indexmap_crate: Symbol,
-    sym_indexmap_type: Symbol,
-    sym_ahash_crate: Symbol,
-    sym_ahashmap_type: Symbol,
-) -> Option<&'static str> {
-    let ty::Adt(adt, _) = ty.kind() else {
-        return None;
-    };
-    let def_id = adt.did();
-
-    if cx.tcx.is_diagnostic_item(sym::HashMap, def_id) {
-        Some("HashMap")
-    } else if cx.tcx.is_diagnostic_item(sym::BTreeMap, def_id) {
-        Some("BTreeMap")
-    } else if cx.tcx.crate_name(def_id.krate) == sym_indexmap_crate
-        && cx.tcx.item_name(def_id) == sym_indexmap_type
-    {
-        Some("IndexMap")
-    } else if cx.tcx.crate_name(def_id.krate) == sym_ahash_crate
-        && cx.tcx.item_name(def_id) == sym_ahashmap_type
-    {
-        Some("AHashMap")
-    } else {
-        None
-    }
-}
 
 /// Returns `true` if the callee expression resolves to one of the recognized
 /// constructors: `new`, `default`, or `with_capacity`.
@@ -113,61 +78,6 @@ fn is_map_constructor(cx: &LateContext<'_>, callee: &Expr<'_>) -> bool {
 
     let name = cx.tcx.item_name(def_id);
     matches!(name.as_str(), "new" | "default" | "with_capacity")
-}
-
-/// If `stmt` is `let [mut] <name> = <MapType>::new()` (or `::default()` or
-/// `::with_capacity(_)`), returns the binding's `HirId` and a display name
-/// for the map type.
-///
-/// The display name is taken from the callee path (what the user wrote, e.g.
-/// `"FxHashMap"`) so that type aliases of `HashMap` produce the correct
-/// suggestion. Falls back to the resolved type name when the callee is a
-/// plain `Default::default()` call without a type qualifier.
-fn map_init_binding<'tcx>(
-    cx: &LateContext<'tcx>,
-    stmt: &Stmt<'tcx>,
-    sym_indexmap_crate: Symbol,
-    sym_indexmap_type: Symbol,
-    sym_ahash_crate: Symbol,
-    sym_ahashmap_type: Symbol,
-) -> Option<(HirId, String)> {
-    let StmtKind::Let(local) = &stmt.kind else {
-        return None;
-    };
-    let init = local.init?;
-
-    if stmt.span.from_expansion() {
-        return None;
-    }
-
-    let ExprKind::Call(callee, _args) = &init.kind else {
-        return None;
-    };
-
-    let ty = cx.typeck_results().expr_ty(init);
-    let fallback_name = recognized_map_type(
-        cx,
-        ty,
-        sym_indexmap_crate,
-        sym_indexmap_type,
-        sym_ahash_crate,
-        sym_ahashmap_type,
-    )?;
-
-    if !is_map_constructor(cx, callee) {
-        return None;
-    }
-
-    // Prefer the name the user wrote so that type aliases (e.g. `FxHashMap`,
-    // `AHashMap`) produce `FxHashMap::from([..])` rather than `HashMap::from([..])`.
-    let type_name =
-        callee_type_name(callee).map_or_else(|| fallback_name.to_owned(), |s| s.to_string());
-
-    let PatKind::Binding(_, hir_id, _, _) = local.pat.kind else {
-        return None;
-    };
-
-    Some((hir_id, type_name))
 }
 
 /// Minimum number of consecutive `.insert()` calls required to fire the lint.
@@ -192,6 +102,83 @@ impl MapInitThenInsert {
             sym_ahashmap_type: Symbol::intern("AHashMap"),
         }
     }
+
+    /// Returns the display name if `ty` is a recognized map type, `None` otherwise.
+    ///
+    /// HashMap/BTreeMap use `is_diagnostic_item` (robust, compiler-provided).
+    /// `IndexMap` uses `crate_name` + `item_name` matching (no diagnostic item
+    /// exists for third-party crates).
+    fn recognized_map_type<'tcx>(
+        &self,
+        cx: &LateContext<'tcx>,
+        ty: Ty<'tcx>,
+    ) -> Option<&'static str> {
+        let ty::Adt(adt, _) = ty.kind() else {
+            return None;
+        };
+        let def_id = adt.did();
+
+        if cx.tcx.is_diagnostic_item(sym::HashMap, def_id) {
+            Some("HashMap")
+        } else if cx.tcx.is_diagnostic_item(sym::BTreeMap, def_id) {
+            Some("BTreeMap")
+        } else if cx.tcx.crate_name(def_id.krate) == self.sym_indexmap_crate
+            && cx.tcx.item_name(def_id) == self.sym_indexmap_type
+        {
+            Some("IndexMap")
+        } else if cx.tcx.crate_name(def_id.krate) == self.sym_ahash_crate
+            && cx.tcx.item_name(def_id) == self.sym_ahashmap_type
+        {
+            Some("AHashMap")
+        } else {
+            None
+        }
+    }
+
+    /// If `stmt` is `let [mut] <name> = <MapType>::new()` (or `::default()` or
+    /// `::with_capacity(_)`), returns the binding's `HirId` and a display name
+    /// for the map type.
+    ///
+    /// The display name is taken from the callee path (what the user wrote, e.g.
+    /// `"FxHashMap"`) so that type aliases of `HashMap` produce the correct
+    /// suggestion. Falls back to the resolved type name when the callee is a
+    /// plain `Default::default()` call without a type qualifier.
+    fn map_init_binding<'tcx>(
+        &self,
+        cx: &LateContext<'tcx>,
+        stmt: &Stmt<'tcx>,
+    ) -> Option<(HirId, String)> {
+        let StmtKind::Let(local) = &stmt.kind else {
+            return None;
+        };
+        let init = local.init?;
+
+        if stmt.span.from_expansion() {
+            return None;
+        }
+
+        let ExprKind::Call(callee, _args) = &init.kind else {
+            return None;
+        };
+
+        let ty = cx.typeck_results().expr_ty(init);
+        let fallback_name = self.recognized_map_type(cx, ty)?;
+
+        if !is_map_constructor(cx, callee) {
+            return None;
+        }
+
+        // Prefer the name the user wrote so that type aliases (e.g. `FxHashMap`,
+        // `AHashMap`) produce `FxHashMap::from([..])` rather than `HashMap::from([..])`.
+        let type_name =
+            callee_type_name(callee).map_or_else(|| fallback_name.to_owned(), |s| s.to_string());
+
+        let PatKind::Binding(_, hir_id, _, _) = local.pat.kind else {
+            return None;
+        };
+
+        Some((hir_id, type_name))
+    }
 }
 
 rustc_session::impl_lint_pass!(MapInitThenInsert => [MAP_INIT_THEN_INSERT]);
@@ -206,14 +193,7 @@ impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
         let mut i = 0;
 
         while i < stmts.len() {
-            let Some((binding_id, map_type_name)) = map_init_binding(
-                cx,
-                &stmts[i],
-                self.sym_indexmap_crate,
-                self.sym_indexmap_type,
-                self.sym_ahash_crate,
-                self.sym_ahashmap_type,
-            ) else {
+            let Some((binding_id, map_type_name)) = self.map_init_binding(cx, &stmts[i]) else {
                 i += 1;
                 continue;
             };
