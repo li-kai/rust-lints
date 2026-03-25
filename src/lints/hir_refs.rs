@@ -12,7 +12,7 @@ use rustc_hir::{Expr, ExprKind, HirId, Item, ItemKind};
 use rustc_lint::{LateContext, LintContext as _};
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::def_id::DefId;
-use rustc_span::{Span, Symbol, sym};
+use rustc_span::{ExpnKind, Span, Symbol, sym};
 
 /// Returns `true` if this reference should be skipped by module-level lints
 /// (external crate items, macro expansions, test crates, test code).
@@ -81,6 +81,60 @@ pub fn receiver_is_option_or_result<'tcx>(
             || cx.tcx.is_diagnostic_item(sym::Result, did);
     }
     false
+}
+
+/// Which panic-family macro was detected.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PanicMacro {
+    Panic,
+    Unreachable,
+    Assert,
+    AssertEq,
+    AssertNe,
+}
+
+impl PanicMacro {
+    /// Human-readable label for diagnostics.
+    pub fn desc(self) -> &'static str {
+        match self {
+            Self::Panic => "panic!()",
+            Self::Unreachable => "unreachable!()",
+            Self::Assert => "assert!()",
+            Self::AssertEq => "assert_eq!()",
+            Self::AssertNe => "assert_ne!()",
+        }
+    }
+}
+
+/// Checks if a span originates from a panic-related macro, walking up the
+/// expansion chain to handle cases like `panic!` expanding through internal
+/// macros (`panic_fmt`, `panic_2021`, etc.).
+pub fn find_panic_macro(span: Span) -> Option<(Span, PanicMacro)> {
+    let mut sp = span;
+    loop {
+        let expn_data = sp.ctxt().outer_expn_data();
+        if let ExpnKind::Macro(_, macro_name) = &expn_data.kind {
+            let kind = match macro_name.as_str() {
+                "panic" => Some(PanicMacro::Panic),
+                "unreachable" => Some(PanicMacro::Unreachable),
+                "assert" => Some(PanicMacro::Assert),
+                "assert_eq" => Some(PanicMacro::AssertEq),
+                "assert_ne" => Some(PanicMacro::AssertNe),
+                _ => None,
+            };
+            if let Some(kind) = kind {
+                return Some((expn_data.call_site, kind));
+            }
+            // Walk up to the parent expansion (e.g. panic_fmt -> panic)
+            let parent = expn_data.call_site;
+            if parent.ctxt() == sp.ctxt() || !parent.from_expansion() {
+                return None;
+            }
+            sp = parent;
+        } else {
+            return None;
+        }
+    }
 }
 
 /// Returns the named module path components for a definition (e.g. `[payments, checkout]`).

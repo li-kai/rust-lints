@@ -3,7 +3,7 @@ use clippy_utils::is_trait_impl_item;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{Closure, Expr, ExprKind, ImplItem, ImplItemKind, LangItem, Node};
 use rustc_lint::{LateContext, LateLintPass};
-use rustc_span::{ExpnKind, Span};
+use rustc_span::Span;
 
 use super::hir_refs;
 
@@ -13,37 +13,6 @@ rustc_session::declare_lint! {
     pub PANIC_IN_DROP,
     Deny,
     "panic-able expression in `Drop` impl \u{2014} this will abort during unwinding"
-}
-
-/// Checks if a span originates from a panic-related macro, walking up the
-/// expansion chain to handle cases like `panic!` expanding through internal
-/// macros (`panic_fmt`, `panic_2021`, etc.).
-fn find_panic_macro(span: Span) -> Option<(Span, &'static str)> {
-    let mut sp = span;
-    loop {
-        let expn_data = sp.ctxt().outer_expn_data();
-        if let ExpnKind::Macro(_, macro_name) = &expn_data.kind {
-            let desc: Option<&'static str> = match macro_name.as_str() {
-                "panic" => Some("panic!()"),
-                "unreachable" => Some("unreachable!()"),
-                "assert" => Some("assert!()"),
-                "assert_eq" => Some("assert_eq!()"),
-                "assert_ne" => Some("assert_ne!()"),
-                _ => None,
-            };
-            if let Some(desc) = desc {
-                return Some((expn_data.call_site, desc));
-            }
-            // Walk up to the parent expansion (e.g. panic_fmt -> panic)
-            let parent = expn_data.call_site;
-            if parent.ctxt() == sp.ctxt() || !parent.from_expansion() {
-                return None;
-            }
-            sp = parent;
-        } else {
-            return None;
-        }
-    }
 }
 
 /// Returns `true` if the expression is `std::thread::panicking()` or
@@ -103,9 +72,9 @@ impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
         // Check for panic macros: panic!, unreachable!, assert!, assert_eq!, assert_ne!
         // (checked before method calls to avoid double-reporting macro internals)
         if expr.span.from_expansion()
-            && let Some((call_site, desc)) = find_panic_macro(expr.span)
+            && let Some((call_site, kind)) = hir_refs::find_panic_macro(expr.span)
         {
-            self.findings.push((call_site, desc));
+            self.findings.push((call_site, kind.desc()));
             return;
         }
 
