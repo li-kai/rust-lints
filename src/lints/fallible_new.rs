@@ -4,7 +4,7 @@ use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{Closure, Expr, ExprKind, ImplItem, ImplItemKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
-use rustc_span::{ExpnKind, Span, sym};
+use rustc_span::{Span, sym};
 
 use super::hir_refs;
 use crate::config::FallibleNewConfig;
@@ -30,49 +30,36 @@ fn returns_result<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>)
     false
 }
 
-struct PanicFinder<'a, 'tcx> {
-    cx: &'a LateContext<'tcx>,
-    typeck: &'a rustc_middle::ty::TypeckResults<'tcx>,
+struct PanicFinder {
     /// Collected (span, description) pairs for each panicking expression found.
     findings: Vec<(Span, &'static str)>,
 }
 
 // No NestedFilter — deliberately skip closures and async blocks.
 // A closure stored in a field or returned doesn't panic during construction.
-impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
+impl Visitor<'_> for PanicFinder {
+    fn visit_expr(&mut self, expr: &'_ Expr<'_>) {
         // Skip closure/async block bodies — panics there don't run during construction
         if matches!(expr.kind, ExprKind::Closure(Closure { .. })) {
             return;
         }
 
-        if let ExprKind::MethodCall(method, receiver, _args, span) = &expr.kind {
+        if let ExprKind::MethodCall(method, _receiver, _args, span) = &expr.kind {
             let name = method.ident.as_str();
-            if (name == "unwrap" || name == "expect")
-                && hir_refs::receiver_is_option_or_result(self.cx, self.typeck, receiver)
-            {
-                let desc = if name == "unwrap" {
-                    ".unwrap()"
-                } else {
-                    ".expect()"
-                };
+            if name == "unwrap" || name == "expect" {
+                let desc = if name == "unwrap" { ".unwrap()" } else { ".expect()" };
                 self.findings.push((*span, desc));
             }
         }
 
         if expr.span.from_expansion() {
-            let expn_data = expr.span.ctxt().outer_expn_data();
-            if let ExpnKind::Macro(_, macro_name) = expn_data.kind {
-                let desc: Option<&'static str> = match macro_name.as_str() {
-                    "panic" => Some("panic!()"),
-                    "unreachable" => Some("unreachable!()"),
-                    _ => None,
-                };
-                if let Some(desc) = desc {
-                    self.findings.push((expn_data.call_site, desc));
-                    // Don't walk into macro expansion
-                    return;
+            if let Some((call_site, kind)) = hir_refs::find_panic_macro(expr.span) {
+                if matches!(kind, hir_refs::PanicMacro::Panic | hir_refs::PanicMacro::Unreachable)
+                {
+                    self.findings.push((call_site, kind.desc()));
                 }
+                // Don't walk into any panic-family macro expansion
+                return;
             }
         }
 
@@ -117,10 +104,7 @@ impl<'tcx> LateLintPass<'tcx> for FallibleNew {
         }
 
         let body = cx.tcx.hir_body(*body_id);
-        let typeck = cx.tcx.typeck(impl_item.owner_id.def_id);
         let mut finder = PanicFinder {
-            cx,
-            typeck,
             findings: Vec::new(),
         };
         intravisit::walk_body(&mut finder, body);

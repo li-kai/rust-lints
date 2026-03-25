@@ -1,0 +1,92 @@
+error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
+  --> $DIR/main.rs:22:9
+   |
+LL | /         pub fn new(path: &str) -> Self {
+LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             let contents = std::fs::read_to_string(path).unwrap();
+LL | |             Self { data: contents }
+LL | |         }
+   | |_________^
+   |
+note: `.unwrap()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:24:58
+   |
+LL |             let contents = std::fs::read_to_string(path).unwrap();
+   |                                                          ^^^^^^^^
+   = note: `#[deny(fallible_new)]` on by default
+
+error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
+  --> $DIR/main.rs:35:9
+   |
+LL | /         pub fn new(url: &str) -> Self {
+LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             let validated = url.parse::<u16>().expect("invalid port");
+LL | |             Self {
+...  |
+LL | |         }
+   | |_________^
+   |
+note: `.expect()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:37:48
+   |
+LL |             let validated = url.parse::<u16>().expect("invalid port");
+   |                                                ^^^^^^^^^^^^^^^^^^^^^^
+
+error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
+  --> $DIR/main.rs:48:9
+   |
+LL | /         pub fn new(mode: &str) -> Self {
+LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             if mode != "strict" {
+LL | |                 panic!("only strict mode is supported");
+LL | |             }
+LL | |             Self
+LL | |         }
+   | |_________^
+   |
+note: `panic!()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:51:17
+   |
+LL |                 panic!("only strict mode is supported");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: constructor `new_with_port` can panic — consider returning `Result` or renaming to `try_new_with_port`
+  --> $DIR/main.rs:63:9
+   |
+LL | /         pub fn new_with_port(port_str: &str) -> Self {
+LL | |             //~^ WARNING: constructor `new_with_port` can panic
+LL | |             let port = port_str.parse::<u16>().unwrap();
+LL | |             Self { port }
+LL | |         }
+   | |_________^
+   |
+note: `.unwrap()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:65:48
+   |
+LL |             let port = port_str.parse::<u16>().unwrap();
+   |                                                ^^^^^^^^
+
+error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
+  --> $DIR/main.rs:77:9
+   |
+LL | /         pub fn new(a: &str, b: &str) -> Self {
+LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             let a = a.parse::<String>().unwrap();
+LL | |             let b = b.parse::<u16>().expect("bad b");
+LL | |             Self { a, b }
+LL | |         }
+   | |_________^
+   |
+note: `.unwrap()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:79:41
+   |
+LL |             let a = a.parse::<String>().unwrap();
+   |                                         ^^^^^^^^
+note: `.expect()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:80:38
+   |
+LL |             let b = b.parse::<u16>().expect("bad b");
+   |                                      ^^^^^^^^^^^^^^^
+
+error: aborting due to 5 previous errors
+
