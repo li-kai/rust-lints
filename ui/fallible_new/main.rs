@@ -81,6 +81,17 @@ mod triggers {
             Self { a, b }
         }
     }
+
+    // -- unwrap inside assert! should still trigger --
+    struct AssertUnwrap;
+
+    impl AssertUnwrap {
+        pub fn new(port_str: &str) -> Self {
+            //~^ WARNING: constructor `new` can panic
+            assert_eq!(port_str.parse::<u16>().unwrap(), 80);
+            Self
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -199,6 +210,24 @@ mod no_trigger {
     impl Guarded {
         fn new() -> Self {
             let _val = "42".parse::<u32>().unwrap();
+            Self
+        }
+    }
+
+    // -- Custom type with method named "unwrap" — NOT Option/Result --
+    struct Wrapper(String);
+
+    impl Wrapper {
+        fn unwrap(self) -> String {
+            self.0
+        }
+    }
+
+    struct UsesCustomUnwrap;
+
+    impl UsesCustomUnwrap {
+        pub fn new(w: Wrapper) -> Self {
+            let _val = w.unwrap();
             Self
         }
     }

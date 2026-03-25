@@ -88,5 +88,21 @@ note: `.expect()` can panic — use `?` with a `Result` return type instead
 LL |             let b = b.parse::<u16>().expect("bad b");
    |                                      ^^^^^^^^^^^^^^^
 
-error: aborting due to 5 previous errors
+error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
+  --> $DIR/main.rs:89:9
+   |
+LL | /         pub fn new(port_str: &str) -> Self {
+LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             assert_eq!(port_str.parse::<u16>().unwrap(), 80);
+LL | |             Self
+LL | |         }
+   | |_________^
+   |
+note: `.unwrap()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:91:48
+   |
+LL |             assert_eq!(port_str.parse::<u16>().unwrap(), 80);
+   |                                                ^^^^^^^^
+
+error: aborting due to 6 previous errors
 
