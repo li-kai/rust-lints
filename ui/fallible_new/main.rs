@@ -110,16 +110,6 @@ mod no_trigger {
         }
     }
 
-    // -- Private constructor --
-    struct Inner;
-
-    impl Inner {
-        fn new() -> Self {
-            let _val = "42".parse::<u32>().unwrap();
-            Self
-        }
-    }
-
     // -- Trait impl — signature dictated by trait --
     trait Builder {
         fn new() -> Self;
@@ -158,6 +148,60 @@ mod no_trigger {
 
     // -- Method named "new" but not a constructor (free function, not impl) --
     // (This lint only checks impl items, so standalone fns are out of scope.)
+
+    // -- const fn new — struct literal, no panics (must not ICE) --
+    // Regression: the lint used to call cx.typeck_results() inside
+    // check_impl_item, where body-level typeck is unavailable.
+    struct GlyphPalette {
+        branch: &'static str,
+        item: &'static str,
+    }
+
+    impl GlyphPalette {
+        pub const fn new() -> Self {
+            Self {
+                branch: "├── ",
+                item: "└── ",
+            }
+        }
+    }
+
+    // -- generic impl with new — must not ICE --
+    struct Tree<D> {
+        root: D,
+        leaves: Vec<D>,
+        palette: GlyphPalette,
+    }
+
+    impl<D: std::fmt::Display> Tree<D> {
+        pub fn new(root: D) -> Self {
+            Self {
+                root,
+                leaves: Vec::new(),
+                palette: GlyphPalette::new(),
+            }
+        }
+    }
+
+    // -- Returns Result in generic impl — should be skipped --
+    struct TiktokenTokenizer;
+
+    impl TiktokenTokenizer {
+        pub fn new() -> Result<Self, std::io::Error> {
+            Ok(Self)
+        }
+    }
+
+    // -- Private constructor with #[expect] — intentional invariant --
+    struct Guarded;
+
+    #[expect(fallible_new)]
+    impl Guarded {
+        fn new() -> Self {
+            let _val = "42".parse::<u32>().unwrap();
+            Self
+        }
+    }
 }
 
 fn main() {
