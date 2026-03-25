@@ -2,6 +2,8 @@ use clippy_utils::diagnostics::span_lint_and_help;
 use rustc_hir::{ClosureKind, CoroutineDesugaring, CoroutineKind, Expr, ExprKind, Node};
 use rustc_lint::{LateContext, LateLintPass};
 
+use rustc_data_structures::fx::FxHashSet;
+
 use super::call_matching::{build_path_list, find_matching_path, resolve_callee_def_id};
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
@@ -131,7 +133,7 @@ fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 }
 
 pub struct BlockingInAsync {
-    paths: Vec<String>,
+    paths: FxHashSet<String>,
 }
 
 impl BlockingInAsync {

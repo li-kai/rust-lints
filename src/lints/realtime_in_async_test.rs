@@ -33,6 +33,8 @@ use rustc_hir::{Body, Expr, ExprKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::hir::nested_filter;
 
+use rustc_data_structures::fx::FxHashSet;
+
 use super::call_matching::{build_path_list, find_matching_path, resolve_callee_def_id};
 use crate::config::SubLintConfig;
 
@@ -79,7 +81,7 @@ fn is_start_paused_true(expr: &Expr<'_>) -> bool {
 /// Walks a function body looking for tokio time calls and `start_paused(true)`.
 struct TimeCallVisitor<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
-    time_paths: &'a [String],
+    time_paths: &'a FxHashSet<String>,
     /// Span of the first tokio time call found (for diagnostic pointing).
     first_time_call_span: Option<rustc_span::Span>,
     /// Whether `.start_paused(true)` was found in the body.
@@ -118,7 +120,7 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
 }
 
 pub struct RealtimeInAsyncTest {
-    time_paths: Vec<String>,
+    time_paths: FxHashSet<String>,
 }
 
 impl RealtimeInAsyncTest {

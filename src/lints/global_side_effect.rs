@@ -2,6 +2,8 @@ use clippy_utils::diagnostics::span_lint_and_help;
 use rustc_hir::Expr;
 use rustc_lint::{LateContext, LateLintPass};
 
+use rustc_data_structures::fx::FxHashSet;
+
 use super::call_matching::{
     build_path_list, find_matching_path, is_in_suppression_zone, resolve_callee_def_id,
 };
@@ -126,11 +128,11 @@ const HELP_LOGGING_INIT: &str = "move global tracing subscriber initialization t
 /// Chose a single pass over four separate passes to avoid repeated traversal
 /// the HIR for what is essentially the same check with different path lists.
 pub struct GlobalSideEffect {
-    /// Effective path lists after applying config overrides.
-    time_paths: Vec<String>,
-    randomness_paths: Vec<String>,
-    env_paths: Vec<String>,
-    logging_init_paths: Vec<String>,
+    /// Effective path sets after applying config overrides.
+    time_paths: FxHashSet<String>,
+    randomness_paths: FxHashSet<String>,
+    env_paths: FxHashSet<String>,
+    logging_init_paths: FxHashSet<String>,
 }
 
 impl GlobalSideEffect {
