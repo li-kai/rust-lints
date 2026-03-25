@@ -14,10 +14,10 @@ default:
 build *args:
     cargo build {{ args }}
 
-# Run UI tests
+# Run UI tests (quiet on pass, shows failures and ignored)
 [no-exit-message]
 test *args:
-    cargo test {{ args }}
+    cargo test -q {{ args }} 2>&1 | awk '!/^(running [0-9]+ tests?$|test \[ui\] .+\.\.\. ok$|test result: ok\. .+ 0 ignored;.+$|\.?$|.*Finished .+profile)/'
 
 # Update expected UI test output (.stderr files)
 bless *args:
