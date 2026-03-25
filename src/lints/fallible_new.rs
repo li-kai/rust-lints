@@ -6,6 +6,7 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{ExpnKind, Span, sym};
 
+use super::hir_refs;
 use crate::config::FallibleNewConfig;
 
 rustc_session::declare_lint! {
@@ -36,19 +37,9 @@ fn returns_result<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>)
     false
 }
 
-/// Returns `true` if the receiver type of a method call is `Option` or `Result`.
-fn receiver_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, receiver: &Expr<'tcx>) -> bool {
-    let ty = cx.typeck_results().expr_ty_adjusted(receiver).peel_refs();
-    if let ty::Adt(adt, _) = ty.kind() {
-        let did = adt.did();
-        return cx.tcx.is_diagnostic_item(sym::Option, did)
-            || cx.tcx.is_diagnostic_item(sym::Result, did);
-    }
-    false
-}
-
 struct PanicFinder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
+    typeck: &'a rustc_middle::ty::TypeckResults<'tcx>,
     /// Collected (span, description) pairs for each panicking expression found.
     findings: Vec<(Span, &'static str)>,
 }
@@ -65,7 +56,7 @@ impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
         if let ExprKind::MethodCall(method, receiver, _args, span) = &expr.kind {
             let name = method.ident.as_str();
             if (name == "unwrap" || name == "expect")
-                && receiver_is_option_or_result(self.cx, receiver)
+                && hir_refs::receiver_is_option_or_result(self.cx, self.typeck, receiver)
             {
                 let desc = if name == "unwrap" {
                     ".unwrap()"
@@ -137,8 +128,10 @@ impl<'tcx> LateLintPass<'tcx> for FallibleNew {
         }
 
         let body = cx.tcx.hir_body(*body_id);
+        let typeck = cx.tcx.typeck(impl_item.owner_id.def_id);
         let mut finder = PanicFinder {
             cx,
+            typeck,
             findings: Vec::new(),
         };
         intravisit::walk_body(&mut finder, body);

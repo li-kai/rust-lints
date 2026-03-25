@@ -3,7 +3,9 @@ use clippy_utils::is_trait_impl_item;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{Closure, Expr, ExprKind, ImplItem, ImplItemKind, LangItem, Node};
 use rustc_lint::{LateContext, LateLintPass};
-use rustc_span::{ExpnKind, Span, sym};
+use rustc_span::{ExpnKind, Span};
+
+use super::hir_refs;
 
 rustc_session::declare_lint! {
     /// Warns when a `Drop::drop` implementation contains operations that can
@@ -62,21 +64,6 @@ fn is_panicking_guard<'tcx>(cx: &LateContext<'tcx>, cond: &Expr<'tcx>) -> bool {
     false
 }
 
-/// Returns `true` if the receiver type of a method call is `Option` or `Result`.
-fn receiver_is_option_or_result<'tcx>(
-    cx: &LateContext<'tcx>,
-    typeck: &rustc_middle::ty::TypeckResults<'tcx>,
-    receiver: &Expr<'tcx>,
-) -> bool {
-    let ty = typeck.expr_ty_adjusted(receiver).peel_refs();
-    if let rustc_middle::ty::Adt(adt, _) = ty.kind() {
-        let did = adt.did();
-        return cx.tcx.is_diagnostic_item(sym::Option, did)
-            || cx.tcx.is_diagnostic_item(sym::Result, did);
-    }
-    false
-}
-
 struct DropPanicFinder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     typeck: &'a rustc_middle::ty::TypeckResults<'tcx>,
@@ -125,7 +112,7 @@ impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
         if let ExprKind::MethodCall(method, receiver, _args, span) = &expr.kind {
             let name = method.ident.as_str();
             if (name == "unwrap" || name == "expect")
-                && receiver_is_option_or_result(self.cx, self.typeck, receiver)
+                && hir_refs::receiver_is_option_or_result(self.cx, self.typeck, receiver)
             {
                 let desc = if name == "unwrap" {
                     ".unwrap()"

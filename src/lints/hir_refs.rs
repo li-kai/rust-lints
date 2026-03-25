@@ -10,9 +10,9 @@ use rustc_hir::def::Res;
 use rustc_hir::definitions::DefPathData;
 use rustc_hir::{Expr, ExprKind, HirId, Item, ItemKind};
 use rustc_lint::{LateContext, LintContext as _};
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::def_id::DefId;
-use rustc_span::{Span, Symbol};
+use rustc_span::{Span, Symbol, sym};
 
 /// Returns `true` if this reference should be skipped by module-level lints
 /// (external crate items, macro expansions, test crates, test code).
@@ -63,6 +63,24 @@ pub fn for_each_use_def_id(item: &Item<'_>, mut cb: impl FnMut(DefId, HirId, Spa
             }
         }
     }
+}
+
+/// Returns `true` if the receiver type of a method call is `Option` or `Result`.
+///
+/// Accepts explicit `TypeckResults` because callers in `check_impl_item`
+/// callbacks may not have body-level typeck results set on the `LateContext`.
+pub fn receiver_is_option_or_result<'tcx>(
+    cx: &LateContext<'tcx>,
+    typeck: &rustc_middle::ty::TypeckResults<'tcx>,
+    receiver: &Expr<'tcx>,
+) -> bool {
+    let recv_ty = typeck.expr_ty_adjusted(receiver).peel_refs();
+    if let ty::Adt(adt, _) = recv_ty.kind() {
+        let did = adt.did();
+        return cx.tcx.is_diagnostic_item(sym::Option, did)
+            || cx.tcx.is_diagnostic_item(sym::Result, did);
+    }
+    false
 }
 
 /// Returns the named module path components for a definition (e.g. `[payments, checkout]`).
