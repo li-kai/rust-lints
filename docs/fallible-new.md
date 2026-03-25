@@ -80,11 +80,12 @@ impl Server {
     }
 }
 
-// Private constructor — only internal callers
+// Private constructor — opt out with #[expect]
 struct Inner;
+#[expect(fallible_new)]
 impl Inner {
     fn new() -> Self {
-        // unwrap here is an internal invariant, not a public API concern
+        // unwrap here is an internal invariant; #[expect] documents the intent
         let val = GLOBAL.lock().unwrap();
         Self
     }

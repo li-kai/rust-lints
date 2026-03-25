@@ -105,7 +105,7 @@ warning: constructor `new` can panic — consider returning `Result` or renaming
    = help: `.unwrap()` at src/config.rs:9:55 can panic — use `?` with a `Result` return type instead
 ```
 
-Does not fire when the return type is already `Result`, when the constructor is private, or inside trait impls.
+Does not fire when the return type is already `Result` or inside trait impls. For private constructors that intentionally panic on invariant violations, use `#[expect(fallible_new)]`.
 
 ### `global_side_effect`
 

@@ -17,13 +17,6 @@ rustc_session::declare_lint! {
     "constructor `new` can panic \u{2014} consider returning `Result` or renaming to `try_new`"
 }
 
-/// Returns `true` if the method is `pub` or `pub(crate)`.
-fn is_sufficiently_visible<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
-    // Use effective visibility: lint pub and pub(crate), skip private/pub(super).
-    let def_id = impl_item.owner_id.def_id;
-    cx.tcx.effective_visibilities(()).is_reachable(def_id)
-}
-
 /// Returns `true` if the function's return type is `Result<_, _>`.
 fn returns_result<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
     // Use the type-checked return type to handle type aliases
@@ -118,12 +111,8 @@ impl<'tcx> LateLintPass<'tcx> for FallibleNew {
             return;
         }
 
-        // Skip private constructors (internal invariants) and
-        // trait impls (signature dictated by trait).
-        if !is_sufficiently_visible(cx, impl_item)
-            || is_trait_impl_item(cx, impl_item.hir_id())
-            || returns_result(cx, impl_item)
-        {
+        // Skip trait impls (signature dictated by trait).
+        if is_trait_impl_item(cx, impl_item.hir_id()) || returns_result(cx, impl_item) {
             return;
         }
 
