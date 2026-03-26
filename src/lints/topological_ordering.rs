@@ -36,7 +36,7 @@ rustc_session::declare_lint! {
     /// unordered relative to each other.
     pub TOPOLOGICAL_ORDERING,
     Warn,
-    "items are not in topological order within this module"
+    "items are not in topological order in this module"
 }
 
 // Item classification helpers

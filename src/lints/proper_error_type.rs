@@ -29,7 +29,10 @@ enum UnstructuredKind {
     /// String, &str, Cow<str>, Box<dyn Error>
     Basic(&'static str),
     /// `anyhow::Error` or `miette::Report`
-    ErasedCrate(&'static str),
+    ErasedCrate {
+        crate_name: &'static str,
+        type_name: &'static str,
+    },
 }
 
 rustc_session::declare_lint! {
@@ -122,7 +125,7 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
                     "define an error enum with `#[derive(thiserror::Error)]`",
                 );
             }
-            UnstructuredKind::ErasedCrate(crate_name) => {
+            UnstructuredKind::ErasedCrate { crate_name, type_name } => {
                 // Only flag if effectively public
                 if !cx.tcx.effective_visibilities(()).is_reachable(def_id) {
                     return;
@@ -132,7 +135,7 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
                     PROPER_ERROR_TYPE,
                     ret_span,
                     format!(
-                        "effectively public function returns `{crate_name}::Error` — use a typed error"
+                        "effectively public function returns `{crate_name}::{type_name}` — use a typed error"
                     ),
                     None,
                     "define an error enum with `#[derive(thiserror::Error)]` for library API surfaces",
@@ -214,9 +217,9 @@ impl ProperErrorType {
                 let crate_name = cx.tcx.crate_name(did.krate);
                 let item_name = cx.tcx.item_name(did);
                 if crate_name == self.sym_anyhow && item_name == self.sym_anyhow_error {
-                    Some(UnstructuredKind::ErasedCrate("anyhow"))
+                    Some(UnstructuredKind::ErasedCrate { crate_name: "anyhow", type_name: "Error" })
                 } else if crate_name == self.sym_miette && item_name == self.sym_miette_report {
-                    Some(UnstructuredKind::ErasedCrate("miette"))
+                    Some(UnstructuredKind::ErasedCrate { crate_name: "miette", type_name: "Report" })
                 } else {
                     None
                 }
