@@ -562,56 +562,30 @@ Once a lint produces zero warnings, promote it to `deny`. Carry forward legitima
 
 ## Graduation
 
-Once clean, promote warns to deny. Target state for a mature codebase:
+Once clean on a lint, consider promoting it to deny — but only where every violation is genuinely a bug. Most warn-level lints are heuristic or stylistic; denying them forces `#[expect]` on legitimate code, adding noise without safety value.
+
+**Safe to promote** — violations are always wrong:
 
 ```toml
-# Cargo.toml — graduated denies
-unwrap_used      = "deny"
-expect_used      = "deny"
-panic            = "deny"
-indexing_slicing = "deny"
-map_err_ignore   = "deny"
-# print_stdout, print_stderr, dbg_macro — superseded by dylint debug_remnants
+# Cargo.toml
+map_err_ignore = "deny"  # discarding the original error loses debug context
 ```
 
 ```toml
-# dylint.toml — graduated denies
+# dylint.toml
 #
-# These lints default to warn; promote to deny once clean.
 # Lints that already default to deny (acyclic_modules, blocking_in_async,
 # fallible_new, module_dependencies, panic_in_drop, unbounded_channel,
 # unclear_exports, global_side_effect_logging_init) need no entry here.
 
-[proper_error_type]
-level = "deny"
-
-[result_result]
-level = "deny"
-
-[suggest_builder]
-level = "deny"
-
-[needless_builder]
-level = "deny"
-
-[map_init_then_insert]
-level = "deny"
-
-[topological_ordering]
-level = "deny"
-
-[unstructured_log_fields]
-level = "deny"
-
 [realtime_in_async_test]
-level = "deny"
-
-[global_side_effect.time]
-level = "deny"
-
-[global_side_effect.randomness]
-level = "deny"
-
-[global_side_effect.env]
-level = "deny"
+level = "deny"  # real-time waits in async tests are always flaky
 ```
+
+**Keep at warn** — legitimate uses exist, suppression should be easy:
+
+- `unwrap_used`, `expect_used`, `panic`, `indexing_slicing` — too many valid cases (checked invariants, infallible paths, test helpers)
+- `suggest_builder`, `needless_builder`, `topological_ordering`, `map_init_then_insert` — style preferences, not correctness
+- `unstructured_log_fields` — positional args are sometimes clearer for simple messages
+- `proper_error_type`, `result_result` — heuristic; false positives on FFI boundaries and internal APIs
+- `global_side_effect.time/randomness/env` — strictness varies by codebase; some teams want direct calls in leaf functions
