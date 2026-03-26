@@ -562,30 +562,21 @@ Once a lint produces zero warnings, promote it to `deny`. Carry forward legitima
 
 ## Graduation
 
-Once clean on a lint, consider promoting it to deny — but only where every violation is genuinely a bug. Most warn-level lints are heuristic or stylistic; denying them forces `#[expect]` on legitimate code, adding noise without safety value.
-
-**Safe to promote** — violations are always wrong:
+Only promote to deny when violations are genuinely always wrong. Most warn-level lints have legitimate exceptions — keep those at warn and use `#[expect]` case-by-case.
 
 ```toml
-# Cargo.toml
-map_err_ignore = "deny"  # discarding the original error loses debug context
+# Cargo.toml — safe to deny
+map_err_ignore = "deny"
 ```
 
 ```toml
-# dylint.toml
-#
-# Lints that already default to deny (acyclic_modules, blocking_in_async,
-# fallible_new, module_dependencies, panic_in_drop, unbounded_channel,
-# unclear_exports, global_side_effect_logging_init) need no entry here.
-
-[realtime_in_async_test]
-level = "deny"  # real-time waits in async tests are always flaky
+# dylint.toml — safe to deny
+[result_result]
+level = "deny"
+[proper_error_type]
+level = "deny"
+[map_init_then_insert]
+level = "deny"
+[unstructured_log_fields]
+level = "deny"
 ```
-
-**Keep at warn** — legitimate uses exist, suppression should be easy:
-
-- `unwrap_used`, `expect_used`, `panic`, `indexing_slicing` — too many valid cases (checked invariants, infallible paths, test helpers)
-- `suggest_builder`, `needless_builder`, `topological_ordering`, `map_init_then_insert` — style preferences, not correctness
-- `unstructured_log_fields` — positional args are sometimes clearer for simple messages
-- `proper_error_type`, `result_result` — heuristic; false positives on FFI boundaries and internal APIs
-- `global_side_effect.time/randomness/env` — strictness varies by codebase; some teams want direct calls in leaf functions
