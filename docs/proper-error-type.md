@@ -200,8 +200,8 @@ enum InternalError { Oops }
 | Trait impl methods | Signature dictated by the trait |
 | `#[cfg(test)]` modules | Test helpers commonly use informal error types |
 | `fn main()` | Entry points commonly use `anyhow::Result` |
-| `#[derive(thiserror::Error)]` (steps 2–5) | thiserror handles correctness *(not yet implemented)* |
+| `#[derive(thiserror::Error)]` (steps 2–5) | thiserror handles correctness — proc-macro generated impls have expansion spans, so `span.from_expansion()` skips them |
 | No fields implementing `Error` (step 2) | No source to chain |
-| `#[error(transparent)]` (step 3) | Intentionally forwards both `Display` and `source()` *(not yet implemented)* |
+| `#[error(transparent)]` (step 3) | Intentionally forwards both `Display` and `source()` — handled implicitly since generated impls are from expansion |
 | Non-`pub` types (step 5) | Private types do not form a public contract |
 

@@ -159,4 +159,32 @@ enum InternalError {
     Oops,
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// thiserror — should NOT trigger any step
+// ══════════════════════════════════════════════════════════════════════
+
+// Should NOT trigger step 4 (manual Error+Display) or step 2 (missing source):
+// thiserror generates both impls via proc macro; their spans are from_expansion().
+#[derive(thiserror::Error, Debug)]
+pub enum ThiserrorError {
+    #[error("io failed")]
+    Io(#[from] std::io::Error),
+}
+
+// Should NOT trigger step 3 (duplicated source): #[error(transparent)]
+// intentionally forwards both Display and source() to the inner error.
+#[derive(thiserror::Error, Debug)]
+pub enum TransparentError {
+    #[error(transparent)]
+    Io(std::io::Error),
+}
+
+// Should NOT trigger step 5 (*Error without Error impl):
+// thiserror generates impl Error, so implements_trait returns true.
+#[derive(thiserror::Error, Debug)]
+pub enum ThiserrorNamedError {
+    #[error("invalid")]
+    Invalid,
+}
+
 fn main() {}
