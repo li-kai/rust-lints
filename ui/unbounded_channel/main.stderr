@@ -1,7 +1,7 @@
 error: `std::sync::mpsc::channel()` creates an unbounded channel — no backpressure
   --> $DIR/main.rs:9:22
    |
-LL |     let (_tx, _rx) = mpsc::channel::<String>(); //~ WARNING: unbounded channel
+LL |     let (_tx, _rx) = mpsc::channel::<String>(); //~ ERROR: unbounded channel
    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: use a bounded channel with an explicit capacity to enable backpressure (e.g., `mpsc::channel(1000)`)

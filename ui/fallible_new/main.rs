@@ -20,7 +20,7 @@ mod triggers {
 
     impl Config {
         pub fn new(path: &str) -> Self {
-            //~^ WARNING: constructor `new` can panic
+            //~^ ERROR: constructor `new` can panic
             let contents = std::fs::read_to_string(path).unwrap();
             Self { data: contents }
         }
@@ -33,7 +33,7 @@ mod triggers {
 
     impl DbPool {
         pub fn new(url: &str) -> Self {
-            //~^ WARNING: constructor `new` can panic
+            //~^ ERROR: constructor `new` can panic
             let validated = url.parse::<u16>().expect("invalid port");
             Self {
                 url: url.to_string(),
@@ -46,7 +46,7 @@ mod triggers {
 
     impl StrictConfig {
         pub fn new(mode: &str) -> Self {
-            //~^ WARNING: constructor `new` can panic
+            //~^ ERROR: constructor `new` can panic
             if mode != "strict" {
                 panic!("only strict mode is supported");
             }
@@ -61,7 +61,7 @@ mod triggers {
 
     impl Server {
         pub fn new_with_port(port_str: &str) -> Self {
-            //~^ WARNING: constructor `new_with_port` can panic
+            //~^ ERROR: constructor `new_with_port` can panic
             let port = port_str.parse::<u16>().unwrap();
             Self { port }
         }
@@ -75,10 +75,23 @@ mod triggers {
 
     impl Multi {
         pub fn new(a: &str, b: &str) -> Self {
-            //~^ WARNING: constructor `new` can panic
+            //~^ ERROR: constructor `new` can panic
             let a = a.parse::<String>().unwrap();
             let b = b.parse::<u16>().expect("bad b");
             Self { a, b }
+        }
+    }
+
+    // -- unreachable! in new --
+    struct Unreachable;
+
+    impl Unreachable {
+        pub fn new(mode: u8) -> Self {
+            //~^ ERROR: constructor `new` can panic
+            match mode {
+                0 => Self,
+                _ => unreachable!("only mode 0"),
+            }
         }
     }
 
@@ -87,7 +100,7 @@ mod triggers {
 
     impl AssertUnwrap {
         pub fn new(port_str: &str) -> Self {
-            //~^ WARNING: constructor `new` can panic
+            //~^ ERROR: constructor `new` can panic
             assert_eq!(port_str.parse::<u16>().unwrap(), 80);
             Self
         }

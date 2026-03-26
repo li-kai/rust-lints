@@ -6,7 +6,7 @@ use std::sync::mpsc;
 // ── SHOULD TRIGGER ──────────────────────────────────────────────────
 
 fn trigger_std_mpsc() {
-    let (_tx, _rx) = mpsc::channel::<String>(); //~ WARNING: unbounded channel
+    let (_tx, _rx) = mpsc::channel::<String>(); //~ ERROR: unbounded channel
 }
 
 // Note: tokio/crossbeam/flume triggers cannot be tested in UI tests without

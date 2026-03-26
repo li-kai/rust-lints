@@ -2,7 +2,7 @@ error: constructor `new` can panic — consider returning `Result` or renaming t
   --> $DIR/main.rs:22:9
    |
 LL | /         pub fn new(path: &str) -> Self {
-LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             //~^ ERROR: constructor `new` can panic
 LL | |             let contents = std::fs::read_to_string(path).unwrap();
 LL | |             Self { data: contents }
 LL | |         }
@@ -19,7 +19,7 @@ error: constructor `new` can panic — consider returning `Result` or renaming t
   --> $DIR/main.rs:35:9
    |
 LL | /         pub fn new(url: &str) -> Self {
-LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             //~^ ERROR: constructor `new` can panic
 LL | |             let validated = url.parse::<u16>().expect("invalid port");
 LL | |             Self {
 ...  |
@@ -36,7 +36,7 @@ error: constructor `new` can panic — consider returning `Result` or renaming t
   --> $DIR/main.rs:48:9
    |
 LL | /         pub fn new(mode: &str) -> Self {
-LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             //~^ ERROR: constructor `new` can panic
 LL | |             if mode != "strict" {
 LL | |                 panic!("only strict mode is supported");
 LL | |             }
@@ -54,7 +54,7 @@ error: constructor `new_with_port` can panic — consider returning `Result` or 
   --> $DIR/main.rs:63:9
    |
 LL | /         pub fn new_with_port(port_str: &str) -> Self {
-LL | |             //~^ WARNING: constructor `new_with_port` can panic
+LL | |             //~^ ERROR: constructor `new_with_port` can panic
 LL | |             let port = port_str.parse::<u16>().unwrap();
 LL | |             Self { port }
 LL | |         }
@@ -70,7 +70,7 @@ error: constructor `new` can panic — consider returning `Result` or renaming t
   --> $DIR/main.rs:77:9
    |
 LL | /         pub fn new(a: &str, b: &str) -> Self {
-LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             //~^ ERROR: constructor `new` can panic
 LL | |             let a = a.parse::<String>().unwrap();
 LL | |             let b = b.parse::<u16>().expect("bad b");
 LL | |             Self { a, b }
@@ -91,18 +91,35 @@ LL |             let b = b.parse::<u16>().expect("bad b");
 error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
   --> $DIR/main.rs:89:9
    |
+LL | /         pub fn new(mode: u8) -> Self {
+LL | |             //~^ ERROR: constructor `new` can panic
+LL | |             match mode {
+LL | |                 0 => Self,
+...  |
+LL | |         }
+   | |_________^
+   |
+note: `unreachable!()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:93:22
+   |
+LL |                 _ => unreachable!("only mode 0"),
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
+  --> $DIR/main.rs:102:9
+   |
 LL | /         pub fn new(port_str: &str) -> Self {
-LL | |             //~^ WARNING: constructor `new` can panic
+LL | |             //~^ ERROR: constructor `new` can panic
 LL | |             assert_eq!(port_str.parse::<u16>().unwrap(), 80);
 LL | |             Self
 LL | |         }
    | |_________^
    |
 note: `.unwrap()` can panic — use `?` with a `Result` return type instead
-  --> $DIR/main.rs:91:48
+  --> $DIR/main.rs:104:48
    |
 LL |             assert_eq!(port_str.parse::<u16>().unwrap(), 80);
    |                                                ^^^^^^^^
 
-error: aborting due to 6 previous errors
+error: aborting due to 7 previous errors
 

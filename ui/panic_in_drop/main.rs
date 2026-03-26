@@ -8,7 +8,7 @@ struct TempFile {
 }
 
 impl Drop for TempFile {
-    //~v WARNING: panic-able expression in `Drop` impl
+    //~v ERROR: panic-able expression in `Drop` impl
     fn drop(&mut self) {
         std::fs::remove_file(&self.path).unwrap();
     }
@@ -19,7 +19,7 @@ struct Connection {
 }
 
 impl Drop for Connection {
-    //~v WARNING: panic-able expression in `Drop` impl
+    //~v ERROR: panic-able expression in `Drop` impl
     fn drop(&mut self) {
         assert!(self.active, "dropped inactive connection");
     }
@@ -30,7 +30,7 @@ struct Flusher {
 }
 
 impl Drop for Flusher {
-    //~v WARNING: panic-able expression in `Drop` impl
+    //~v ERROR: panic-able expression in `Drop` impl
     fn drop(&mut self) {
         let data = self.data.take().expect("already flushed");
         // simulate flush
@@ -43,7 +43,7 @@ struct MultiPanic {
 }
 
 impl Drop for MultiPanic {
-    //~v WARNING: panic-able expression in `Drop` impl
+    //~v ERROR: panic-able expression in `Drop` impl
     fn drop(&mut self) {
         panic!("oops");
     }
@@ -52,7 +52,7 @@ impl Drop for MultiPanic {
 struct WithUnreachable;
 
 impl Drop for WithUnreachable {
-    //~v WARNING: panic-able expression in `Drop` impl
+    //~v ERROR: panic-able expression in `Drop` impl
     fn drop(&mut self) {
         unreachable!("should never drop");
     }
@@ -63,7 +63,7 @@ struct WithAssertEq {
 }
 
 impl Drop for WithAssertEq {
-    //~v WARNING: panic-able expression in `Drop` impl
+    //~v ERROR: panic-able expression in `Drop` impl
     fn drop(&mut self) {
         assert_eq!(self.val, 0);
     }
@@ -74,7 +74,7 @@ struct WithAssertNe {
 }
 
 impl Drop for WithAssertNe {
-    //~v WARNING: panic-able expression in `Drop` impl
+    //~v ERROR: panic-able expression in `Drop` impl
     fn drop(&mut self) {
         assert_ne!(self.val, 42);
     }
