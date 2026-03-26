@@ -122,4 +122,48 @@ async fn ok_advance() {
     tokio::time::advance(Duration::from_secs(60)).await; // OK: this is the right pattern
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Should trigger: std::time::Instant::now() in a paused-clock test.
+// ══════════════════════════════════════════════════════════════════════
+
+#[tokio::test(start_paused = true)]
+async fn trigger_std_instant_in_paused() {
+    let start = std::time::Instant::now(); //~ WARNING: `std::time::Instant::now()` does not respect
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    assert!(start.elapsed() >= Duration::from_secs(30));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should NOT trigger: tokio::time::Instant::now() is correct in paused-clock tests.
+// ══════════════════════════════════════════════════════════════════════
+
+#[tokio::test(start_paused = true)]
+async fn ok_tokio_instant_in_paused() {
+    let start = tokio::time::Instant::now(); // OK: respects paused clock
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    assert!(tokio::time::Instant::now() >= start);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should NOT trigger: std::time::Instant::now() in a plain sync test.
+// ══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn ok_std_instant_in_sync_test() {
+    let start = std::time::Instant::now(); // OK: no paused clock
+    std::thread::sleep(Duration::from_millis(10));
+    assert!(start.elapsed() >= Duration::from_millis(10));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should NOT trigger: std::time::Instant::now() in a non-paused async test
+// (the tokio::time::sleep is flagged separately, not the Instant).
+// ══════════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn ok_std_instant_without_paused() {
+    let start = std::time::Instant::now(); // OK: no paused clock to conflict with
+    tokio::time::sleep(Duration::from_secs(1)).await; //~ WARNING: real-time wait
+}
+
 fn main() {}

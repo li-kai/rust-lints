@@ -5,7 +5,7 @@
 Flags two correctness issues in async tests using Tokio time:
 
 1. `tokio::time::sleep`, `sleep_until`, `timeout`, `timeout_at`, `interval`, `interval_at` inside async test functions that don't have the Tokio clock paused
-2. *(not yet implemented)* `std::time::Instant::now()` inside async tests that otherwise rely on Tokio time APIs or a paused Tokio clock
+2. `std::time::Instant::now()` inside async tests that have a paused Tokio clock (`start_paused = true`)
 
 ## Why
 
@@ -35,7 +35,7 @@ async fn test_request_timeout() {
 }
 ```
 
-Planned (not yet implemented) — `std::time::Instant::now()` in a paused-clock test:
+`std::time::Instant::now()` in a paused-clock test:
 
 ```rust
 #[tokio::test(start_paused = true)]

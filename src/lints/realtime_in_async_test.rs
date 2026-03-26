@@ -1,5 +1,10 @@
-//! Flags `tokio::time::sleep`, `timeout`, `interval`, and `sleep_until` calls
-//! inside test functions that don't have the tokio clock paused.
+//! Flags two clock-correctness issues in async tests using Tokio time:
+//!
+//! 1. `tokio::time::sleep` / `timeout` / `interval` / `sleep_until` without
+//!    `start_paused = true` — these wait on real time, slowing CI.
+//! 2. `std::time::Instant::now()` inside a test with `start_paused = true` —
+//!    it doesn't respect Tokio's paused clock (`tokio::time::Instant` should
+//!    be used instead).
 //!
 //! # Detection approach
 //!
@@ -10,9 +15,11 @@
 //! We detect this from the expanded code:
 //! 1. Find test functions (via `rustc_test_marker` / `is_in_test`).
 //! 2. Walk the body for time-related calls (`tokio::time::sleep`, etc.).
-//! 3. Walk the body for `.start_paused(true)` — present when the user wrote
+//! 3. Walk the body for `std::time::Instant::now()` calls.
+//! 4. Walk the body for `.start_paused(true)` — present when the user wrote
 //!    `#[tokio::test(start_paused = true)]`.
-//! 4. Fire if time calls found but no `start_paused(true)`.
+//! 5. Fire if time calls found but no `start_paused(true)`.
+//! 6. Fire if `std::time::Instant::now()` found with `start_paused(true)`.
 //!
 //! This avoids depending on the proc macro's attribute syntax (consumed before
 //! HIR) and instead observes the generated code.
@@ -54,8 +61,13 @@ const DEFAULT_TIME_PATHS: &[&str] = &[
     "tokio::time::interval_at",
 ];
 
+const STD_INSTANT_NOW: &str = "std::time::Instant::now";
+
 const HELP: &str = "switch to `#[tokio::test(start_paused = true)]` to resolve \
                      sleeps instantly; use `tokio::time::advance()` for precise control";
+
+const STD_INSTANT_HELP: &str = "use `tokio::time::Instant::now()` instead; \
+                                it advances with `tokio::time::advance()` and auto-advance";
 
 /// Returns `true` if `expr` is a boolean literal `true`.
 const fn is_bool_lit_true(expr: &Expr<'_>) -> bool {
@@ -84,6 +96,8 @@ struct TimeCallVisitor<'a, 'tcx> {
     time_paths: &'a FxHashSet<String>,
     /// Span of the first tokio time call found (for diagnostic pointing).
     first_time_call_span: Option<rustc_span::Span>,
+    /// Span of the first `std::time::Instant::now()` call found.
+    std_instant_now_span: Option<rustc_span::Span>,
     /// Whether `.start_paused(true)` was found in the body.
     has_start_paused_true: bool,
 }
@@ -96,18 +110,29 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
     }
 
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        // Short-circuit: once we have both signals, the outcome is determined.
-        if self.first_time_call_span.is_some() && self.has_start_paused_true {
+        // Short-circuit: once we have all signals, the outcome is determined.
+        if self.first_time_call_span.is_some()
+            && self.has_start_paused_true
+            && self.std_instant_now_span.is_some()
+        {
             return;
         }
 
-        // Check for tokio time calls (only until we find the first one).
-        if self.first_time_call_span.is_none()
+        // Check for tokio time calls and std::time::Instant::now().
+        let needs_time_check = self.first_time_call_span.is_none();
+        let needs_instant_check = self.std_instant_now_span.is_none();
+
+        if (needs_time_check || needs_instant_check)
             && let Some(def_id) = resolve_callee_def_id(self.cx, expr)
         {
             let callee_path = self.cx.tcx.def_path_str(def_id);
-            if find_matching_path(&callee_path, self.time_paths).is_some() {
+
+            if needs_time_check && find_matching_path(&callee_path, self.time_paths).is_some() {
                 self.first_time_call_span = Some(expr.span);
+            }
+
+            if needs_instant_check && callee_path == STD_INSTANT_NOW {
+                self.std_instant_now_span = Some(expr.span);
             }
         }
 
@@ -157,26 +182,38 @@ impl<'tcx> LateLintPass<'tcx> for RealtimeInAsyncTest {
             cx,
             time_paths: &self.time_paths,
             first_time_call_span: None,
+            std_instant_now_span: None,
             has_start_paused_true: false,
         };
         intravisit::walk_body(&mut visitor, body);
 
-        let Some(time_span) = visitor.first_time_call_span else {
-            return; // No time calls — nothing to flag.
-        };
-
-        if visitor.has_start_paused_true {
-            return; // Clock is paused — time calls are instant.
+        // Case 1: tokio time call without paused clock.
+        if let Some(time_span) = visitor.first_time_call_span {
+            if !visitor.has_start_paused_true {
+                span_lint_and_help(
+                    cx,
+                    REALTIME_IN_ASYNC_TEST,
+                    time_span,
+                    "real-time wait in async test without paused clock",
+                    None,
+                    HELP,
+                );
+            }
         }
 
-        span_lint_and_help(
-            cx,
-            REALTIME_IN_ASYNC_TEST,
-            time_span,
-            "real-time wait in async test without paused clock",
-            None,
-            HELP,
-        );
+        // Case 2: std::time::Instant::now() with paused clock.
+        if let Some(instant_span) = visitor.std_instant_now_span {
+            if visitor.has_start_paused_true {
+                span_lint_and_help(
+                    cx,
+                    REALTIME_IN_ASYNC_TEST,
+                    instant_span,
+                    "`std::time::Instant::now()` does not respect Tokio's paused clock",
+                    None,
+                    STD_INSTANT_HELP,
+                );
+            }
+        }
     }
 }
 
