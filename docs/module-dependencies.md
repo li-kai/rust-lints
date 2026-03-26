@@ -2,9 +2,9 @@
 
 ## The Problem
 
-AI coding agents widen visibility modifiers (`fn` → `pub fn`, `pub(crate)` → `pub`) as a quick fix when encountering compiler access errors. This silently exposes internal implementation details and creates architectural debt. The ball of mud doesn't form through one bad decision — it forms because architectural changes are invisible in code review. A `use crate::server::SessionInfo` buried on line 847 of a new file is an architectural decision that ships unreviewed.
+AI coding agents widen visibility modifiers (`fn` → `pub fn`, `pub(crate)` → `pub`) as a quick fix for compiler access errors, silently exposing internals and creating architectural debt. The ball of mud forms because architectural changes are invisible in code review — a `use crate::server::SessionInfo` buried on line 847 of a new file is an architectural decision that ships unreviewed.
 
-The solution has two parts: a **lint** that forces architectural intent before implementation, and a **CI process** that makes dependency changes visible to human reviewers.
+Two parts: a **lint** that forces architectural intent before implementation, and a **CI process** that makes dependency changes visible to reviewers.
 
 ### Why Compile-Time, Not CI-Only
 
@@ -131,16 +131,16 @@ This is not required for the initial implementation, but the config format and l
 **Diagnostic format:**
 
 ```
-error[module_dependencies]: `payments` depends on `server`, which is not in its allowlist
+error: `payments` depends on `server`, which is not in its allowlist
   --> src/payments/checkout.rs:12:5
    |
 12 |     use crate::server::SessionInfo;
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: if this dependency is intentional, add "server" to the
-           `payments` allowlist in module_dependencies.toml
-   = help: if not, move `SessionInfo` to a module that `payments`
-           is allowed to depend on (currently: types, errors, utils)
+   = help: if this dependency is architecturally correct, add "server" to the
+           `payments` allowlist in dylint.toml under [module_dependencies.allow]
+           if not, move the item to a module that `payments` is allowed to
+           depend on (currently: errors, types, utils)
 ```
 
 The diagnostic tells the agent exactly what to do: either update the config (which will be reviewed) or restructure the code.
@@ -151,7 +151,7 @@ The config file is machine-readable architecture. CI renders it as a visual grap
 
 **What CI does:**
 
-1. Detect if `module_dependencies.toml` changed in the PR.
+1. Detect if `dylint.toml` changed in the PR.
 2. Render the before and after dependency graphs (mermaid, graphviz, or similar).
 3. Post the graph diff as a PR comment, highlighting new and removed edges.
 
@@ -191,7 +191,7 @@ These conventions are recommendations, not enforced by the `module_dependencies`
 
 **Proc macros:** Non-issue. Proc macros must live in external crates (Rust language requirement). The lint only tracks intra-crate dependencies, so proc macro-generated paths are invisible to it.
 
-**`macro_rules!` macros:** Treated as real dependencies. A `macro_rules!` macro in `utils` that expands to `crate::server::SessionInfo` creates a dependency from the *call site's* module to `server`. The lint flags this at the call site. The dependency is real — the macro creates coupling. The agent can read the macro definition to understand the expansion and decide whether to restructure or propose a config change.
+**`macro_rules!` macros:** References originating from macro expansion are excluded (`span.from_expansion()` is skipped). A `macro_rules!` macro in `utils` that expands to `crate::server::SessionInfo` will **not** create a dependency edge, because the reference span is marked as macro-expanded. This avoids false positives from macros that generate cross-module paths the user did not explicitly write. The tradeoff is that macro-mediated coupling is invisible to the lint.
 
 **Re-exports:** The lint tracks the *syntactic* dependency — the module the path resolves through, not the module that originally defines the item. If `api` re-exports `types::UserId` and `payments` uses `api::UserId`, the lint sees `payments → api`. This is correct. The alternative (tracing to the origin module) would require the config to model re-export chains, adding config bloat without meaningful architectural signal.
 
@@ -211,18 +211,17 @@ This is a known limitation, not a design flaw. The lint's job is enforcing archi
 
 This means the agent is never blocked — it can always unblock itself by proposing the dependency. The review gate is on the config change, not the code. If the human rejects the architectural change, the agent restructures.
 
-**Diagnostic update:** The error message should make both paths explicit:
+**Diagnostic update:** The error message makes both paths explicit:
 
 ```
-error[module_dependencies]: `payments` depends on `server`, which is not in its allowlist
+error: `payments` depends on `server`, which is not in its allowlist
   --> src/payments/checkout.rs:12:5
    |
 12 |     use crate::server::SessionInfo;
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: if this dependency is architecturally correct, add "server" to
-           the `payments` allowlist in module_dependencies.toml (in a
-           separate commit for review)
-   = help: if not, move `SessionInfo` to a module that `payments` is
-           allowed to depend on (currently: types, errors, utils)
+   = help: if this dependency is architecturally correct, add "server" to the
+           `payments` allowlist in dylint.toml under [module_dependencies.allow]
+           if not, move the item to a module that `payments` is allowed to
+           depend on (currently: errors, types, utils)
 ```

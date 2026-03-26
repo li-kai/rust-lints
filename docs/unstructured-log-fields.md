@@ -2,7 +2,7 @@
 
 **Level:** `warn`
 
-Flags `tracing` macro invocations where all captured values are positional format arguments and none are structured key-value fields.
+Flags `tracing` macro invocations (`info!`, `warn!`, `debug!`, `error!`, `trace!`) where all captured values are positional format arguments and none are structured key-value fields.
 
 ## Why
 

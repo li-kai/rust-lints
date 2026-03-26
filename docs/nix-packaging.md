@@ -23,7 +23,7 @@ consumer machine. This has two costs:
 
 ## Background: how dylint loads and runs lints
 
-Understanding dylint's architecture is key to the solution.
+Understanding dylint's architecture clarifies the solution.
 
 ### The driver model
 
@@ -129,7 +129,7 @@ time, not build time.
 For advanced consumers, the flake still exposes:
 
 ```nix
-rust-lints.lib.dylintVersion
+rust-lints.lib.dylint.version
 rust-lints.lib.dylint.forSystem system
 rust-lints.packages.${system}.default
 ```
@@ -228,25 +228,3 @@ artifacts.
   the shell helper. Packaging `cargo-dylint` itself as a standalone derivation is
   a separate concern.
 
-## Implementation steps
-
-> **Spike the driver build first.** The driver build (linking against fenix's
-> `rustc_driver` with correct `-rpath`) is the highest-risk step. Before writing
-> any other nix code, manually verify you can build `dylint-driver` against the
-> fenix sysroot and have it find `librustc_driver` at runtime. If this doesn't
-> work cleanly, the whole approach needs rethinking.
-
-1. **Spike:** build `dylint-driver` against the fenix toolchain in a standalone
-   derivation. Verify it starts and can find `librustc_driver` at runtime.
-2. Add `crane` to flake inputs.
-3. Build `dylint-link` as a nix derivation from crates.io (build-time only).
-4. Build the `rust-lints` cdylib using crane + dylint-link + rustup shim.
-5. Combine into a single `packages.default` with the correct output structure.
-6. Verify: the output has `lib/librust_lints@<toolchain>.<ext>` and
-   `drivers/<toolchain>/dylint-driver`.
-7. **Smoke test:** add a Nix derivation that creates a minimal Rust project on
-   **stable** Rust, sets `DYLINT_LIBRARY_PATH` and `DYLINT_DRIVER_PATH`, runs
-   `cargo dylint --all`, and asserts a lint fires. This is the acceptance
-   criterion.
-8. Update README with the public shell helper as the supported nix consumer interface.
-9. Set up binary cache (see [docs/nix-cachix.md](./nix-cachix.md)).

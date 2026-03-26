@@ -1,6 +1,6 @@
 # `fallible_new`
 
-**Level:** `warn`
+**Level:** `deny`
 
 Warns when a `fn new()` constructor contains operations that can panic, suggesting it return `Result` or be renamed to convey fallibility.
 
@@ -12,7 +12,7 @@ Rust convention is that `fn new()` is an infallible constructor. Callers assume 
 - **Impossible to recover** — unlike a `Result`, a panic in `new()` cannot be caught with `?` or matched on. The only option is `catch_unwind`, which is not idiomatic.
 - **Breaks composability** — library consumers cannot wrap fallible construction in their own error handling without risking a panic in their process.
 
-The fix is either to return `Result<Self, E>` (and optionally rename to `try_new`), or to move the fallible work out of the constructor.
+Return `Result<Self, E>` (and optionally rename to `try_new` / `try_new_*` for variants), or move the fallible work out of the constructor.
 
 ### Relation to Clippy
 
@@ -36,7 +36,7 @@ The lint fires when the body of `fn new(...)` (or `fn new_*()` variants) contain
 ```rust
 impl Config {
     pub fn new(path: &str) -> Self {
-        //~^ WARNING: constructor `new` can panic
+        //~^ ERROR: constructor `new` can panic
         let contents = std::fs::read_to_string(path).unwrap();
         toml::from_str(&contents).expect("invalid config")
     }
@@ -46,7 +46,7 @@ impl Config {
 ```rust
 impl DbPool {
     pub fn new(url: &str) -> Self {
-        //~^ WARNING: constructor `new` can panic
+        //~^ ERROR: constructor `new` can panic
         let conn = Connection::connect(url).unwrap();
         Self { conn }
     }

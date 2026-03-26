@@ -1,6 +1,6 @@
 # `blocking_in_async`
 
-**Level:** `warn`
+**Level:** `deny`
 
 Flags known-blocking operations inside `async fn` or `async {}` blocks. Suggests using async-aware alternatives or `spawn_blocking` instead.
 
@@ -13,30 +13,38 @@ Calling blocking operations inside async code blocks the executor thread, causin
 - **Deadlocks in thread pools** — if all worker threads are blocked on I/O, no task can make progress. This is a classic cause of async deadlocks.
 - **Defeats the point of async** — async is for I/O multiplexing. Blocking inside async wastes the entire benefit.
 
-The fix is to use async-aware alternatives, such as `tokio::fs`, or to offload blocking work with `tokio::task::spawn_blocking`.
+Use async-aware alternatives (`tokio::fs`) or offload blocking work with `tokio::task::spawn_blocking`.
 
 This lint is about executor blocking, not test clock semantics. A Tokio test using `tokio::time::sleep(...)` without `start_paused = true` has a clock problem, not a blocking problem. That case belongs to `realtime_in_async_test`.
 
 ## Flagged calls
 
-The lint ships with a default set of paths for the most common blocking operations:
+Built-in flagged paths:
 
 ### `std::fs`
 
 | Path | Notes |
 |---|---|
 | `std::fs::read` | Synchronous file read |
+| `std::fs::read_to_string` | Synchronous file read to string |
 | `std::fs::write` | Synchronous file write |
 | `std::fs::read_dir` | Synchronous directory listing |
 | `std::fs::metadata` | Synchronous metadata lookup |
 | `std::fs::canonicalize` | Synchronous path resolution |
+| `std::fs::copy` | Synchronous file copy |
+| `std::fs::create_dir` | Synchronous directory creation |
+| `std::fs::create_dir_all` | Synchronous recursive directory creation |
+| `std::fs::remove_file` | Synchronous file removal |
+| `std::fs::remove_dir` | Synchronous directory removal |
+| `std::fs::remove_dir_all` | Synchronous recursive directory removal |
+| `std::fs::rename` | Synchronous file rename |
 
 ### `std::io`
 
 | Path | Notes |
 |---|---|
-| `std::io::stdin().read_line` | Blocks on keyboard input |
-| `std::io::stdin().read` | Blocks on stdin |
+| `std::io::Stdin::read_line` | Blocks on keyboard input |
+| `std::io::Stdin::read` | Blocks on stdin |
 
 ### `std::net`
 
@@ -51,6 +59,7 @@ The lint ships with a default set of paths for the most common blocking operatio
 | Path | Notes |
 |---|---|
 | `std::thread::sleep` | Blocks the thread; unlike `tokio::time::sleep`, this stalls the executor itself |
+| `std::thread::spawn` | Bypasses the executor; use `tokio::task::spawn` instead |
 
 ### `std::sync`
 
@@ -73,7 +82,6 @@ The lint ships with a default set of paths for the most common blocking operatio
 | Path | Notes |
 |---|---|
 | `tokio::task::block_in_place` | Risky on single-threaded executors; prefer `spawn_blocking` |
-| `std::thread::spawn` | Bypasses the executor; use `tokio::task::spawn` instead |
 
 ### Examples
 
@@ -81,7 +89,7 @@ The lint ships with a default set of paths for the most common blocking operatio
 
 ```rust
 async fn fetch_user_config(user_id: u32) -> Config {
-    //~^ WARNING: `std::fs::read()` blocks the executor thread
+    //~^ ERROR: blocking call to `std::fs::read_to_string()` inside async context
     let path = format!("/data/{}.toml", user_id);
     let contents = std::fs::read_to_string(&path).unwrap();
     Config::parse(&contents)
@@ -90,7 +98,7 @@ async fn fetch_user_config(user_id: u32) -> Config {
 
 ```rust
 async fn connect() -> Connection {
-    //~^ WARNING: `std::net::TcpStream::connect()` blocks the executor thread
+    //~^ ERROR: blocking call to `std::net::TcpStream::connect()` inside async context
     let stream = std::net::TcpStream::connect("127.0.0.1:5432").unwrap();
     Connection::new(stream)
 }
@@ -98,14 +106,14 @@ async fn connect() -> Connection {
 
 ```rust
 async fn process() {
-    //~^ WARNING: `std::thread::sleep()` blocks the executor thread
+    //~^ ERROR: blocking call to `std::thread::sleep()` inside async context
     std::thread::sleep(Duration::from_secs(1));
 }
 ```
 
 ```rust
 async fn safe_acquire(mtx: &std::sync::Mutex<Data>) -> Data {
-    //~^ WARNING: `std::sync::Mutex::lock()` blocks on contention in async context
+    //~^ ERROR: blocking call to `std::sync::Mutex::lock()` inside async context
     let guard = mtx.lock().unwrap();
     guard.clone()
 }

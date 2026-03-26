@@ -3,17 +3,17 @@
 **Lints:** `global_side_effect::time`, `global_side_effect::randomness`, `global_side_effect::env`, `global_side_effect::logging_init`
 **Levels:** `warn` for `time`, `randomness`, and `env`; `deny` for `logging_init`
 
-Four lints that flag direct calls to non-deterministic or environment-coupled functions. The first three target runtime dependencies — wall-clock time, random number generation, or environment variables — and the fix is identical: **accept the dependency as a parameter**. The fourth targets global logger initialization, where the fix is: **move it to `main()`**.
+Four lints that flag direct calls to non-deterministic or environment-coupled functions. The first three target runtime dependencies — wall-clock time, random number generation, and environment variables — fix: **accept the dependency as a parameter**. The fourth targets global logger initialization — fix: **move it to `main()`**.
 
 ## Why
 
-Code that calls these functions directly is untestable (you can't control the inputs), non-deterministic (same inputs, different outputs), and hard to mock without thread-local hacks.
+Direct calls to these functions are untestable (inputs cannot be controlled), non-deterministic (same inputs, different outputs), and hard to mock without thread-local hacks.
 
 Global tracing subscriber initialization (`tracing_subscriber::fmt::init()`, etc.) shares the same structural problem: it mutates process-global state, it can only succeed once per process, and when called from library code or deep inside the call graph it causes silent failures in tests (the second `init()` panics or is silently ignored) and removes the application author's ability to choose their own logging configuration.
 
 ## Flagged calls
 
-Each lint ships with built-in defaults covering common crates.
+Built-in flagged paths by lint:
 
 ### `global_side_effect::time`
 
@@ -37,12 +37,20 @@ Each lint ships with built-in defaults covering common crates.
 | Path | Notes |
 |---|---|
 | `std::random::random` | Direct random value |
-| `rand::thread_rng` | Thread-local RNG |
+| `rand::thread_rng` | Thread-local RNG (rand 0.8) |
+| `rand::rng` | Thread-local RNG (rand 0.9+) |
 | `rand::random` | Wrapper around thread-local RNG |
+| `rand::random_range` | Random value in range (rand 0.9+) |
 | `rand::rngs::OsRng::new` | OS randomness |
 | `rand::rngs::StdRng::from_os_rng` | Seeded from OS |
-| `fastrand::u32` | Direct random value |
-| `fastrand::u64` | Direct random value |
+| `getrandom::getrandom` | Low-level OS randomness |
+| `fastrand::bool` | Random bool |
+| `fastrand::u8` .. `fastrand::u128` | Random unsigned integers |
+| `fastrand::usize` | Random usize |
+| `fastrand::i8` .. `fastrand::i128` | Random signed integers |
+| `fastrand::isize` | Random isize |
+| `fastrand::f32`, `fastrand::f64` | Random floats |
+| `fastrand::char` | Random char |
 | `fastrand::Rng::new` | RNG from OS seed |
 
 ### `global_side_effect::env`
@@ -50,11 +58,19 @@ Each lint ships with built-in defaults covering common crates.
 | Path | Notes |
 |---|---|
 | `std::env::var` | Read a single env var |
+| `std::env::var_os` | Read a single env var (OsString) |
 | `std::env::vars` | Iterate all env vars |
+| `std::env::vars_os` | Iterate all env vars (OsString) |
 | `std::env::args` | Command-line arguments |
+| `std::env::args_os` | Command-line arguments (OsString) |
+| `dotenvy::dotenv` | Load `.env` file |
+| `dotenvy::dotenv_override` | Load `.env` file, overriding existing |
+| `dotenvy::from_filename` | Load from custom filename |
 | `dotenvy::var` | Read from `.env` file |
 | `dotenvy::vars` | Iterate `.env` vars |
-| `dotenv::var` | Older dotenv crate |
+| `dotenv::dotenv` | Load `.env` file (unmaintained) |
+| `dotenv::var` | Read from `.env` file (unmaintained) |
+| `dotenv::vars` | Iterate `.env` vars (unmaintained) |
 
 ### `global_side_effect::logging_init`
 
@@ -118,15 +134,15 @@ fn main() {
 ```rust
 // Inside a library function
 pub fn setup_app() {
-    //~^ ERROR: global logger initialization outside of `main()`
+    //~^ ERROR: direct call to `tracing_subscriber::fmt::init()`
     tracing_subscriber::fmt::init();
     // ...
 }
 
 // Inside a module initializer
 pub fn configure_service(config: &Config) {
-    //~^ ERROR: global logger initialization outside of `main()`
-    env_logger::init();
+    //~^ ERROR: direct call to `tracing_subscriber::fmt::SubscriberBuilder::try_init()`
+    tracing_subscriber::fmt().try_init();
     start_service(config);
 }
 ```
@@ -166,14 +182,14 @@ The lint does not fire in these contexts:
 | Test functions | Any function registered with the test harness (`#[test]`, `#[tokio::test]`, `#[async_std::test]`, `#[rstest]`, `#[test_case::test]`, `#[googletest::test]`, etc.) — detected via the compiler's `#[rustc_test_marker]` |
 | `#[cfg(test)]` modules | Item is inside a `#[cfg(test)]` module |
 | `fn main()` | Enclosing function is `main` |
-| `#[allow(global_side_effect)]` | Standard rustc attribute |
+| `#[allow(global_side_effect_time)]` (etc.) | Standard rustc attribute — use the per-lint name |
 
 ## Configuration
 
 All four lints accept the same two fields. Use the lint name as the TOML section key.
 
 ```toml
-[global_side_effect::time]
+[global_side_effect.time]
 # Extra paths to flag, merged with built-in defaults.
 additional_paths = ["my_crate::util::current_time"]
 

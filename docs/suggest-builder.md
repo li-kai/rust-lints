@@ -2,7 +2,7 @@
 
 **Level:** `warn`
 
-Suggests exposing a `#[builder]` constructor in a `#[bon] impl` for structs with many fields so callers can use named setters.
+Suggests adding a `#[builder]` constructor in a `#[bon] impl` for structs with many fields, enabling named setters at call sites.
 
 ## Why
 
@@ -41,20 +41,7 @@ struct Config {
     timeout: u64,
     retries: u32,
     tls: bool,
-}
-
-// Already has a `#[bon] impl` with a `#[builder]` constructor
-struct User {
-    id: u32,
     name: String,
-}
-
-#[bon]
-impl User {
-    #[builder]
-    fn new(id: u32, name: String) -> Self {
-        Self { id, name }
-    }
 }
 
 // Below threshold (default 6)
@@ -74,7 +61,7 @@ struct ConfigBuilder {
 }
 ```
 
-Structs with `Default` or `#[repr(C)]` are also not considered.
+Structs with `Default` (derived or manual), `#[repr(C)]`, or lifetime parameters are also not considered. `PhantomData` fields are excluded from the field count since they are not real from a construction-ergonomics standpoint.
 
 ## Configuration
 

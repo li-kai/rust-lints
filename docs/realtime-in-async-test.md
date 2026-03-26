@@ -4,18 +4,14 @@
 
 Flags two correctness issues in async tests using Tokio time:
 
-1. `tokio::time::sleep`, `timeout`, `interval`, and related calls inside async test functions that don't have the Tokio clock paused
-2. `std::time::Instant::now()` inside async tests that otherwise rely on Tokio time APIs or a paused Tokio clock
+1. `tokio::time::sleep`, `sleep_until`, `timeout`, `timeout_at`, `interval`, `interval_at` inside async test functions that don't have the Tokio clock paused
+2. *(not yet implemented)* `std::time::Instant::now()` inside async tests that otherwise rely on Tokio time APIs or a paused Tokio clock
 
 ## Why
 
-Async tests that call `tokio::time::sleep` or similar functions wait on real time by default. That slows CI and makes tests flaky under load.
-
-`start_paused = true` solves this: the clock starts frozen and auto-advances when the runtime would otherwise wait for a timer.
+Async tests that call `tokio::time::sleep` or similar functions wait on real time by default, slowing CI and causing flakiness under load. `start_paused = true` solves this: the clock starts frozen and auto-advances when the runtime would otherwise wait for a timer.
 
 The second failure mode is mixing `std::time::Instant` with Tokio time control. `tokio::time::pause()` and `#[tokio::test(start_paused = true)]` affect `tokio::time::Instant`, not `std::time::Instant`.
-
-The lint is narrow. It does **not** ban all `Instant::now()` in tests. It only flags `std::time::Instant::now()` when the test already uses Tokio's time model.
 
 ## Examples
 
@@ -38,6 +34,8 @@ async fn test_request_timeout() {
     ).await;
 }
 ```
+
+Planned (not yet implemented) — `std::time::Instant::now()` in a paused-clock test:
 
 ```rust
 #[tokio::test(start_paused = true)]
@@ -115,6 +113,6 @@ additional_paths = ["my_crate::time::sleep"]
 
 This lint is about Tokio clock correctness in tests.
 
-- `tokio::time::sleep(...)` without `start_paused = true` is a test clock problem.
-- `std::time::Instant::now()` in a Tokio-timed test is a clock mismatch.
-- `std::thread::sleep(...)` inside async code is a blocking problem covered by `blocking_in_async`.
+- `tokio::time::sleep(...)` without `start_paused = true` is a test clock problem (this lint).
+- `std::time::Instant::now()` in a Tokio-timed test is a clock mismatch (this lint, planned).
+- `std::thread::sleep(...)` inside async code is a blocking problem (`blocking_in_async`).

@@ -36,10 +36,9 @@ explicit `cachix push` targets just our output:
 See [`.github/workflows/nix.yml`](../.github/workflows/nix.yml) for the full
 workflow.
 
-**Why this matters:** Without cachix, consumers referencing our flake output
-would trigger a local Nix build — which still requires downloading the nightly
-toolchain and compiling everything. With cachix, they get a pre-built binary
-cache hit and download the artifacts directly. No build, no toolchain download.
+Without cachix, consumers referencing our flake output build from source —
+downloading the nightly toolchain and compiling everything. With cachix, they
+download pre-built artifacts directly.
 
 ### Version pinning and CI ordering
 
@@ -63,8 +62,8 @@ Our artifacts are small, but the transitive closure is not:
 | **Our outputs total** | **~15–35 MB** | × 2–4 platforms |
 | fenix nightly toolchain (with `rustc-dev`) | ~500 MB – 1 GB | × 2–4 platforms |
 
-**Push only our output store path, not the full closure.** Using
-`cachix push li-kai $(nix path-info ./result)` (not `--watch-store` or
-`nix-store -qR`) avoids caching the fenix toolchain through our cache.
-Consumers pull the toolchain from
+**Push only our output store path, not the full closure.** Capture the
+output path from `nix build --print-out-paths` and push just that (not
+`--watch-store` or `nix-store -qR`). This avoids caching the fenix
+toolchain through our cache. Consumers pull the toolchain from
 [fenix's own cache](https://fenix.cachix.org) instead.

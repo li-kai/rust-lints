@@ -2,11 +2,11 @@
 
 **Level:** `warn`
 
-Flags debugging macros (`println!()`, `print!()`, `eprintln!()`, `dbg!()`) and suggests structured logging replacements. Guides both humans and coding agents toward `tracing` or `log` instead of raw print output.
+Flags debugging macros (`println!()`, `print!()`, `eprintln!()`, `dbg!()`) and suggests structured logging replacements.
 
 ## Why
 
-Debug macros are a development convenience that should not persist in production code:
+Debug macros should not persist in production code:
 
 - **Unstructured output** — `println!` and `eprintln!` produce plain text with no machine-readable structure. In production with thousands of log lines per second, you cannot filter, aggregate, or correlate them across services.
 - **Lost context** — raw print statements cannot capture span information, request IDs, or async task context. Debugging becomes a wall of unrelated text.
@@ -14,7 +14,7 @@ Debug macros are a development convenience that should not persist in production
 - **Development artifacts** — temporary debug output accidentally shipped to production, filling logs with noise.
 - **Testing fragility** — programs that write to stderr may fail in test harnesses that capture output.
 
-The fix is to use structured logging frameworks (`tracing` for applications, `log` for libraries) that provide runtime verbosity control and integrate with observability systems.
+Use structured logging (`tracing` for applications, `log` for libraries) for runtime verbosity control and observability integration.
 
 ## Flagged Expressions
 
@@ -25,13 +25,15 @@ The fix is to use structured logging frameworks (`tracing` for applications, `lo
 | `eprintln!(...)` | `eprintln!("ERROR: {}", err)` | Unstructured stderr output |
 | `dbg!(...)` | `dbg!(value)` | Temporary debugging tool (prints to stderr) |
 
+`eprint!` is intentionally excluded — it is typically used for progress indicators and prompts, not leftover debugging.
+
 ## Examples
 
 ### Triggers
 
 ```rust
 fn process_payment(amount: u64) -> Result<Receipt> {
-    //~^ WARNING: debug remnant: replace `println!` with `tracing::info!(amount, "processing payment")`
+    //~^ WARNING: debug remnant: `println!` in committed code
     println!("Processing ${}", amount);
     let receipt = do_payment()?;
     Ok(receipt)
@@ -41,7 +43,7 @@ fn process_payment(amount: u64) -> Result<Receipt> {
 ```rust
 impl Handler {
     fn handle_request(&self, req: Request) -> Response {
-        //~^ WARNING: debug remnant: replace `eprintln!` with `tracing::debug!(?req, "handling request")`
+        //~^ WARNING: debug remnant: `eprintln!` in committed code
         eprintln!("Got request: {:?}", req);
         self.process(req)
     }
@@ -50,7 +52,7 @@ impl Handler {
 
 ```rust
 fn validate(config: &Config) -> bool {
-    //~^ WARNING: debug remnant: replace `dbg!` with `tracing::debug!(?config)`
+    //~^ WARNING: debug remnant: `dbg!` in committed code
     dbg!(config);
     config.is_valid()
 }
@@ -58,7 +60,7 @@ fn validate(config: &Config) -> bool {
 
 ```rust
 fn main() {
-    //~^ WARNING: debug remnant: replace `println!` with `tracing::info!("starting server")`
+    //~^ WARNING: debug remnant: `println!` in committed code
     println!("Starting server");
     run()
 }
@@ -115,32 +117,26 @@ The lint does not fire in these contexts:
 | `#[cfg(test)]` modules | Item is inside a `#[cfg(test)]` module |
 | `#[allow(debug_remnants)]` | Standard rustc suppression attribute |
 
-No implicit exemptions for `fn main()` or binary crates. Use `#[allow(debug_remnants, reason = "...")]` for intentional print output in CLI tools or entry points. This keeps the exemption visible and reasoned — important both for reviewers and for coding agents, which otherwise default to `println!` when scaffolding binaries.
+No implicit exemptions for `fn main()` or binary crates. Use `#[allow(debug_remnants, reason = "...")]` for intentional print output in CLI tools or entry points.
 
 ## Configuration
 
 ```toml
 [debug_remnants]
 # Which logging framework to suggest: "tracing" (default) or "log"
-suggested_strategy = "tracing"
-
-# Suppress warnings in #[test] functions?
-allow_in_tests = true
-
-# Suppress warnings in #[cfg(test)] modules?
-allow_in_test_modules = true
+suggested_framework = "tracing"
 ```
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `suggested_strategy` | `"tracing"` \| `"log"` | `"tracing"` | Which logging framework to suggest in diagnostics |
-| `allow_in_tests` | `bool` | `true` | Don't warn inside `#[test]` functions or `#[rstest]` |
-| `allow_in_test_modules` | `bool` | `true` | Don't warn inside `#[cfg(test)]` modules |
+| `suggested_framework` | `"tracing"` \| `"log"` | `"tracing"` | Which logging framework to suggest in diagnostics |
+
+Test suppression (test crates, `#[test]` functions, `#[cfg(test)]` modules) is always active and not configurable.
 
 ### Strategy guide
 
-- **`suggested_strategy = "tracing"`** (default) — Suggest `tracing::info!()`, `tracing::debug!()`, etc. Use for applications and async code.
-- **`suggested_strategy = "log"`** — Suggest `log::info!()`, `log::debug!()`, etc. Use for libraries where `tracing` is not a dependency.
+- **`suggested_framework = "tracing"`** (default) — Suggest `tracing::info!()`, `tracing::debug!()`, etc. Use for applications and async code.
+- **`suggested_framework = "log"`** — Suggest `log::info!()`, `log::debug!()`, etc. Use for libraries where `tracing` is not a dependency.
 
 ## Suggested Fixes by Strategy
 
@@ -193,7 +189,7 @@ pub fn parse(input: &str) -> Result<Data> {
 
 ## Relation to Clippy
 
-This lint supersedes three Clippy restriction lints. **Disable them when `debug_remnants` is active** to avoid duplicate warnings:
+Disable these Clippy lints when `debug_remnants` is active to avoid duplicate warnings:
 
 ```toml
 # Cargo.toml — turn off clippy lints that debug_remnants replaces
@@ -211,7 +207,7 @@ print_stderr = "allow"  # superseded by debug_remnants
 
 Why supersede rather than wrap:
 
-- **Actionable diagnostics** — Clippy says "don't use this." This lint says "replace with `tracing::info!(field, "message")`" — a concrete example an agent can apply directly.
-- **Unified config** — one `suggested_strategy` knob instead of configuring three separate lints.
-- **Test-aware** — automatically suppresses in `#[test]` and `#[cfg(test)]` without per-lint `allow` attributes.
-- **`print!` coverage** — Clippy's `print_stdout` covers `print!` and `println!` separately; this lint catches all four macros in one pass.
+- **Actionable diagnostics** — Clippy says "don't use this." This lint suggests a concrete replacement.
+- **Unified config** — one `suggested_framework` knob instead of three separate lints.
+- **Test-aware** — suppresses in `#[test]` and `#[cfg(test)]` without per-lint `allow` attributes.
+- **`print!` coverage** — Clippy requires two separate lints (`print_stdout`, `print_stderr`); this lint catches all four macros in one pass.

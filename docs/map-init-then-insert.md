@@ -6,7 +6,7 @@ Warns when a `HashMap`, `BTreeMap`, `IndexMap`, `FxHashMap`, `AHashMap`, or simi
 
 ## Why
 
-Sequential `.insert()` calls after construction are verbose and miss optimization opportunities:
+Sequential `.insert()` calls after construction are verbose and miss optimizations:
 
 - **Readability** — a `from` literal makes the intended contents visible at a glance, similar to `vec![...]` vs repeated `.push()`.
 - **Missed capacity** — `HashMap::new()` followed by *n* inserts causes repeated resizing. `HashMap::from([(k, v), ...])` can allocate once.
@@ -105,7 +105,7 @@ None. Use `#[allow(map_init_then_insert)]` to suppress on a case-by-case basis, 
 | `std::collections::BTreeMap` | `is_type_diagnostic_item(sym::BTreeMap)` | ✅ |
 | `indexmap::IndexMap` | Type path matching | ✅ |
 | `rustc_hash::FxHashMap` | Type alias of `HashMap` — caught by diagnostic item | ✅ |
-| `ahash::AHashMap` | Type alias of `HashMap` — caught by diagnostic item | ✅ |
+| `ahash::AHashMap` | Explicit crate + type name matching | ✅ |
 | `hashbrown::HashMap` | — | ❌ — diagnostic item is on std's `HashMap` only; direct hashbrown usage is rare |
 | `dashmap::DashMap` | — | ❌ — concurrent map, different semantics |
 | `FxHashSet` / `AHashSet` / `HashSet` | — | ❌ — sets, not maps; fit a `set_init_then_insert` lint |

@@ -14,7 +14,7 @@ Error handling is a contract between a function and its callers. When that contr
 - **Misleading types** — a type named `FooError` that does not implement `std::error::Error` cannot be used with `Box<dyn Error>`, `?` conversion via `From`, or error reporters.
 - **Avoidable boilerplate** — hand-written `Display` + `Error` impls drift out of sync with enum variants. `thiserror` eliminates this class of bug.
 
-This lint does not enforce error naming conventions (e.g., `config::Error` vs. `config::ConfigError`). See the [Rust API Guidelines][api-naming] on module-name stuttering.
+This lint does not enforce naming conventions (e.g., `config::Error` vs. `config::ConfigError`). See the [Rust API Guidelines][api-naming] on module-name stuttering.
 
 [std-error]: https://doc.rust-lang.org/std/error/trait.Error.html
 [api-naming]: https://rust-lang.github.io/api-guidelines/naming.html
@@ -39,17 +39,17 @@ Also flags `anyhow::Error` and `miette::Report` in effectively public signatures
 ```rust
 // Triggers
 pub fn parse(input: &str) -> Result<Config, String> { .. }
-//~^ WARNING: public function returns `Result<_, String>`
+//~^ WARNING: public function returns `Result<_, String>` — use a type that implements `Error`
 
 // Triggers
 pub fn run(cmd: &str) -> Result<(), Box<dyn Error>> { .. }
-//~^ WARNING: public function returns `Result<_, Box<dyn Error>>`
+//~^ WARNING: public function returns `Result<_, Box<dyn Error>>` — use a type that implements `Error`
 
 // Triggers — anyhow/miette in an effectively public function
 pub fn load(path: &Path) -> anyhow::Result<Config> { .. }
-//~^ WARNING: effectively public function returns `anyhow::Error`
+//~^ WARNING: effectively public function returns `anyhow::Error` — use a typed error
 pub fn check(input: &str) -> miette::Result<()> { .. }
-//~^ WARNING: effectively public function returns `miette::Report`
+//~^ WARNING: effectively public function returns `miette::Report` — use a typed error
 ```
 
 ```rust
@@ -74,7 +74,7 @@ Flags manual `impl Error` blocks that do not override `source()` when the type h
 // Triggers
 pub enum ConfigError { Io(io::Error) }
 impl std::error::Error for ConfigError {}
-//~^ WARNING: `ConfigError` has error-typed fields but does not implement `source()`
+//~^ WARNING: `ConfigError` wraps error types but does not implement `source()`
 ```
 
 ```rust
@@ -106,7 +106,7 @@ Flags `Display` impls that render an inner error also returned by `source()`. Er
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self { Self::Io(e) => write!(f, "config error: {e}") }
-        //~^ WARNING: inner error rendered in Display is also returned by source()
+        //~^ WARNING: `Display` renders inner error that is also returned by `source()`
     }
 }
 impl std::error::Error for ConfigError {
@@ -172,7 +172,7 @@ pub enum ParseError {
 
 // Triggers
 pub struct ConnectionError { pub message: String, pub code: u32 }
-//~^ WARNING: `ConnectionError` does not implement `std::error::Error`
+//~^ WARNING: `ConnectionError` is named as an error type but does not implement `std::error::Error`
 ```
 
 ```rust
@@ -200,8 +200,8 @@ enum InternalError { Oops }
 | Trait impl methods | Signature dictated by the trait |
 | `#[cfg(test)]` modules | Test helpers commonly use informal error types |
 | `fn main()` | Entry points commonly use `anyhow::Result` |
-| `#[derive(thiserror::Error)]` (steps 2–5) | thiserror handles correctness |
+| `#[derive(thiserror::Error)]` (steps 2–5) | thiserror handles correctness *(not yet implemented)* |
 | No fields implementing `Error` (step 2) | No source to chain |
-| `#[error(transparent)]` (step 3) | Intentionally forwards both `Display` and `source()` |
+| `#[error(transparent)]` (step 3) | Intentionally forwards both `Display` and `source()` *(not yet implemented)* |
 | Non-`pub` types (step 5) | Private types do not form a public contract |
 

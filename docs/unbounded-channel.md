@@ -1,6 +1,6 @@
 # `unbounded_channel`
 
-**Level:** `warn`
+**Level:** `deny`
 
 Flags creation of unbounded channels, which can cause memory exhaustion under backpressure. Suggests using bounded channels instead.
 
@@ -13,11 +13,11 @@ Unbounded channels have no backpressure. When producers outrun consumers:
 - **No flow control** — a runaway producer can take down the entire system without warning. With bounded channels, at least the `.send()` call would fail or block, giving callers an opportunity to notice and throttle.
 - **Usually a mistake** — most unbounded channels are created "for now" and forgotten. In production under load, they become a vector for memory exhaustion attacks (even internal ones from misbehaving subsystems).
 
-The fix is to use a bounded channel with an explicit capacity. Backpressure may require refactoring, but it's better to discover that at design time than at 3am in production.
+Use a bounded channel with an explicit capacity. Backpressure may require refactoring, but discovering that at design time beats discovering it at 3am in production.
 
 ## Flagged calls
 
-The lint ships with a default set of unbounded channel constructors:
+Built-in flagged constructors:
 
 ### `std::sync::mpsc`
 
@@ -43,7 +43,8 @@ Note: `std::sync::mpsc` is deprecated in favor of async channels. If your channe
 
 | Path | Notes |
 |---|---|
-| `crossbeam::channel::unbounded` | Create unbounded crossbeam channel |
+| `crossbeam_channel::unbounded` | Create unbounded crossbeam channel (standalone crate) |
+| `crossbeam::channel::unbounded` | Create unbounded crossbeam channel (umbrella re-export) |
 
 ### Examples
 
@@ -53,7 +54,7 @@ Note: `std::sync::mpsc` is deprecated in favor of async channels. If your channe
 use tokio::sync::mpsc;
 
 async fn setup_logger() {
-    //~^ WARNING: `tokio::sync::mpsc::unbounded_channel()` has no backpressure — can exhaust memory
+    //~^ ERROR: `tokio::sync::mpsc::unbounded_channel()` creates an unbounded channel — no backpressure
     let (tx, mut rx) = mpsc::unbounded_channel();
 
     tokio::spawn(async move {
@@ -68,7 +69,7 @@ async fn setup_logger() {
 use std::sync::mpsc;
 
 fn start_worker() {
-    //~^ WARNING: `std::sync::mpsc::channel()` creates unbounded channel — no backpressure
+    //~^ ERROR: `std::sync::mpsc::channel()` creates an unbounded channel — no backpressure
     let (tx, rx) = mpsc::channel();
 
     std::thread::spawn(move || {
@@ -83,7 +84,7 @@ fn start_worker() {
 use crossbeam::channel;
 
 fn main() {
-    //~^ WARNING: `crossbeam::channel::unbounded()` has no backpressure
+    //~^ ERROR: `crossbeam::channel::unbounded()` creates an unbounded channel — no backpressure
     let (tx, rx) = channel::unbounded();
 
     // ...
@@ -133,6 +134,14 @@ fn main() {
 }
 ```
 
+## Suppression zones
+
+The lint is automatically suppressed in:
+
+- **`fn main()`** — the composition root, where wiring up real dependencies (including unbounded channels) is expected.
+- **Test code** — `#[test]` functions, `#[tokio::test]`, `#[cfg(test)]` modules, and test crates.
+- **`#[allow(unbounded_channel)]`** — explicit per-site opt-out.
+
 ## Configuration
 
 ```toml
@@ -165,12 +174,6 @@ When in doubt, start small (e.g., 100) and increase if you observe legitimate ba
 
 ## Relation to other lints
 
-This lint is part of a family of resource exhaustion prevention lints:
-
-| Lint | Catches |
+| Related lint | Catches |
 |---|---|
-| `unbounded_channel` | Unbounded message queues → OOM |
 | `large_struct` / `large_future` (Clippy) | Oversized allocations → stack overflow / memory pressure |
-| `hardcoded_time` | Missing testability → hard to discover bugs |
-
-Together, they encourage resource-aware, production-safe async Rust.

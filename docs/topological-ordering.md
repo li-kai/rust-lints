@@ -8,7 +8,7 @@ Without a convention, item order is accidental. Items end up wherever they were 
 
 ### Why a lint
 
-Formatting tools (rustfmt) control whitespace and syntax style. They do not control item order because item order is semantic -- it depends on the call/reference graph between items. A lint with access to the HIR and type information can resolve which items reference which others and enforce a consistent ordering.
+Rustfmt does not control item order because it is semantic — it depends on the call/reference graph between items. A lint with HIR and type information can resolve references and enforce a consistent ordering.
 
 ### Relationship to dylint's `non_topologically_sorted_functions`
 
@@ -91,7 +91,7 @@ fn parse_atom() -> Atom {
 
 When items form a cycle, the lint treats the entire strongly connected component (SCC) as a single unit. Items within an SCC can appear in any order relative to each other. The SCC as a whole must be ordered topologically relative to items outside the SCC.
 
-This is the only correct approach. Reporting a cycle as an error would be wrong -- cycles are valid Rust and common in recursive-descent parsers, state machines, and mutually recursive data structures. Silently ignoring cycled items would leave ordering undefined. Treating the SCC as a unit preserves the ordering guarantee for everything outside the cycle.
+Reporting a cycle as an error would be wrong — cycles are valid Rust and common in recursive-descent parsers, state machines, and mutually recursive data structures. Silently ignoring cycled items would leave ordering undefined. Treating the SCC as a unit preserves the ordering guarantee for everything outside the cycle.
 
 ### Algorithm
 
@@ -115,6 +115,11 @@ warning: items are not in topological order in this module
    |
 5  |     fn process(_cfg: Config) {}
    |                      ^^^^^^ `fn process` references `struct Config` but appears before it
+...
+LL |     struct Config {
+   |     ------------- `struct Config` defined here
+   |
+   = help: reorder items so referenced items appear before their referencing items
 ```
 
 For the "item group" violation (inherent impl not adjacent to type):
@@ -134,6 +139,8 @@ LL | |             Self { name }
 LL | |         }
 LL | |     }
    | |_____^
+   |
+   = help: move the impl block adjacent to its type definition
 ```
 
 ### Lint level

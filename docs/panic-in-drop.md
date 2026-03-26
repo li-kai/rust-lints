@@ -1,6 +1,6 @@
 # `panic_in_drop`
 
-**Level:** `warn`
+**Level:** `deny`
 
 Flags `Drop` implementations that contain operations which can panic, since panicking during unwinding causes an immediate abort.
 
@@ -13,7 +13,7 @@ If a panic occurs while the runtime is already unwinding from a previous panic, 
 - **Extremely hard to debug** — the abort happens at the OS level. You get a signal (SIGABRT) with no indication of which `Drop` impl caused it or what the original panic was about.
 - **Contagious** — one bad `Drop` impl can take down an entire server. Libraries that panic in `Drop` are unsafe to use in any context that catches panics (e.g. `catch_unwind`, thread pool workers, test harnesses).
 
-The fix is to handle errors in `Drop` gracefully: log them, ignore them, or store them for later retrieval. If cleanup is critical and fallible, provide an explicit `close()` / `flush()` method and document that callers should call it before dropping.
+Handle errors in `Drop` gracefully: log them, ignore them, or store them for later retrieval. If cleanup is critical and fallible, provide an explicit `close()` / `flush()` method that callers invoke before dropping.
 
 ### Relation to Clippy
 
@@ -39,7 +39,7 @@ The lint fires when the body of a `Drop::drop` implementation contains any of:
 ```rust
 impl Drop for TempFile {
     fn drop(&mut self) {
-        //~^ WARNING: panic-able expression in `Drop` impl — this will abort during unwinding
+        //~^ ERROR: panic-able expression in `Drop` impl — this will abort during unwinding
         std::fs::remove_file(&self.path).unwrap();
     }
 }
@@ -48,7 +48,7 @@ impl Drop for TempFile {
 ```rust
 impl Drop for Connection {
     fn drop(&mut self) {
-        //~^ WARNING: panic-able expression in `Drop` impl — this will abort during unwinding
+        //~^ ERROR: panic-able expression in `Drop` impl — this will abort during unwinding
         self.socket.shutdown(Shutdown::Both).expect("shutdown failed");
     }
 }
@@ -57,7 +57,7 @@ impl Drop for Connection {
 ```rust
 impl Drop for Checkpoint {
     fn drop(&mut self) {
-        //~^ WARNING: panic-able expression in `Drop` impl — this will abort during unwinding
+        //~^ ERROR: panic-able expression in `Drop` impl — this will abort during unwinding
         assert!(self.flushed, "dropped without flushing");
     }
 }
@@ -97,11 +97,36 @@ impl Processor {
         let data = self.load().unwrap(); // fine here
     }
 }
+
+// Guarded by std::thread::panicking() — safe
+impl Drop for GuardedDrop {
+    fn drop(&mut self) {
+        if !std::thread::panicking() {
+            self.val.unwrap(); // only runs when not already unwinding
+        }
+    }
+}
+
+// Panic inside a closure — doesn't run during drop itself
+impl Drop for Deferred {
+    fn drop(&mut self) {
+        // Closures and async blocks are not traversed — a panic stored
+        // in a closure won't execute as part of the drop call.
+        let _ = self.callback.take();
+    }
+}
 ```
+
+## Exceptions
+
+The lint does not fire on:
+
+- **`std::thread::panicking()` guards** — if the body of `drop()` checks `std::thread::panicking()` (or its negation), both branches are suppressed. The author has already handled the double-panic scenario.
+- **Closures and async blocks** — panic-able expressions inside a closure or async block within `drop()` are not flagged, because they don't execute as part of the drop call itself.
 
 ## Configuration
 
-No configuration. The lint always fires on panic-able expressions inside `Drop::drop`.
+No additional configuration.
 
 ## Relation to other lints
 

@@ -8,7 +8,7 @@ Clippy and dylint setup for production Rust codebases. Copy the [Setup](#setup) 
 
 ```toml
 [workspace.lints.rust]
-unsafe_code     = "forbid"
+unsafe_code     = "forbid"  # or "deny" if your project has legitimate unsafe blocks
 unused_must_use = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dylint_lib, values("rust_lints"))'] }
 
@@ -115,8 +115,6 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 ```
 
-Permits `.unwrap()` and `.expect()` in `#[test]` functions while banning them in production code.
-
 **3. Each crate inherits with:**
 
 ```toml
@@ -129,9 +127,9 @@ workspace = true
 
 ## Lint Reference
 
-**Group enables** — `pedantic` and `nursery` are enabled at `priority = -1` so every lint in these groups defaults to warn. Individual entries at default priority override the group level. Non-fixable pedantic/nursery lints are visible in IDE, CI, and CLI — not just during the pre-commit hook.
+`pedantic` and `nursery` are enabled at `priority = -1` so every lint in these groups defaults to warn. Individual entries at default priority override the group level.
 
-**Deny** — always wrong in production; no valid exception exists. **Warn** — usually wrong; suppression requires a documented reason (enforced by `allow_attributes_without_reason`).
+**Deny** — always wrong in production; no valid exception. **Warn** — usually wrong; suppression requires a documented reason (enforced by `allow_attributes_without_reason`).
 
 ### `disallowed_types`
 
@@ -578,21 +576,42 @@ map_err_ignore   = "deny"
 
 ```toml
 # dylint.toml — graduated denies
+#
+# These lints default to warn; promote to deny once clean.
+# Lints that already default to deny (acyclic_modules, blocking_in_async,
+# fallible_new, module_dependencies, panic_in_drop, unbounded_channel,
+# unclear_exports, global_side_effect_logging_init) need no entry here.
+
 [proper_error_type]
 level = "deny"
 
-[unbounded_channel]
+[result_result]
 level = "deny"
 
-[fallible_new]
+[suggest_builder]
 level = "deny"
 
-[hardcoded_time]
+[needless_builder]
 level = "deny"
 
-[hardcoded_randomness]
+[map_init_then_insert]
 level = "deny"
 
-[hardcoded_env]
+[topological_ordering]
+level = "deny"
+
+[unstructured_log_fields]
+level = "deny"
+
+[realtime_in_async_test]
+level = "deny"
+
+[global_side_effect.time]
+level = "deny"
+
+[global_side_effect.randomness]
+level = "deny"
+
+[global_side_effect.env]
 level = "deny"
 ```

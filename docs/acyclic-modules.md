@@ -45,7 +45,7 @@ All resolution is type-based (`LateLintPass` with full `TyCtxt` access), not par
 
 ### What Is Excluded
 
-- **Test code.** `#[cfg(test)]` modules and `#[test]` functions are excluded. Tests legitimately reach across module boundaries; enforcing acyclicity on test code would make integration tests unwritable.
+- **Test code.** `#[cfg(test)]` modules, `#[test]` functions, and test crates (compiled with `--test` / `cargo test`) are excluded. Tests legitimately reach across module boundaries; enforcing acyclicity on test code would make integration tests unwritable.
 - **Macro-expanded spans.** References originating from macro expansion are excluded to avoid false positives from macros that generate cross-module paths the user did not write.
 - **External crate items.** Only intra-crate dependencies are tracked. Cross-crate cycles are already prevented by Cargo.
 
@@ -85,7 +85,7 @@ A cycle at any level is an error. A cycle at the crate root (e.g., `payments ↔
    c. Run cycle detection (DFS, three-color) on M's sibling graph.
 3. For each cycle found, emit a diagnostic showing the cycle path and the spans of the edges that form it.
 
-The graph is small at each level (number of direct children, typically 2–15 nodes). DFS is O(V + E) per level. Total cost is proportional to the number of recorded edges times the module depth, both small.
+The graph is small at each level (number of direct children, typically 2–15 nodes). DFS is O(V + E) per level. Total cost is proportional to the number of recorded edges times the module depth — both small in practice.
 
 ### Diagnostic Format
 
@@ -114,20 +114,30 @@ For a cycle at a deeper level:
 
 ```
 error: cyclic dependency between sibling modules under `payments`:
-       `checkout` → `billing` → `checkout`
-  --> src/payments/checkout/payment.rs:8:5
-   |
-8  |     use crate::payments::billing::Invoice;
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `checkout` → `billing`
-   |
-  ::: src/payments/billing/invoice.rs:3:5
+       `billing` → `checkout` → `billing`
+  --> src/payments/billing/invoice.rs:3:5
    |
 3  |     use crate::payments::checkout::CartItem;
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `billing` → `checkout`
    |
-   = help: break this cycle by extracting shared types into a sibling
-           module (e.g., `payments::shared`) that both can depend on
+  ::: src/payments/checkout/payment.rs:8:5
+   |
+8  |     use crate::payments::billing::Invoice;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `checkout` → `billing`
+   |
+   = help: break this cycle by moving shared items to a module that both
+           `checkout` and `billing` can depend on, or restructure so the
+           dependency flows in one direction
 ```
+
+For cycles involving 3 or more modules, the help message uses a different wording:
+
+```
+   = help: break this cycle by extracting shared items into a common
+           module that `A`, `B`, `C` can all depend on
+```
+
+Cycles are normalized to start at the lexicographically smallest module name for deterministic output.
 
 The diagnostic shows exactly what happened and what to do: extract shared items into a common dependency, or restructure so the dependency is one-directional.
 
