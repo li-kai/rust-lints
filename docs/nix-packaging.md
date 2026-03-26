@@ -162,8 +162,10 @@ The `packages.default` derivation must produce two things:
 
 ### 2. The dylint driver
 
-- Build the `dylint-driver` binary from crates.io, linked against the same
-  nightly toolchain's `rustc_driver`.
+- Build the `dylint-driver` binary from a local shim project
+  (`nix/dylint-driver/`) that wraps the `dylint_driver` library crate from
+  crates.io. The binary doesn't exist as a published crate — `cargo-dylint`
+  normally synthesizes it at runtime; we replicate that offline for Nix.
 - The driver binary dynamically links to `librustc_driver` — the sysroot
   libraries must be reachable at runtime (via `-rpath` baked in at link time,
   or via `LD_LIBRARY_PATH`).
@@ -180,6 +182,8 @@ The `packages.default` derivation must produce two things:
 | `rustc-dev` | Provide `rustc_driver` and compiler internals for linking | fenix toolchain components |
 | `dylint-link` | Custom linker that produces `@toolchain`-tagged output | Built from crates.io |
 | `rustup` shim | `dylint-link` calls `rustup which rustc` internally | Already in our flake |
+| Prefetched clippy source | `dylint_driver`'s build script clones rust-clippy to extract symbols from `clippy_utils/src/sym.rs`; Nix builds have no network access | `fetchFromGitHub` at the rev from `Cargo.toml` |
+| Git clippy wrapper | Intercepts `git clone`/`checkout` of rust-clippy and serves the prefetched source | `nix/git-clippy-wrapper.sh` |
 
 ### Implementation
 
