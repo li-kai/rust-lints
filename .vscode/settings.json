@@ -1,0 +1,34 @@
+{
+  // Rust & Rust-Analyzer Configuration
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.clippy": "explicit",
+      "source.organizeImports": "explicit"
+    }
+  },
+
+  "rust-analyzer.cargo.features": "all",
+  "rust-analyzer.check.overrideCommand": [
+    "bash",
+    "./scripts/ra-check.sh",
+    "--message-format=json"
+  ],
+  "rust-analyzer.rustc.source": "discover",
+  "rust-analyzer.files.excludeDirs": ["ui"],
+  "rust-analyzer.imports.granularity.enforce": true,
+  "rust-analyzer.imports.granularity.group": "item",
+  "rust-analyzer.imports.group.enable": true,
+  "rust-analyzer.imports.preferNoStd": true,
+
+  // File watching
+  "files.watcherExclude": {
+    "**/target/**": true,
+    "**/.direnv/**": true,
+    "**/mutants.out*/**": true,
+    "**/ui/**": true,
+    "**/result/**": true,
+    "**/nix/**": true
+  }
+}

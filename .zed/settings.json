@@ -41,5 +41,4 @@
     },
   },
 
-  "file_scan_exclusions": ["**/target/**", "**/node_modules/**"],
 }
