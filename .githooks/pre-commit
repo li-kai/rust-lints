@@ -439,4 +439,3 @@ while IFS= read -r toml; do
 done < <(echo "$staged" | _grep 'Cargo\.toml$')
 
 exit $rc
-

@@ -30,135 +30,181 @@ import sys
 from collections import OrderedDict
 from pathlib import Path
 
-
 # -- Recommended lint levels --
 
-RUST_LINTS: OrderedDict[str, str] = OrderedDict([
-    ("unsafe_code", "forbid"),
-    ("unused_must_use", "deny"),
-    ("unexpected_cfgs", """{ level = "warn", check-cfg = ['cfg(dylint_lib, values("rust_lints"))'] }"""),
-])
+RUST_LINTS: OrderedDict[str, str] = OrderedDict(
+    [
+        ("unsafe_code", "forbid"),
+        ("unused_must_use", "deny"),
+        (
+            "unexpected_cfgs",
+            """{ level = "warn", check-cfg = ['cfg(dylint_lib, values("rust_lints"))'] }""",
+        ),
+    ]
+)
 
-CLIPPY_LINTS: OrderedDict[str, list[tuple[str, str]]] = OrderedDict([
-    ("Deny: always wrong in production", [
-        ("await_holding_lock", "deny"),
-        ("await_holding_refcell_ref", "deny"),
-        ("let_underscore_future", "deny"),
-        ("rc_mutex", "deny"),
-        ("exit", "deny"),
-        ("todo", "deny"),
-        ("unimplemented", "deny"),
-        ("undocumented_unsafe_blocks", "deny"),
-        ("multiple_unsafe_ops_per_block", "deny"),
-    ]),
-    ("Error handling discipline", [
-        ("unwrap_used", "warn"),
-        ("expect_used", "warn"),
-        ("panic_in_result_fn", "warn"),
-        ("unwrap_in_result", "warn"),
-        ("map_err_ignore", "warn"),
-    ]),
-    ("Type safety & correctness", [
-        ("indexing_slicing", "warn"),
-        ("panic", "warn"),
-        ("option_option", "warn"),
-        ("cast_possible_truncation", "warn"),
-        ("cast_sign_loss", "warn"),
-        ("cast_possible_wrap", "warn"),
-        ("float_cmp", "warn"),
-    ]),
-    ("Async & concurrency", [
-        ("large_futures", "warn"),
-        ("mutex_atomic", "warn"),
-    ]),
-    ("Code quality & maintainability", [
-        ("wildcard_enum_match_arm", "warn"),
-        ("clone_on_ref_ptr", "warn"),
-        ("unused_result_ok", "warn"),
-        ("let_underscore_must_use", "warn"),
-        ("fn_params_excessive_bools", "warn"),
-        ("match_same_arms", "warn"),
-        ("match_wildcard_for_single_variants", "warn"),
-    ]),
-    ("Documentation & design", [
-        ("missing_errors_doc", "warn"),
-        ("missing_panics_doc", "warn"),
-        ("missing_fields_in_debug", "warn"),
-        ("return_self_not_must_use", "warn"),
-        ("should_panic_without_expect", "warn"),
-        ("allow_attributes", "warn"),
-        ("allow_attributes_without_reason", "deny"),
-        ("ignore_without_reason", "deny"),
-    ]),
-    ("Performance & idioms", [
-        ("unnecessary_wraps", "warn"),
-        ("manual_let_else", "warn"),
-        ("default_trait_access", "warn"),
-        ("format_push_string", "warn"),
-        ("unreadable_literal", "warn"),
-    ]),
-    ("Debug & print discipline", [
-        ("dbg_macro", "warn"),
-        ("print_stdout", "warn"),
-        ("print_stderr", "warn"),
-    ]),
-    ("File & I/O operations", [
-        ("create_dir", "warn"),
-        ("verbose_file_reads", "warn"),
-        ("pathbuf_init_then_push", "warn"),
-    ]),
-    ("Resource management", [
-        ("mem_forget", "warn"),
-        ("rc_buffer", "warn"),
-        ("large_include_file", "warn"),
-    ]),
-    ("Miscellaneous", [
-        ("error_impl_error", "warn"),
-        ("cfg_not_test", "warn"),
-        ("missing_assert_message", "warn"),
-        ("tests_outside_test_module", "warn"),
-        ("ref_option", "warn"),
-        ("large_types_passed_by_value", "warn"),
-        ("unsafe_derive_deserialize", "warn"),
-        ("large_stack_arrays", "warn"),
-        ("doc_link_with_quotes", "warn"),
-        ("copy_iterator", "warn"),
-        ("macro_use_imports", "warn"),
-    ]),
-    ("Disabled: enabled by group but too noisy or harmful", [
-        ("module_name_repetitions", "allow"),
-        ("option_if_let_else", "allow"),
-        ("similar_names", "allow"),
-        ("struct_excessive_bools", "allow"),
-        ("struct_field_names", "allow"),
-        ("too_many_lines", "allow"),
-    ]),
-])
+CLIPPY_LINTS: OrderedDict[str, list[tuple[str, str]]] = OrderedDict(
+    [
+        (
+            "Deny: always wrong in production",
+            [
+                ("await_holding_lock", "deny"),
+                ("await_holding_refcell_ref", "deny"),
+                ("let_underscore_future", "deny"),
+                ("rc_mutex", "deny"),
+                ("exit", "deny"),
+                ("todo", "deny"),
+                ("unimplemented", "deny"),
+                ("undocumented_unsafe_blocks", "deny"),
+                ("multiple_unsafe_ops_per_block", "deny"),
+            ],
+        ),
+        (
+            "Error handling discipline",
+            [
+                ("unwrap_used", "warn"),
+                ("expect_used", "warn"),
+                ("panic_in_result_fn", "warn"),
+                ("unwrap_in_result", "warn"),
+                ("map_err_ignore", "warn"),
+            ],
+        ),
+        (
+            "Type safety & correctness",
+            [
+                ("indexing_slicing", "warn"),
+                ("panic", "warn"),
+                ("option_option", "warn"),
+                ("cast_possible_truncation", "warn"),
+                ("cast_sign_loss", "warn"),
+                ("cast_possible_wrap", "warn"),
+                ("float_cmp", "warn"),
+            ],
+        ),
+        (
+            "Async & concurrency",
+            [
+                ("large_futures", "warn"),
+                ("mutex_atomic", "warn"),
+            ],
+        ),
+        (
+            "Code quality & maintainability",
+            [
+                ("wildcard_enum_match_arm", "warn"),
+                ("clone_on_ref_ptr", "warn"),
+                ("unused_result_ok", "warn"),
+                ("let_underscore_must_use", "warn"),
+                ("fn_params_excessive_bools", "warn"),
+                ("match_same_arms", "warn"),
+                ("match_wildcard_for_single_variants", "warn"),
+            ],
+        ),
+        (
+            "Documentation & design",
+            [
+                ("missing_errors_doc", "warn"),
+                ("missing_panics_doc", "warn"),
+                ("missing_fields_in_debug", "warn"),
+                ("return_self_not_must_use", "warn"),
+                ("should_panic_without_expect", "warn"),
+                ("allow_attributes", "warn"),
+                ("allow_attributes_without_reason", "deny"),
+                ("ignore_without_reason", "deny"),
+            ],
+        ),
+        (
+            "Performance & idioms",
+            [
+                ("unnecessary_wraps", "warn"),
+                ("manual_let_else", "warn"),
+                ("default_trait_access", "warn"),
+                ("format_push_string", "warn"),
+                ("unreadable_literal", "warn"),
+            ],
+        ),
+        (
+            "Debug & print discipline",
+            [
+                ("dbg_macro", "warn"),
+                ("print_stdout", "warn"),
+                ("print_stderr", "warn"),
+            ],
+        ),
+        (
+            "File & I/O operations",
+            [
+                ("create_dir", "warn"),
+                ("verbose_file_reads", "warn"),
+                ("pathbuf_init_then_push", "warn"),
+            ],
+        ),
+        (
+            "Resource management",
+            [
+                ("mem_forget", "warn"),
+                ("rc_buffer", "warn"),
+                ("large_include_file", "warn"),
+            ],
+        ),
+        (
+            "Miscellaneous",
+            [
+                ("error_impl_error", "warn"),
+                ("cfg_not_test", "warn"),
+                ("missing_assert_message", "warn"),
+                ("tests_outside_test_module", "warn"),
+                ("ref_option", "warn"),
+                ("large_types_passed_by_value", "warn"),
+                ("unsafe_derive_deserialize", "warn"),
+                ("large_stack_arrays", "warn"),
+                ("doc_link_with_quotes", "warn"),
+                ("copy_iterator", "warn"),
+                ("macro_use_imports", "warn"),
+            ],
+        ),
+        (
+            "Disabled: enabled by group but too noisy or harmful",
+            [
+                ("module_name_repetitions", "allow"),
+                ("option_if_let_else", "allow"),
+                ("similar_names", "allow"),
+                ("struct_excessive_bools", "allow"),
+                ("struct_field_names", "allow"),
+                ("too_many_lines", "allow"),
+            ],
+        ),
+    ]
+)
 
 # Contradictory lint pairs — one from each must be excluded. The scraper
 # reports both as MachineApplicable, but enabling both causes them to fight
 # (each fix triggers the other). We keep the idiomatic/majority choice.
 EXCLUDED_FIXABLE_LINTS = {
-    "implicit_return",          # contradicts needless_return (keep needless_return)
-    "semicolon_inside_block",   # contradicts semicolon_outside_block (keep outside)
-    "pub_without_shorthand",    # contradicts pub_with_shorthand (keep with)
-    "separated_literal_suffix",    # contradicts unseparated_literal_suffix (keep unseparated)
+    "implicit_return",  # contradicts needless_return (keep needless_return)
+    "semicolon_inside_block",  # contradicts semicolon_outside_block (keep outside)
+    "pub_without_shorthand",  # contradicts pub_with_shorthand (keep with)
+    "separated_literal_suffix",  # contradicts unseparated_literal_suffix (keep unseparated)
 }
 
 # Dylint lints with MachineApplicable autofix — enabled via DYLINT_RUSTFLAGS
 # in the pre-commit hook after clippy fix.
-DYLINT_FIXABLE_LINTS: list[str] = [
-]
+DYLINT_FIXABLE_LINTS: list[str] = []
 
-BANNED_CRATES: OrderedDict[str, str] = OrderedDict([
-    ("lazy_static", "use std::sync::LazyLock (Rust 1.80+)"),
-    ("once_cell", "use std::sync::OnceLock / LazyLock (Rust 1.70+/1.80+)"),
-    ("failure", "use thiserror for libraries, anyhow for applications"),
-    ("dashmap", "use RwLock<HashMap> — DashMap deadlocks when a Ref is held across map calls"),
-    ("openssl", "use rustls"),
-    ("md5", "MD5 is cryptographically broken; use SHA-256 or SHA-3"),
-    ("sha1", "SHA-1 collision resistance is broken; use SHA-256 or SHA-3"),
-])
+BANNED_CRATES: OrderedDict[str, str] = OrderedDict(
+    [
+        ("lazy_static", "use std::sync::LazyLock (Rust 1.80+)"),
+        ("once_cell", "use std::sync::OnceLock / LazyLock (Rust 1.70+/1.80+)"),
+        ("failure", "use thiserror for libraries, anyhow for applications"),
+        (
+            "dashmap",
+            "use RwLock<HashMap> — DashMap deadlocks when a Ref is held across map calls",
+        ),
+        ("openssl", "use rustls"),
+        ("md5", "MD5 is cryptographically broken; use SHA-256 or SHA-3"),
+        ("sha1", "SHA-1 collision resistance is broken; use SHA-256 or SHA-3"),
+    ]
+)
 
 
 def parse_fixable_lints(path: Path) -> OrderedDict[str, list[str]]:
@@ -186,9 +232,7 @@ def emit_lints(fixable_lints_path: Path | None = None) -> str:
     """
     # Collect all recommended lint names for precedence check
     recommended_names = {
-        lint
-        for group_lints in CLIPPY_LINTS.values()
-        for lint, _ in group_lints
+        lint for group_lints in CLIPPY_LINTS.values() for lint, _ in group_lints
     }
 
     lines = [
@@ -198,14 +242,16 @@ def emit_lints(fixable_lints_path: Path | None = None) -> str:
     ]
     for lint, level in RUST_LINTS.items():
         if level.startswith("{"):
-            lines.append(f'{lint} = {level}')
+            lines.append(f"{lint} = {level}")
         else:
             lines.append(f'{lint} = "{level}"')
 
     lines += ["", "[lints.clippy]"]
 
     # Group enables — pedantic and nursery are opt-in; individual entries override.
-    lines.append("# Enable opt-in lint groups — individual entries below override these.")
+    lines.append(
+        "# Enable opt-in lint groups — individual entries below override these."
+    )
     lines.append('pedantic = { level = "warn", priority = -1 }')
     lines.append('nursery = { level = "warn", priority = -1 }')
     lines.append("")
@@ -220,7 +266,9 @@ def emit_lints(fixable_lints_path: Path | None = None) -> str:
     # Fixable lints (allow) — skip any already covered by recommended
     if fixable_lints_path:
         fixable_groups = parse_fixable_lints(fixable_lints_path)
-        lines.append("# --- Auto-fixable lints: silent during dev, auto-fixed at commit time ---")
+        lines.append(
+            "# --- Auto-fixable lints: silent during dev, auto-fixed at commit time ---"
+        )
         for group, lints in fixable_groups.items():
             filtered = [l for l in lints if l not in recommended_names]
             if not filtered:
@@ -241,23 +289,21 @@ def emit_hook(fixable_lints_path: Path | None = None) -> str:
     Blocking checks use `just check-all`.
     """
     recommended_names = {
-        lint
-        for group_lints in CLIPPY_LINTS.values()
-        for lint, _ in group_lints
+        lint for group_lints in CLIPPY_LINTS.values() for lint, _ in group_lints
     }
 
     fixable_lints: list[str] = []
     if fixable_lints_path:
         fixable_groups = parse_fixable_lints(fixable_lints_path)
         for lints in fixable_groups.values():
-            fixable_lints.extend(
-                l for l in lints if l not in recommended_names
-            )
+            fixable_lints.extend(l for l in lints if l not in recommended_names)
 
-    fix_flags = " \\\n".join([
-        "cargo clippy --fix --allow-dirty --allow-staged --",
-        *(f"  -W clippy::{lint}" for lint in fixable_lints),
-    ])
+    fix_flags = " \\\n".join(
+        [
+            "cargo clippy --fix --allow-dirty --allow-staged --",
+            *(f"  -W clippy::{lint}" for lint in fixable_lints),
+        ]
+    )
 
     # Dylint auto-fix commands — these lints default to `Allow` so they are
     # silent in the editor; DYLINT_RUSTFLAGS overrides the level for the fix pass.
@@ -279,7 +325,7 @@ def emit_hook(fixable_lints_path: Path | None = None) -> str:
 
     return f"""#!/usr/bin/env bash
 set -euo pipefail
-# Auto-generated by scripts/recommended-config.py --format hook{f' --fixable-lints {fixable_lints_path}' if fixable_lints_path else ''}
+# Auto-generated by scripts/recommended-config.py --format hook{f" --fixable-lints {fixable_lints_path}" if fixable_lints_path else ""}
 
 # Use rg (ripgrep) for pattern matching if available, fall back to grep -E.
 if command -v rg &>/dev/null; then
@@ -373,11 +419,15 @@ def do_install(fixable_lints_path: Path | None = None) -> None:
     hooks_dir.mkdir(exist_ok=True)
     hook_path = hooks_dir / "pre-commit"
     hook_path.write_text(emit_hook(fixable_lints_path))
-    hook_path.chmod(hook_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    hook_path.chmod(
+        hook_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+    )
     print(f"wrote {hook_path}")
 
     print()
-    print("Add the following to your Cargo.toml (or merge with existing [lints] sections):")
+    print(
+        "Add the following to your Cargo.toml (or merge with existing [lints] sections):"
+    )
     print()
     print(emit_lints(fixable_lints_path))
     print()
