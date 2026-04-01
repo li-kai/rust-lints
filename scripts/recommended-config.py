@@ -108,7 +108,7 @@ CLIPPY_LINTS: OrderedDict[str, list[tuple[str, str]]] = OrderedDict(
                 ("missing_fields_in_debug", "warn"),
                 ("return_self_not_must_use", "warn"),
                 ("should_panic_without_expect", "warn"),
-                ("allow_attributes", "warn"),
+                ("allow_attributes", "forbid"),
                 ("allow_attributes_without_reason", "deny"),
                 ("ignore_without_reason", "deny"),
             ],

@@ -65,7 +65,7 @@ missing_panics_doc        = "warn"
 missing_fields_in_debug   = "warn"
 return_self_not_must_use  = "warn"
 should_panic_without_expect = "warn"
-allow_attributes          = "warn"
+allow_attributes          = "forbid"
 allow_attributes_without_reason = "deny"
 ignore_without_reason     = "deny"
 
@@ -307,7 +307,7 @@ Why each workspace lint is included, grouped by concern.
 | `missing_assert_message` | warn | Bare `assert!` produces unhelpful panic messages — always include context. |
 | `should_panic_without_expect` | warn | `#[should_panic]` without `expected = "..."` passes on *any* panic, not just the right one. |
 | `tests_outside_test_module` | warn | `#[test]` functions belong in `#[cfg(test)]` modules for organizational clarity. |
-| `allow_attributes` | warn | Flags `#[allow]` — use `#[expect]` instead so stale suppressions become warnings automatically. |
+| `allow_attributes` | forbid | Flags `#[allow]` — use `#[expect]` instead so stale suppressions become warnings automatically. Cannot be locally overridden. |
 | `allow_attributes_without_reason` | deny | Every suppression must carry a `reason` — prevents silent lint bypasses and keeps `#[expect]` stale-suppression detection meaningful. |
 | `ignore_without_reason` | deny | `#[ignore]` without rationale accumulates silently. |
 
@@ -361,7 +361,7 @@ Lints enabled by the `pedantic`/`nursery` group but explicitly turned off.
 `allow_attributes_without_reason` requires every suppression to carry `reason`:
 
 ```rust
-#[allow(clippy::unwrap_used, reason = "index is bounds-checked by the constructor invariant")]
+#[expect(clippy::unwrap_used, reason = "index is bounds-checked by the constructor invariant")]
 let val = self.items[self.cursor];
 ```
 
