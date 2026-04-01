@@ -250,7 +250,6 @@
       "string_lit_chars_any",
       "try_err",
       "unnecessary_safety_comment",
-      "unseparated_literal_suffix",
       "unused_trait_names"
     ],
     "style": [
@@ -718,7 +717,6 @@
     "unneeded_struct_pattern",
     "unneeded_wildcard_pattern",
     "unnested_or_patterns",
-    "unseparated_literal_suffix",
     "unused_enumerate_index",
     "unused_rounding",
     "unused_trait_names",

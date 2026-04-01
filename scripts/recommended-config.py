@@ -184,7 +184,6 @@ EXCLUDED_FIXABLE_LINTS = {
     "implicit_return",  # contradicts needless_return (keep needless_return)
     "semicolon_inside_block",  # contradicts semicolon_outside_block (keep outside)
     "pub_with_shorthand",  # contradicts pub_without_shorthand (keep without)
-    "separated_literal_suffix",  # contradicts unseparated_literal_suffix (keep unseparated)
 }
 
 # Dylint lints with MachineApplicable autofix — enabled via DYLINT_RUSTFLAGS

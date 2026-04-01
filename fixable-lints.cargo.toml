@@ -248,7 +248,6 @@ str_to_string = "allow"
 string_lit_chars_any = "allow"
 try_err = "allow"
 unnecessary_safety_comment = "allow"
-unseparated_literal_suffix = "allow"
 unused_trait_names = "allow"
 
 # style (108 lints)
