@@ -201,6 +201,7 @@ EXCLUDED_FIXABLE_LINTS = {
     "implicit_return",  # contradicts needless_return (keep needless_return)
     "semicolon_inside_block",  # contradicts semicolon_outside_block (keep outside)
     "pub_with_shorthand",  # contradicts pub_without_shorthand (keep without)
+    "std_instead_of_alloc",  # broken without extern crate alloc
     "unseparated_literal_suffix",  # contradicts separated_literal_suffix (keep separated)
 }
 

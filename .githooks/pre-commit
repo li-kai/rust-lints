@@ -333,7 +333,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::return_and_then \
   -W clippy::semicolon_outside_block \
   -W clippy::separated_literal_suffix \
-  -W clippy::std_instead_of_alloc \
   -W clippy::std_instead_of_core \
   -W clippy::str_to_string \
   -W clippy::string_lit_chars_any \
