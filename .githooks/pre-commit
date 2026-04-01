@@ -339,7 +339,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::string_lit_chars_any \
   -W clippy::try_err \
   -W clippy::unnecessary_safety_comment \
-  -W clippy::unseparated_literal_suffix \
   -W clippy::unused_trait_names 2>&1 || true)
   echo "$output" | _grep -q 'Fixed' || break
 done
