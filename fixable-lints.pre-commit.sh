@@ -308,4 +308,3 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::write_with_newline \
   -W clippy::writeln_empty_string \
   -W clippy::zero_ptr 2>/dev/null
-

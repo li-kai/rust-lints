@@ -302,7 +302,6 @@ def emit_lints(fixable_lints_path: Path | None = None) -> str:
             lines.append(f"# {group} ({len(filtered)} lints)")
             for lint in filtered:
                 lines.append(f'{lint} = "allow"')
-        lines.append("")
 
     return "\n".join(lines)
 

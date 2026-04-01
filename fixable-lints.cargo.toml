@@ -91,7 +91,6 @@ useless_concat = "allow"
 useless_conversion = "allow"
 useless_format = "allow"
 useless_nonzero_new_unchecked = "allow"
-
 # correctness (7 lints)
 inline_fn_without_body = "allow"
 invisible_characters = "allow"
@@ -100,7 +99,6 @@ mem_replace_with_uninit = "allow"
 never_loop = "allow"
 non_octal_unix_permissions = "allow"
 read_line_without_trim = "allow"
-
 # nursery (13 lints)
 clear_with_drain = "allow"
 derive_partial_eq_without_eq = "allow"
@@ -115,7 +113,6 @@ suboptimal_flops = "allow"
 too_long_first_doc_paragraph = "allow"
 trait_duplication_in_bounds = "allow"
 unused_rounding = "allow"
-
 # pedantic (41 lints)
 bool_to_int_with_if = "allow"
 borrow_as_ptr = "allow"
@@ -158,7 +155,6 @@ unicode_not_nfc = "allow"
 unnecessary_literal_bound = "allow"
 unnecessary_semicolon = "allow"
 unnested_or_patterns = "allow"
-
 # perf (15 lints)
 cmp_owned = "allow"
 collapsible_str_replace = "allow"
@@ -175,7 +171,6 @@ replace_box = "allow"
 to_string_in_format_args = "allow"
 useless_vec = "allow"
 waker_clone_wake = "allow"
-
 # restriction (28 lints)
 allow_attributes = "allow"
 as_pointer_underscore = "allow"
@@ -205,7 +200,6 @@ try_err = "allow"
 unnecessary_safety_comment = "allow"
 unseparated_literal_suffix = "allow"
 unused_trait_names = "allow"
-
 # style (98 lints)
 blocks_in_conditions = "allow"
 bool_assert_comparison = "allow"
@@ -305,7 +299,6 @@ write_literal = "allow"
 write_with_newline = "allow"
 writeln_empty_string = "allow"
 zero_ptr = "allow"
-
 # suspicious (12 lints)
 cast_abs_to_unsigned = "allow"
 cast_slice_from_raw_parts = "allow"
@@ -319,4 +312,3 @@ swap_ptr_to_ref = "allow"
 unnecessary_clippy_cfg = "allow"
 unnecessary_option_map_or_else = "allow"
 unnecessary_result_map_or_else = "allow"
-

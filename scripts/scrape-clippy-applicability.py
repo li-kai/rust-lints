@@ -152,7 +152,9 @@ def emit_cargo_toml_snippet(data: dict) -> str:
         lines.append(f"# {group} ({len(group_lints)} lints)")
         for lint in group_lints:
             lines.append(f'{lint} = "allow"')
-        lines.append("")
+    # Remove trailing blank entry left by the last group
+    if lines and lines[-1] == "":
+        lines.pop()
 
     return "\n".join(lines)
 
@@ -188,7 +190,6 @@ def emit_pre_commit_flags(data: dict) -> str:
 
     lines.append(f"  -W clippy::{data['all'][-1]} 2>/dev/null")
 
-    lines.append("")
     return "\n".join(lines)
 
 
