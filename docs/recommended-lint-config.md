@@ -522,12 +522,12 @@ cargo clippy --all-targets -- \
 
 **restriction** (27 lints) — enable individually; four contradictory pairs resolved below
 
-`alloc_instead_of_core` · `as_pointer_underscore` · `as_underscore` · `assertions_on_result_states` · `dbg_macro` · `deref_by_slicing` · `doc_include_without_cfg` · `get_unwrap` · `if_then_some_else_none` · `lossy_float_literal` · `missing_asserts_for_indexing` · `needless_raw_strings` · `non_ascii_literal` · `non_zero_suggestions` · `precedence_bits` · `pub_with_shorthand` · `rest_pat_in_fully_bound_structs` · `return_and_then` · `semicolon_outside_block` · `std_instead_of_alloc` · `std_instead_of_core` · `str_to_string` · `string_lit_chars_any` · `try_err` · `unseparated_literal_suffix` · `unnecessary_safety_comment` · `unused_trait_names`
+`alloc_instead_of_core` · `as_pointer_underscore` · `as_underscore` · `assertions_on_result_states` · `dbg_macro` · `deref_by_slicing` · `doc_include_without_cfg` · `get_unwrap` · `if_then_some_else_none` · `lossy_float_literal` · `missing_asserts_for_indexing` · `needless_raw_strings` · `non_ascii_literal` · `non_zero_suggestions` · `precedence_bits` · `pub_without_shorthand` · `rest_pat_in_fully_bound_structs` · `return_and_then` · `semicolon_outside_block` · `std_instead_of_alloc` · `std_instead_of_core` · `str_to_string` · `string_lit_chars_any` · `try_err` · `unseparated_literal_suffix` · `unnecessary_safety_comment` · `unused_trait_names`
 
 *Contradictory pairs — one from each is omitted:*
 
 - **`needless_return`** (in `clippy::all`) over `implicit_return` — idiomatic Rust uses tail expressions; explicit `return` is for early exits.
-- **`pub_with_shorthand`** over `pub_without_shorthand` — `pub(crate)` is the idiomatic form. `pub(in crate::path)` is for restricting to a specific submodule, not an alternative spelling.
+- **`pub_without_shorthand`** over `pub_with_shorthand` — `pub(super)` is the idiomatic form; the explicit `pub(in super)` spelling adds noise without clarity.
 - **`semicolon_outside_block`** over `semicolon_inside_block` — `{ expr };` keeps the semicolon at the statement boundary where readers scan for it. Rustfmt agrees.
 - **`unseparated_literal_suffix`** over `separated_literal_suffix` — `1u32` is the conventional form in the standard library and rustc. The `_` separator (`1_000_000`) is for digit grouping, not type suffixes.
 

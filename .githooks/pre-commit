@@ -264,7 +264,7 @@ for (( i=0; i<5; i++ )); do
   -W clippy::non_ascii_literal \
   -W clippy::non_zero_suggestions \
   -W clippy::precedence_bits \
-  -W clippy::pub_with_shorthand \
+  -W clippy::pub_without_shorthand \
   -W clippy::rest_pat_in_fully_bound_structs \
   -W clippy::return_and_then \
   -W clippy::semicolon_outside_block \

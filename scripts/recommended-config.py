@@ -183,7 +183,7 @@ CLIPPY_LINTS: OrderedDict[str, list[tuple[str, str]]] = OrderedDict(
 EXCLUDED_FIXABLE_LINTS = {
     "implicit_return",  # contradicts needless_return (keep needless_return)
     "semicolon_inside_block",  # contradicts semicolon_outside_block (keep outside)
-    "pub_without_shorthand",  # contradicts pub_with_shorthand (keep with)
+    "pub_with_shorthand",  # contradicts pub_without_shorthand (keep without)
     "separated_literal_suffix",  # contradicts unseparated_literal_suffix (keep unseparated)
 }
 
