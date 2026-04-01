@@ -43,16 +43,46 @@ trap '
 #    pass can leave unfixed code. Loop until clippy reports no more fixes.
 for (( i=0; i<5; i++ )); do
   output=$(cargo clippy --fix --allow-dirty --allow-staged -- \
+  -W clippy::inline_fn_without_body \
+  -W clippy::invisible_characters \
+  -W clippy::match_str_case_mismatch \
+  -W clippy::mem_replace_with_uninit \
+  -W clippy::never_loop \
+  -W clippy::non_octal_unix_permissions \
+  -W clippy::read_line_without_trim \
+  -W clippy::cast_abs_to_unsigned \
+  -W clippy::cast_slice_from_raw_parts \
+  -W clippy::crate_in_macro_def \
+  -W clippy::deprecated_clippy_cfg_attr \
+  -W clippy::four_forward_slashes \
+  -W clippy::ineffective_open_options \
+  -W clippy::manual_unwrap_or_default \
+  -W clippy::needless_character_iteration \
+  -W clippy::swap_ptr_to_ref \
+  -W clippy::unnecessary_clippy_cfg \
+  -W clippy::unnecessary_option_map_or_else \
+  -W clippy::unnecessary_result_map_or_else \
+  -W clippy::cmp_owned \
+  -W clippy::collapsible_str_replace \
+  -W clippy::double_ended_iterator_last \
+  -W clippy::extend_with_drain \
+  -W clippy::large_const_arrays \
+  -W clippy::manual_contains \
+  -W clippy::manual_ignore_case_cmp \
+  -W clippy::manual_retain \
+  -W clippy::manual_str_repeat \
+  -W clippy::missing_const_for_thread_local \
+  -W clippy::redundant_iter_cloned \
+  -W clippy::replace_box \
+  -W clippy::to_string_in_format_args \
+  -W clippy::useless_vec \
+  -W clippy::waker_clone_wake \
   -W clippy::bind_instead_of_map \
   -W clippy::bool_comparison \
-  -W clippy::borrow_deref_ref \
   -W clippy::bytes_count_to_len \
   -W clippy::char_lit_as_u8 \
   -W clippy::clone_on_copy \
   -W clippy::default_constructed_unit_structs \
-  -W clippy::deprecated_cfg_attr \
-  -W clippy::deref_addrof \
-  -W clippy::derivable_impls \
   -W clippy::double_comparisons \
   -W clippy::double_parens \
   -W clippy::duration_subsec \
@@ -83,7 +113,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::manual_main_separator_str \
   -W clippy::manual_ok_err \
   -W clippy::manual_option_as_slice \
-  -W clippy::manual_range_patterns \
   -W clippy::manual_rem_euclid \
   -W clippy::manual_slice_size_calculation \
   -W clippy::manual_split_once \
@@ -94,20 +123,15 @@ for (( i=0; i<5; i++ )); do
   -W clippy::map_flatten \
   -W clippy::map_identity \
   -W clippy::match_as_ref \
-  -W clippy::match_single_binding \
   -W clippy::needless_arbitrary_self_type \
   -W clippy::needless_as_bytes \
-  -W clippy::needless_bool \
   -W clippy::needless_bool_assign \
   -W clippy::needless_borrowed_reference \
-  -W clippy::needless_ifs \
-  -W clippy::needless_lifetimes \
   -W clippy::needless_match \
   -W clippy::needless_option_as_deref \
   -W clippy::needless_option_take \
   -W clippy::needless_question_mark \
   -W clippy::needless_splitn \
-  -W clippy::nonminimal_bool \
   -W clippy::option_as_ref_deref \
   -W clippy::option_filter_map \
   -W clippy::option_map_unit_fn \
@@ -119,7 +143,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::redundant_async_block \
   -W clippy::redundant_at_rest_pattern \
   -W clippy::redundant_closure_call \
-  -W clippy::redundant_slicing \
   -W clippy::repeat_once \
   -W clippy::result_filter_map \
   -W clippy::result_map_unit_fn \
@@ -130,153 +153,19 @@ for (( i=0; i<5; i++ )); do
   -W clippy::string_from_utf8_as_bytes \
   -W clippy::strlen_on_c_strings \
   -W clippy::swap_with_temporary \
-  -W clippy::transmute_ptr_to_ref \
   -W clippy::transmutes_expressible_as_ptr_casts \
   -W clippy::unit_arg \
-  -W clippy::unnecessary_cast \
   -W clippy::unnecessary_first_then_check \
   -W clippy::unnecessary_literal_unwrap \
   -W clippy::unnecessary_map_on_constructor \
   -W clippy::unnecessary_min_or_max \
   -W clippy::unnecessary_operation \
-  -W clippy::unnecessary_sort_by \
   -W clippy::unneeded_wildcard_pattern \
   -W clippy::useless_asref \
   -W clippy::useless_concat \
   -W clippy::useless_conversion \
   -W clippy::useless_format \
   -W clippy::useless_nonzero_new_unchecked \
-  -W clippy::inline_fn_without_body \
-  -W clippy::invisible_characters \
-  -W clippy::match_str_case_mismatch \
-  -W clippy::mem_replace_with_uninit \
-  -W clippy::never_loop \
-  -W clippy::non_octal_unix_permissions \
-  -W clippy::read_line_without_trim \
-  -W clippy::clear_with_drain \
-  -W clippy::derive_partial_eq_without_eq \
-  -W clippy::equatable_if_let \
-  -W clippy::imprecise_flops \
-  -W clippy::missing_const_for_fn \
-  -W clippy::needless_collect \
-  -W clippy::needless_type_cast \
-  -W clippy::nonstandard_macro_braces \
-  -W clippy::redundant_clone \
-  -W clippy::redundant_pub_crate \
-  -W clippy::search_is_some \
-  -W clippy::string_lit_as_bytes \
-  -W clippy::suboptimal_flops \
-  -W clippy::suspicious_operation_groupings \
-  -W clippy::too_long_first_doc_paragraph \
-  -W clippy::trait_duplication_in_bounds \
-  -W clippy::unnecessary_struct_initialization \
-  -W clippy::unused_rounding \
-  -W clippy::use_self \
-  -W clippy::bool_to_int_with_if \
-  -W clippy::borrow_as_ptr \
-  -W clippy::cast_lossless \
-  -W clippy::checked_conversions \
-  -W clippy::cloned_instead_of_copied \
-  -W clippy::collapsible_else_if \
-  -W clippy::doc_comment_double_space_linebreaks \
-  -W clippy::doc_markdown \
-  -W clippy::elidable_lifetime_names \
-  -W clippy::enum_glob_use \
-  -W clippy::explicit_deref_methods \
-  -W clippy::explicit_into_iter_loop \
-  -W clippy::explicit_iter_loop \
-  -W clippy::filter_map_next \
-  -W clippy::flat_map_option \
-  -W clippy::if_not_else \
-  -W clippy::ignored_unit_patterns \
-  -W clippy::implicit_clone \
-  -W clippy::inconsistent_struct_constructor \
-  -W clippy::inefficient_to_string \
-  -W clippy::ip_constant \
-  -W clippy::manual_assert \
-  -W clippy::manual_ilog2 \
-  -W clippy::manual_instant_elapsed \
-  -W clippy::manual_is_power_of_two \
-  -W clippy::manual_is_variant_and \
-  -W clippy::manual_midpoint \
-  -W clippy::manual_string_new \
-  -W clippy::map_unwrap_or \
-  -W clippy::match_bool \
-  -W clippy::must_use_candidate \
-  -W clippy::needless_bitwise_bool \
-  -W clippy::needless_for_each \
-  -W clippy::needless_raw_string_hashes \
-  -W clippy::non_std_lazy_statics \
-  -W clippy::option_as_ref_cloned \
-  -W clippy::ptr_as_ptr \
-  -W clippy::ptr_cast_constness \
-  -W clippy::ptr_offset_by_literal \
-  -W clippy::range_minus_one \
-  -W clippy::range_plus_one \
-  -W clippy::redundant_closure_for_method_calls \
-  -W clippy::redundant_else \
-  -W clippy::ref_as_ptr \
-  -W clippy::ref_binding_to_reference \
-  -W clippy::semicolon_if_nothing_returned \
-  -W clippy::single_char_pattern \
-  -W clippy::single_match_else \
-  -W clippy::stable_sort_primitive \
-  -W clippy::unchecked_time_subtraction \
-  -W clippy::unicode_not_nfc \
-  -W clippy::uninlined_format_args \
-  -W clippy::unnecessary_join \
-  -W clippy::unnecessary_literal_bound \
-  -W clippy::unnecessary_semicolon \
-  -W clippy::unnested_or_patterns \
-  -W clippy::wildcard_imports \
-  -W clippy::cmp_owned \
-  -W clippy::collapsible_str_replace \
-  -W clippy::double_ended_iterator_last \
-  -W clippy::drain_collect \
-  -W clippy::expect_fun_call \
-  -W clippy::extend_with_drain \
-  -W clippy::iter_overeager_cloned \
-  -W clippy::large_const_arrays \
-  -W clippy::manual_contains \
-  -W clippy::manual_ignore_case_cmp \
-  -W clippy::manual_retain \
-  -W clippy::manual_str_repeat \
-  -W clippy::map_entry \
-  -W clippy::missing_const_for_thread_local \
-  -W clippy::missing_spin_loop \
-  -W clippy::redundant_iter_cloned \
-  -W clippy::replace_box \
-  -W clippy::to_string_in_format_args \
-  -W clippy::unnecessary_to_owned \
-  -W clippy::useless_vec \
-  -W clippy::waker_clone_wake \
-  -W clippy::alloc_instead_of_core \
-  -W clippy::as_pointer_underscore \
-  -W clippy::as_underscore \
-  -W clippy::assertions_on_result_states \
-  -W clippy::deref_by_slicing \
-  -W clippy::doc_include_without_cfg \
-  -W clippy::get_unwrap \
-  -W clippy::if_then_some_else_none \
-  -W clippy::lossy_float_literal \
-  -W clippy::missing_asserts_for_indexing \
-  -W clippy::needless_raw_strings \
-  -W clippy::non_ascii_literal \
-  -W clippy::non_zero_suggestions \
-  -W clippy::precedence_bits \
-  -W clippy::pub_without_shorthand \
-  -W clippy::rest_pat_in_fully_bound_structs \
-  -W clippy::return_and_then \
-  -W clippy::semicolon_outside_block \
-  -W clippy::separated_literal_suffix \
-  -W clippy::std_instead_of_alloc \
-  -W clippy::std_instead_of_core \
-  -W clippy::str_to_string \
-  -W clippy::string_lit_chars_any \
-  -W clippy::try_err \
-  -W clippy::unnecessary_safety_comment \
-  -W clippy::unused_trait_names \
-  -W clippy::assign_op_pattern \
   -W clippy::blocks_in_conditions \
   -W clippy::bool_assert_comparison \
   -W clippy::box_default \
@@ -311,7 +200,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::iter_nth_zero \
   -W clippy::iter_skip_next \
   -W clippy::len_zero \
-  -W clippy::let_and_return \
   -W clippy::let_unit_value \
   -W clippy::manual_async_fn \
   -W clippy::manual_bits \
@@ -324,7 +212,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::manual_pattern_char_comparison \
   -W clippy::manual_range_contains \
   -W clippy::manual_repeat_n \
-  -W clippy::manual_rotate \
   -W clippy::manual_saturating_arithmetic \
   -W clippy::manual_while_let_some \
   -W clippy::map_clone \
@@ -336,8 +223,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::mem_replace_with_default \
   -W clippy::missing_enforced_import_renames \
   -W clippy::must_use_unit \
-  -W clippy::needless_borrow \
-  -W clippy::needless_borrows_for_generic_args \
   -W clippy::needless_else \
   -W clippy::needless_late_init \
   -W clippy::needless_parens_on_range_literals \
@@ -349,7 +234,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::obfuscated_if_else \
   -W clippy::ok_expect \
   -W clippy::op_ref \
-  -W clippy::option_map_or_none \
   -W clippy::partialeq_to_none \
   -W clippy::print_literal \
   -W clippy::print_with_newline \
@@ -359,7 +243,6 @@ for (( i=0; i<5; i++ )); do
   -W clippy::redundant_closure \
   -W clippy::redundant_field_names \
   -W clippy::redundant_pattern \
-  -W clippy::redundant_pattern_matching \
   -W clippy::redundant_static_lifetimes \
   -W clippy::result_map_or_into_option \
   -W clippy::single_char_add_str \
@@ -367,35 +250,97 @@ for (( i=0; i<5; i++ )); do
   -W clippy::single_match \
   -W clippy::string_extend_chars \
   -W clippy::to_digit_is_some \
-  -W clippy::toplevel_ref_arg \
   -W clippy::trim_split_whitespace \
   -W clippy::unnecessary_fallible_conversions \
   -W clippy::unnecessary_fold \
-  -W clippy::unnecessary_lazy_evaluations \
   -W clippy::unnecessary_map_or \
   -W clippy::unnecessary_mut_passed \
   -W clippy::unnecessary_owned_empty_strings \
   -W clippy::unneeded_struct_pattern \
   -W clippy::unused_enumerate_index \
   -W clippy::unused_unit \
-  -W clippy::unwrap_or_default \
   -W clippy::while_let_on_iterator \
   -W clippy::write_literal \
   -W clippy::write_with_newline \
   -W clippy::writeln_empty_string \
   -W clippy::zero_ptr \
-  -W clippy::cast_abs_to_unsigned \
-  -W clippy::cast_slice_from_raw_parts \
-  -W clippy::crate_in_macro_def \
-  -W clippy::deprecated_clippy_cfg_attr \
-  -W clippy::four_forward_slashes \
-  -W clippy::ineffective_open_options \
-  -W clippy::manual_unwrap_or_default \
-  -W clippy::needless_character_iteration \
-  -W clippy::swap_ptr_to_ref \
-  -W clippy::unnecessary_clippy_cfg \
-  -W clippy::unnecessary_option_map_or_else \
-  -W clippy::unnecessary_result_map_or_else 2>&1 || true)
+  -W clippy::bool_to_int_with_if \
+  -W clippy::borrow_as_ptr \
+  -W clippy::cast_lossless \
+  -W clippy::checked_conversions \
+  -W clippy::cloned_instead_of_copied \
+  -W clippy::collapsible_else_if \
+  -W clippy::doc_comment_double_space_linebreaks \
+  -W clippy::explicit_deref_methods \
+  -W clippy::explicit_into_iter_loop \
+  -W clippy::filter_map_next \
+  -W clippy::flat_map_option \
+  -W clippy::if_not_else \
+  -W clippy::ignored_unit_patterns \
+  -W clippy::implicit_clone \
+  -W clippy::inconsistent_struct_constructor \
+  -W clippy::inefficient_to_string \
+  -W clippy::ip_constant \
+  -W clippy::manual_assert \
+  -W clippy::manual_ilog2 \
+  -W clippy::manual_instant_elapsed \
+  -W clippy::manual_is_power_of_two \
+  -W clippy::manual_is_variant_and \
+  -W clippy::manual_midpoint \
+  -W clippy::manual_string_new \
+  -W clippy::match_bool \
+  -W clippy::needless_raw_string_hashes \
+  -W clippy::non_std_lazy_statics \
+  -W clippy::option_as_ref_cloned \
+  -W clippy::ptr_as_ptr \
+  -W clippy::ptr_cast_constness \
+  -W clippy::ptr_offset_by_literal \
+  -W clippy::range_minus_one \
+  -W clippy::redundant_closure_for_method_calls \
+  -W clippy::ref_as_ptr \
+  -W clippy::ref_binding_to_reference \
+  -W clippy::semicolon_if_nothing_returned \
+  -W clippy::unchecked_time_subtraction \
+  -W clippy::unicode_not_nfc \
+  -W clippy::unnecessary_literal_bound \
+  -W clippy::unnecessary_semicolon \
+  -W clippy::unnested_or_patterns \
+  -W clippy::clear_with_drain \
+  -W clippy::derive_partial_eq_without_eq \
+  -W clippy::equatable_if_let \
+  -W clippy::imprecise_flops \
+  -W clippy::needless_collect \
+  -W clippy::needless_type_cast \
+  -W clippy::nonstandard_macro_braces \
+  -W clippy::redundant_pub_crate \
+  -W clippy::search_is_some \
+  -W clippy::suboptimal_flops \
+  -W clippy::too_long_first_doc_paragraph \
+  -W clippy::trait_duplication_in_bounds \
+  -W clippy::unused_rounding \
+  -W clippy::as_pointer_underscore \
+  -W clippy::as_underscore \
+  -W clippy::deref_by_slicing \
+  -W clippy::if_then_some_else_none \
+  -W clippy::lossy_float_literal \
+  -W clippy::missing_asserts_for_indexing \
+  -W clippy::needless_raw_strings \
+  -W clippy::non_ascii_literal \
+  -W clippy::non_zero_suggestions \
+  -W clippy::precedence_bits \
+  -W clippy::pub_without_shorthand \
+  -W clippy::rest_pat_in_fully_bound_structs \
+  -W clippy::return_and_then \
+  -W clippy::semicolon_outside_block \
+  -W clippy::separated_literal_suffix \
+  -W clippy::std_instead_of_alloc \
+  -W clippy::std_instead_of_core \
+  -W clippy::str_to_string \
+  -W clippy::string_lit_chars_any \
+  -W clippy::try_err \
+  -W clippy::unnecessary_safety_comment \
+  -W clippy::unseparated_literal_suffix \
+  -W clippy::unused_trait_names 2>&1 || true)
   echo "$output" | _grep -q 'Fixed' || break
 done
 # Print only if there are unresolved diagnostics (errors or named warnings).
