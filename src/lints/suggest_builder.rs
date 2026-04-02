@@ -2,6 +2,7 @@ use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::ty::implements_trait;
 use rustc_hir::{GenericParamKind, Item, ItemKind, LangItem, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
+use rustc_middle::ty;
 use rustc_span::Symbol;
 
 use crate::config::SuggestBuilderConfig;
@@ -93,6 +94,35 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
         if let Some(default_id) = cx.tcx.get_diagnostic_item(rustc_span::sym::Default)
             && implements_trait(cx, ty, default_id, &[])
         {
+            return;
+        }
+        // Skip structs with no inherent constructors (associated fns whose
+        // return type contains Self). Without a constructor the struct is
+        // built via literals — a builder suggestion is noise.
+        let struct_def_id = item.owner_id.to_def_id();
+        let has_ctor = cx.tcx.inherent_impls(struct_def_id).iter().any(|impl_id| {
+            cx.tcx
+                .associated_items(*impl_id)
+                .in_definition_order()
+                .filter(|assoc| matches!(assoc.kind, ty::AssocKind::Fn { .. }))
+                .any(|assoc| {
+                    let ret_ty = cx
+                        .tcx
+                        .fn_sig(assoc.def_id)
+                        .instantiate_identity()
+                        .output()
+                        .skip_binder();
+                    ret_ty
+                        .ty_adt_def()
+                        .is_some_and(|adt| adt.did() == struct_def_id)
+                        || ret_ty.walk().any(|arg| {
+                            arg.as_type().is_some_and(|t| {
+                                t.ty_adt_def().is_some_and(|adt| adt.did() == struct_def_id)
+                            })
+                        })
+                })
+        });
+        if !has_ctor {
             return;
         }
         span_lint_and_help(
