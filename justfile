@@ -4,11 +4,12 @@
 
 set positional-arguments := true
 set dotenv-load := true
+set quiet := true
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Default: show all recipes
 default:
-    @just --list
+    just --list
 
 # Build the lint library
 build *args:
