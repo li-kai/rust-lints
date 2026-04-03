@@ -32,9 +32,23 @@ pub fn parse_boxed_send_sync(_input: &str) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
+// Should trigger: pub(crate) with unstructured error
+pub(crate) fn pub_crate_string_err(_path: &str) -> Result<(), String> {
+    Ok(())
+}
+
 // Should NOT trigger: private function
 fn private_parse(_input: &str) -> Result<(), String> {
     Ok(())
+}
+
+// Should NOT trigger: pub(super) is narrower than pub(crate)
+mod step1_pub_super {
+    mod inner {
+        pub(super) fn pub_super_string_err(_input: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
 }
 
 // Should NOT trigger: typed error
@@ -104,6 +118,20 @@ impl fmt::Display for SimpleError {
 }
 impl std::error::Error for SimpleError {}
 
+// Should trigger step 2: pub(crate) type with error field but no source()
+#[derive(Debug)]
+pub(crate) enum PubCrateConfigError {
+    Io(std::io::Error),
+}
+impl fmt::Display for PubCrateConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(_) => write!(f, "pub(crate) config io error"),
+        }
+    }
+}
+impl std::error::Error for PubCrateConfigError {}
+
 // ══════════════════════════════════════════════════════════════════════
 // Step 3 — Duplicated source in Display
 // (Negative case covered by ConfigErrorWithSource above.)
@@ -154,9 +182,23 @@ pub enum ParseProblem {
     InvalidSyntax,
 }
 
+// Should trigger step 5: pub(crate) type named *Error without Error impl
+pub(crate) enum PubCrateParseError {
+    InvalidSyntax,
+}
+
 // Should NOT trigger: private type
 enum InternalError {
     Oops,
+}
+
+// Should NOT trigger step 5: pub(super) is narrower than pub(crate)
+mod step5_pub_super {
+    mod inner {
+        pub(super) enum PubSuperErr {
+            Oops,
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════

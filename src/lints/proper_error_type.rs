@@ -9,6 +9,7 @@ use rustc_hir::intravisit::FnKind;
 use rustc_hir::{Body, ExprKind, FnDecl, Item, ItemKind, LangItem};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, ExistentialPredicate, Ty};
+use rustc_span::def_id::CRATE_DEF_ID;
 use rustc_span::{Span, Symbol, sym};
 
 struct ErrorImplInfo {
@@ -85,17 +86,20 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
         span: Span,
         def_id: rustc_hir::def_id::LocalDefId,
     ) {
-        // Only lint public, non-test, named functions that aren't macro-generated,
-        // trait method implementations, or binary entry points.
+        // Only lint pub/pub(crate), non-test, named functions that aren't
+        // macro-generated, trait method implementations, or binary entry points.
         if span.from_expansion()
             || is_def_id_trait_method(cx, def_id)
             || is_entrypoint_fn(cx, def_id.to_def_id())
-            || !cx.tcx.visibility(def_id.to_def_id()).is_public()
             || is_in_cfg_test(cx.tcx, cx.tcx.local_def_id_to_hir_id(def_id))
             || matches!(kind, FnKind::Closure)
         {
             return;
         }
+
+        let Some(vis) = vis_if_at_least_pub_crate(cx, def_id.to_def_id()) else {
+            return;
+        };
 
         let ret_ty = return_ty(cx, rustc_hir::OwnerId { def_id });
         let ty::Adt(adt, args) = ret_ty.kind() else {
@@ -114,12 +118,17 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
 
         match kind {
             UnstructuredKind::Basic(name) => {
+                let vis_label = if vis.is_public() {
+                    "public"
+                } else {
+                    "`pub(crate)`"
+                };
                 span_lint_and_help(
                     cx,
                     PROPER_ERROR_TYPE,
                     ret_span,
                     format!(
-                        "public function returns `Result<_, {name}>` — use a type that implements `Error`"
+                        "{vis_label} function returns `Result<_, {name}>` — use a type that implements `Error`"
                     ),
                     None,
                     "define an error enum with `#[derive(thiserror::Error)]`",
@@ -184,6 +193,33 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
     }
 }
 
+/// Returns the visibility when an item has explicit `pub` or `pub(crate)` visibility.
+///
+/// Private items at the crate root share the same semantic visibility
+/// (`Restricted(CRATE_DEF_ID)`) as `pub(crate)` items, so we additionally
+/// check that the HIR node carries a non-empty `vis_span` (i.e. the user
+/// actually wrote a visibility keyword).
+fn vis_if_at_least_pub_crate(
+    cx: &LateContext<'_>,
+    def_id: rustc_hir::def_id::DefId,
+) -> Option<ty::Visibility<rustc_hir::def_id::DefId>> {
+    let vis = cx.tcx.visibility(def_id);
+    if vis.is_public() {
+        return Some(vis);
+    }
+    if vis != ty::Visibility::Restricted(CRATE_DEF_ID.to_def_id()) {
+        return None;
+    }
+    // Semantic visibility is pub(crate) — verify an explicit keyword exists.
+    def_id.as_local().is_some_and(|local| {
+        match cx.tcx.hir_node_by_def_id(local) {
+            rustc_hir::Node::Item(item) => !item.vis_span.is_empty(),
+            rustc_hir::Node::ImplItem(ii) => ii.vis_span().is_some(),
+            _ => false,
+        }
+    }).then_some(vis)
+}
+
 impl ProperErrorType {
     /// Check if `err_ty` is one of the unstructured error patterns.
     fn classify_unstructured<'tcx>(
@@ -244,9 +280,9 @@ impl ProperErrorType {
             return;
         }
 
-        // Only lint public types outside of test code; private types don't form
-        // part of the library's API surface.
-        if !cx.tcx.visibility(item.owner_id.to_def_id()).is_public()
+        // Only lint types that are at least pub(crate) outside of test code;
+        // narrower types don't form part of the library's API surface.
+        if vis_if_at_least_pub_crate(cx, item.owner_id.to_def_id()).is_none()
             || is_in_cfg_test(cx.tcx, cx.tcx.local_def_id_to_hir_id(item.owner_id.def_id))
         {
             return;
@@ -314,8 +350,11 @@ impl ProperErrorType {
                 }
             }
 
-            // Step 2: Missing source() — emit immediately
-            if !has_source && !source_field_names.is_empty() {
+            // Step 2: Missing source() — emit for pub and pub(crate) types
+            if !has_source
+                && !source_field_names.is_empty()
+                && vis_if_at_least_pub_crate(cx, adt_did).is_some()
+            {
                 let type_name = cx.tcx.item_name(adt_did);
                 span_lint_and_help(
                     cx,
