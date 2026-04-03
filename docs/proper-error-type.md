@@ -6,7 +6,9 @@ Flags error types in public APIs that are incomplete, unstructured, or missing e
 
 ## Why
 
-Error handling is a contract between a function and its callers. When that contract is incomplete:
+Error handling is a contract between a function and its callers. In large crates, `pub(crate)` functions and types form an internal API surface with many consumers who face the same problems as external callers — they cannot match on variants, compose errors with `?`, or get useful error chains in logs. This lint therefore covers both `pub` and `pub(crate)` visibility (see [Skip conditions](#skip-conditions) for exceptions).
+
+When that contract is incomplete:
 
 - **Unstructured errors** — `String`, `&str`, and `Box<dyn Error>` discard type information. Callers cannot distinguish failure modes without parsing text, and any wording change silently breaks them.
 - **Broken error chains** — manual `impl Error` often omits `source()`, preventing logging frameworks and `anyhow`/`eyre` reporters from walking the causal chain.
@@ -32,9 +34,9 @@ No existing Clippy lint covers this space:
 
 ### Step 1 — Unstructured error types
 
-Flags public functions returning `Result<T, E>` where `E` is `String`, `&str`, `Cow<'_, str>`, or `Box<dyn Error>` (including `Box<dyn Error + Send + Sync>`).
+Flags `pub` and `pub(crate)` functions returning `Result<T, E>` where `E` is `String`, `&str`, `Cow<'_, str>`, or `Box<dyn Error>` (including `Box<dyn Error + Send + Sync>`).
 
-Also flags `anyhow::Error` and `miette::Report` in effectively public signatures — items reachable from the crate root per `tcx.effective_visibilities()`. These types are acceptable in binaries and internal functions but not on library API surfaces.
+Also flags `anyhow::Error` and `miette::Report` in effectively public signatures — items reachable from the crate root per `tcx.effective_visibilities()`. These types are designed for application-internal use, so they are acceptable in `pub(crate)` and narrower functions but not on library API surfaces.
 
 ```rust
 // Triggers
@@ -45,6 +47,10 @@ pub fn parse(input: &str) -> Result<Config, String> { .. }
 pub fn run(cmd: &str) -> Result<(), Box<dyn Error>> { .. }
 //~^ WARNING: public function returns `Result<_, Box<dyn Error>>` — use a type that implements `Error`
 
+// Triggers — pub(crate) with unstructured error
+pub(crate) fn load_config(path: &Path) -> Result<Config, String> { .. }
+//~^ WARNING: `pub(crate)` function returns `Result<_, String>` — use a type that implements `Error`
+
 // Triggers — anyhow/miette in an effectively public function
 pub fn load(path: &Path) -> anyhow::Result<Config> { .. }
 //~^ WARNING: effectively public function returns `anyhow::Error` — use a typed error
@@ -53,8 +59,8 @@ pub fn check(input: &str) -> miette::Result<()> { .. }
 ```
 
 ```rust
-// OK — anyhow in a non-effectively-public function
-pub fn helper() -> anyhow::Result<()> { .. }  // inside pub(crate) module
+// OK — anyhow in a pub(crate) function (designed for application-internal use)
+pub(crate) fn helper() -> anyhow::Result<()> { .. }
 
 // OK — binary entry point
 fn main() -> anyhow::Result<()> { .. }
@@ -62,19 +68,27 @@ fn main() -> anyhow::Result<()> { .. }
 // OK — typed error
 pub fn parse(input: &str) -> Result<Config, ParseError> { .. }
 
+// OK — pub(super) or narrower visibility
+pub(super) fn helper() -> Result<(), String> { .. }
+
 // OK — private function
 fn helper() -> Result<(), String> { .. }
 ```
 
 ### Step 2 — Missing `source()`
 
-Flags manual `impl Error` blocks that do not override `source()` when the type has fields that implement `Error`.
+Flags manual `impl Error` blocks that do not override `source()` when the type has fields that implement `Error`. Applies to both `pub` and `pub(crate)` types.
 
 ```rust
 // Triggers
 pub enum ConfigError { Io(io::Error) }
 impl std::error::Error for ConfigError {}
 //~^ WARNING: `ConfigError` wraps error types but does not implement `source()`
+
+// Triggers — pub(crate) type
+pub(crate) enum InternalError { Io(io::Error) }
+impl std::error::Error for InternalError {}
+//~^ WARNING: `InternalError` wraps error types but does not implement `source()`
 ```
 
 ```rust
@@ -160,7 +174,7 @@ pub enum ConfigError {
 
 ### Step 5 — `*Error` types without `Error` impl
 
-Flags public types whose name ends in `Error` or `Err` that do not implement `std::error::Error`.
+Flags `pub` and `pub(crate)` types whose name ends in `Error` or `Err` that do not implement `std::error::Error`.
 
 ```rust
 // Triggers
@@ -173,6 +187,10 @@ pub enum ParseError {
 // Triggers
 pub struct ConnectionError { pub message: String, pub code: u32 }
 //~^ WARNING: `ConnectionError` is named as an error type but does not implement `std::error::Error`
+
+// Triggers — pub(crate) type
+pub(crate) enum InternalError { Oops }
+//~^ WARNING: `InternalError` is named as an error type but does not implement `std::error::Error`
 ```
 
 ```rust
@@ -186,6 +204,9 @@ pub enum ParseError {
 // OK — not named *Error
 pub enum ParseProblem { InvalidSyntax }
 
+// OK — pub(super) or narrower visibility
+pub(super) enum LocalError { Oops }
+
 // OK — private type
 enum InternalError { Oops }
 ```
@@ -195,7 +216,8 @@ enum InternalError { Oops }
 | Condition | Reason |
 |---|---|
 | `span.from_expansion()` | Macro-generated code |
-| Non-`pub` functions (step 1) | Private functions may use `String` errors |
+| `pub(super)` or narrower visibility (steps 1, 2, 5) | Local enough that callers can coordinate refactors directly |
+| `pub(crate)` + `anyhow`/`miette` (step 1) | These types are designed for application-internal use |
 | Not effectively public + `anyhow`/`miette` (step 1) | Acceptable in binaries and internal code |
 | Trait impl methods | Signature dictated by the trait |
 | `#[cfg(test)]` modules | Test helpers commonly use informal error types |
@@ -203,5 +225,4 @@ enum InternalError { Oops }
 | `#[derive(thiserror::Error)]` (steps 2–5) | thiserror handles correctness — proc-macro generated impls have expansion spans, so `span.from_expansion()` skips them |
 | No fields implementing `Error` (step 2) | No source to chain |
 | `#[error(transparent)]` (step 3) | Intentionally forwards both `Display` and `source()` — handled implicitly since generated impls are from expansion |
-| Non-`pub` types (step 5) | Private types do not form a public contract |
 
