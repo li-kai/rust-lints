@@ -20,17 +20,25 @@ echo "$staged" | _grep -q '\.rs$|Cargo\.toml$' || exit 0
 
 stash_name="pre-commit-$(date +%s)"
 git stash push --keep-index --include-untracked -q -m "$stash_name"
-# Restore the user's working tree unconditionally. Plain `git stash pop`
-# merges, which conflicts when tools mutated the same files. Instead:
+# Restore the user's working tree unconditionally:
 #   (a) snapshot the fixed index to a tree object
 #   (b) hard-reset working tree + index to HEAD (the stash's base)
-#   (c) pop the stash — applies cleanly because the base matches
-#   (d) re-read the fixed index and checkout fixed files into working tree
+#   (c) remove .tmp files the awk step may have orphaned
+#   (d) pop the stash to restore unstaged and untracked content
+#   (e) re-read the fixed index and checkout fixed files into working tree
 trap '
+  set +e
   if git stash list | grep -qF "$stash_name"; then
     fixed_tree=$(git write-tree)
     git reset --hard -q HEAD
-    git stash pop -q
+    echo "$staged" | _grep "\.(rs|ts|tsx|js|jsx)$" | while IFS= read -r f; do
+      rm -f "${f}.tmp"
+    done
+    if ! git stash pop -q; then
+      echo "warning: stash pop failed; recovering working tree from stash" >&2
+      git checkout "stash@{0}" -- . 2>/dev/null
+      git stash drop -q 2>/dev/null
+    fi
     if [[ -n "${fixed_tree:-}" ]]; then
       git read-tree "$fixed_tree"
       echo "$staged" | xargs -r git checkout-index -f --
