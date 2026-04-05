@@ -58,6 +58,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::module_dependencies::MODULE_DEPENDENCIES_UNLISTED,
         lints::module_dependencies::MODULE_DEPENDENCIES_DEAD_EDGE,
         lints::topological_ordering::TOPOLOGICAL_ORDERING,
+        lints::unsafe_send_missing_drop::UNSAFE_SEND_MISSING_DROP,
     ]);
     lint_store.register_pre_expansion_pass(|| {
         Box::new(lints::bon_builder_collector::BonBuilderCollector)
@@ -87,4 +88,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store.register_late_pass(|_| Box::new(lints::acyclic_modules::AcyclicModules::new()));
     lint_store
         .register_late_pass(|_| Box::new(lints::topological_ordering::TopologicalOrdering::new()));
+    lint_store.register_late_pass(|_| {
+        Box::new(lints::unsafe_send_missing_drop::UnsafeSendMissingDrop::new())
+    });
 }

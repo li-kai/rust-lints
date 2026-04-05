@@ -1,0 +1,43 @@
+warning: `Handle` has `unsafe impl Send` but contains `!Send` fields and no `Drop` impl
+  --> $DIR/main.rs:19:1
+   |
+LL | struct Handle {
+   | ^^^^^^^^^^^^^
+   |
+   = help: the implicit destructor drops `!Send` fields on the caller's thread; implement `Drop` to ensure `!Send` fields are destroyed in the correct context
+   = note: `#[warn(unsafe_send_missing_drop)]` on by default
+
+warning: `Multi` has `unsafe impl Send` but contains `!Send` fields and no `Drop` impl
+  --> $DIR/main.rs:26:1
+   |
+LL | struct Multi {
+   | ^^^^^^^^^^^^
+   |
+   = help: the implicit destructor drops `!Send` fields on the caller's thread; implement `Drop` to ensure `!Send` fields are destroyed in the correct context
+
+warning: `Nested` has `unsafe impl Send` but contains `!Send` fields and no `Drop` impl
+  --> $DIR/main.rs:34:1
+   |
+LL | struct Nested {
+   | ^^^^^^^^^^^^^
+   |
+   = help: the implicit destructor drops `!Send` fields on the caller's thread; implement `Drop` to ensure `!Send` fields are destroyed in the correct context
+
+warning: `Generic` has `unsafe impl Send` but contains `!Send` fields and no `Drop` impl
+  --> $DIR/main.rs:42:1
+   |
+LL | struct Generic<T> {
+   | ^^^^^^^^^^^^^^^^^
+   |
+   = help: the implicit destructor drops `!Send` fields on the caller's thread; implement `Drop` to ensure `!Send` fields are destroyed in the correct context
+
+warning: `WithSync` has `unsafe impl Send` but contains `!Send` fields and no `Drop` impl
+  --> $DIR/main.rs:49:1
+   |
+LL | struct WithSync {
+   | ^^^^^^^^^^^^^^^
+   |
+   = help: the implicit destructor drops `!Send` fields on the caller's thread; implement `Drop` to ensure `!Send` fields are destroyed in the correct context
+
+warning: 5 warnings emitted
+

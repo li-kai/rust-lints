@@ -18,6 +18,7 @@ mod suppression;
 pub mod topological_ordering;
 pub mod unbounded_channel;
 pub mod unclear_exports;
+pub mod unsafe_send_missing_drop;
 pub mod unstructured_log_fields;
 
 use core::cell::RefCell;

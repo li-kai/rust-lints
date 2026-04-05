@@ -96,6 +96,10 @@ name = "unbounded_channel"
 path = "ui/unbounded_channel/main.rs"
 
 [[example]]
+name = "unsafe_send_missing_drop"
+path = "ui/unsafe_send_missing_drop/main.rs"
+
+[[example]]
 name = "unstructured_log_fields"
 path = "ui/unstructured_log_fields/main.rs"
 
