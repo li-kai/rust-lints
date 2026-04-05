@@ -8,6 +8,7 @@ pub mod global_side_effect;
 mod hir_refs;
 pub mod map_init_then_insert;
 pub mod module_dependencies;
+pub mod await_holding_unsendable;
 pub mod needless_builder;
 pub mod panic_in_drop;
 pub mod proper_error_type;

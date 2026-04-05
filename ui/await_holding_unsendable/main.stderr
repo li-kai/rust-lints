@@ -1,0 +1,29 @@
+error: `Entered` held across `.await` — corrupted span nesting — events on other tasks attributed to wrong span
+  --> $DIR/main.rs:20:9
+   |
+LL |     let _entered = span.enter(); //~ ERROR: `Entered` held across `.await`
+   |         ^^^^^^^^
+   |
+   = help: scope the guard so it is dropped before the `.await`, or use an async-aware alternative
+note: the value is held across these await points
+  --> $DIR/main.rs:21:15
+   |
+LL |     do_work().await;
+   |               ^^^^^
+   = note: `#[deny(await_holding_unsendable)]` on by default
+
+error: `Entered` held across `.await` — corrupted span nesting — events on other tasks attributed to wrong span
+  --> $DIR/main.rs:27:13
+   |
+LL |         let _entered = span.enter(); //~ ERROR: `Entered` held across `.await`
+   |             ^^^^^^^^
+   |
+   = help: scope the guard so it is dropped before the `.await`, or use an async-aware alternative
+note: the value is held across these await points
+  --> $DIR/main.rs:28:19
+   |
+LL |         do_work().await;
+   |                   ^^^^^
+
+error: aborting due to 2 previous errors
+

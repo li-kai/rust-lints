@@ -1,8 +1,8 @@
-# `must_not_suspend`
+# `await_holding_unsendable`
 
 **Level:** `deny`
 
-Flags values of specific types that are held alive across `.await` points. Supersedes Clippy's `await_holding_lock` and `await_holding_refcell_ref` with a single configurable lint.
+Flags values of specific types that are held alive across `.await` points. Complements Clippy's `await_holding_lock` and `await_holding_refcell_ref` by covering types Clippy doesn't know about: tracing span guards, parking_lot locks, connection pool handles, crossbeam epoch guards, and any custom types via configuration.
 
 ## Why
 
@@ -36,20 +36,7 @@ The lint fires when a value of a flagged type is live across an `.await` express
 
 ## Default types
 
-### `std::sync` — standard library locks
-
-| Type | Risk |
-|---|---|
-| `std::sync::MutexGuard` | Deadlock — blocks executor thread on contention |
-| `std::sync::RwLockReadGuard` | Deadlock — blocks executor thread on contention |
-| `std::sync::RwLockWriteGuard` | Deadlock — blocks executor thread on contention |
-
-### `std::cell` — runtime borrow checking
-
-| Type | Risk |
-|---|---|
-| `std::cell::Ref` | Panic — concurrent `borrow_mut()` panics while `Ref` is alive |
-| `std::cell::RefMut` | Panic — concurrent `borrow()` panics while `RefMut` is alive |
+Standard library guards (`MutexGuard`, `RwLockReadGuard`, `RwLockWriteGuard`) and `RefCell` refs (`Ref`, `RefMut`) are intentionally **not** included — Clippy's `await_holding_lock` and `await_holding_refcell_ref` already cover them with diagnostic-item-based matching that is more robust than path-string matching. Keep those Clippy lints enabled alongside this one.
 
 ### `parking_lot` — alternative lock guards
 
@@ -101,63 +88,26 @@ The lint fires when a value of a flagged type is live across an `.await` express
 ### Fires
 
 ```rust
-async fn process(mtx: &std::sync::Mutex<Vec<Job>>) {
-    let guard = mtx.lock().unwrap();
-    //~^ ERROR: `MutexGuard` held across `.await` — this can deadlock the executor
-    do_work(guard.last()).await;
-}
-```
-
-```rust
-async fn process(mtx: &std::sync::Mutex<Vec<Job>>) {
-    let guard = mtx.lock().unwrap();
-    //~^ ERROR: `MutexGuard` held across `.await` — this can deadlock the executor
-    let job = guard.last().cloned();
-    drop(guard); // explicit drop does not help — guard's scope encloses the .await
-    do_work(job).await;
-}
-```
-
-```rust
 async fn traced() {
     let span = tracing::info_span!("op");
     let _entered = span.enter();
-    //~^ ERROR: `Entered` held across `.await` — span nesting will be corrupted
+    //~^ ERROR: `Entered` held across `.await` — corrupted span nesting
     do_work().await;
 }
 ```
 
 ```rust
-async fn borrow(cell: &RefCell<Config>) {
-    let cfg = cell.borrow();
-    //~^ ERROR: `Ref` held across `.await` — concurrent borrows will panic
-    fetch(cfg.url()).await;
+async fn pool(pool: &r2d2::Pool<MyManager>) {
+    let conn = pool.get().unwrap();
+    //~^ ERROR: `PooledConnection` held across `.await` — pool starvation
+    fetch(&conn).await;
 }
 ```
 
 ### Does not fire
 
 ```rust
-// Guard scoped before .await.
-async fn good(mtx: &std::sync::Mutex<Vec<Job>>) {
-    let job = {
-        let guard = mtx.lock().unwrap();
-        guard.last().cloned()
-    };
-    do_work(job).await; // OK — guard already dropped
-}
-```
-
-```rust
-// Using async-aware mutex — safe to hold across .await.
-async fn good(mtx: &tokio::sync::Mutex<Vec<Job>>) {
-    let guard = mtx.lock().await;
-    do_work(guard.last()).await; // OK — tokio::sync::MutexGuard is designed for this
-}
-```
-
-```rust
-// Tracing's async-aware instrument pattern.
+// Tracing's async-aware instrument pattern — no Entered guard.
 async fn good() {
     do_work()
         .instrument(tracing::info_span!("op"))
@@ -166,10 +116,22 @@ async fn good() {
 ```
 
 ```rust
-// No .await in scope — synchronous code is fine.
-fn sync_fn(mtx: &std::sync::Mutex<Data>) {
-    let guard = mtx.lock().unwrap();
-    process(&guard); // OK — not async
+// Entered scoped before .await.
+async fn good() {
+    let span = tracing::info_span!("op");
+    {
+        let _entered = span.enter();
+        // sync work under the span
+    }
+    do_work().await; // OK — entered already dropped
+}
+```
+
+```rust
+// Synchronous code — no async context.
+fn sync_fn() {
+    let span = tracing::info_span!("op");
+    let _entered = span.enter(); // OK — not async
 }
 ```
 
@@ -178,10 +140,10 @@ fn sync_fn(mtx: &std::sync::Mutex<Data>) {
 #[cfg(test)]
 mod tests {
     #[tokio::test]
-    async fn test_lock() {
-        let mtx = std::sync::Mutex::new(42);
-        let guard = mtx.lock().unwrap();
-        tokio::time::sleep(Duration::from_millis(1)).await; // OK — test code
+    async fn test_span() {
+        let span = tracing::info_span!("test");
+        let _entered = span.enter();
+        do_work().await; // OK — test code
     }
 }
 ```
@@ -189,7 +151,7 @@ mod tests {
 ## Configuration
 
 ```toml
-[must_not_suspend]
+[await_holding_unsendable]
 # Additional fully-qualified type paths to flag beyond the built-in defaults.
 # additional_types = ["my_crate::ConnectionGuard"]
 
@@ -202,20 +164,17 @@ mod tests {
 | `additional_types` | `Vec<String>` | `[]` | Extra type paths to flag when held across `.await` |
 | `skip_default_types` | `bool` | `false` | If `true`, only `additional_types` are checked |
 
-## Superseded Clippy lints
+## Relationship to Clippy lints
 
-Disable these Clippy lints to avoid duplicate diagnostics:
+This lint **complements** Clippy — keep both enabled, no duplicates:
 
-```toml
-[workspace.lints.clippy]
-await_holding_lock        = "allow"  # superseded by must_not_suspend
-await_holding_refcell_ref = "allow"  # superseded by must_not_suspend
-```
-
-| Clippy lint | Limitation | `must_not_suspend` improvement |
+| Clippy lint | Covers | This lint adds |
 |---|---|---|
-| `await_holding_lock` | Hardcoded to `std::sync` guards only | Covers `parking_lot`, `dashmap`, `crossbeam_epoch`, connection pools, `rusqlite`, and `tracing` out of the box |
-| `await_holding_refcell_ref` | Hardcoded to `std::cell::Ref`/`RefMut` only | Unified with lock guards under a single configurable lint |
+| `await_holding_lock` | `std::sync` guards + parking_lot (via diagnostic items) | — (defers to Clippy) |
+| `await_holding_refcell_ref` | `std::cell::Ref` / `RefMut` | — (defers to Clippy) |
+| `await_holding_invalid_type` | User-configured types (requires clippy.toml) | parking_lot, tracing, crossbeam, rusqlite, r2d2 out of the box; configurable via dylint.toml |
+
+Clippy uses diagnostic-item matching (robust, zero-config). This lint uses `def_path_str` matching (less robust but covers third-party types Clippy has no diagnostic items for).
 
 ## Relation to nightly `#[must_not_suspend]`
 
@@ -225,7 +184,7 @@ Rust nightly has an experimental `#[must_not_suspend]` attribute (RFC 3014, trac
 
 | Lint | Catches |
 |---|---|
-| `must_not_suspend` | Guard types held across `.await` — deadlocks, panics, span corruption |
+| `await_holding_unsendable` | Third-party guard types held across `.await` — complements Clippy's `await_holding_*` |
 | `blocking_in_async` | Blocking calls (not guards) that stall the executor |
 | `unsafe_send_missing_drop` | `unsafe impl Send` without `Drop` — unsound cross-thread destruction |
 | `panic_in_drop` | Panicking inside `Drop` — abort during unwinding |

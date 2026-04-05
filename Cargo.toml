@@ -96,6 +96,10 @@ name = "unbounded_channel"
 path = "ui/unbounded_channel/main.rs"
 
 [[example]]
+name = "await_holding_unsendable"
+path = "ui/await_holding_unsendable/main.rs"
+
+[[example]]
 name = "unsafe_send_missing_drop"
 path = "ui/unsafe_send_missing_drop/main.rs"
 
