@@ -37,7 +37,7 @@ LL |     tokio::time::sleep_until(deadline).await; //~ WARNING: real-time wait
    = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
 
 warning: `std::time::Instant::now()` does not respect Tokio's paused clock
-  --> $DIR/main.rs:131:17
+  --> $DIR/main.rs:144:17
    |
 LL |     let start = std::time::Instant::now(); //~ WARNING: `std::time::Instant::now()` does not respect
    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -45,12 +45,28 @@ LL |     let start = std::time::Instant::now(); //~ WARNING: `std::time::Instant
    = help: use `tokio::time::Instant::now()` instead; it advances with `tokio::time::advance()` and auto-advance
 
 warning: real-time wait in async test without paused clock
-  --> $DIR/main.rs:166:5
+  --> $DIR/main.rs:179:5
    |
 LL |     tokio::time::sleep(Duration::from_secs(1)).await; //~ WARNING: real-time wait
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
 
-warning: 6 warnings emitted
+warning: real-time wait in async test without paused clock
+  --> $DIR/main.rs:189:5
+   |
+LL |     shutdown_forwarder(handle).await; //~ WARNING: real-time wait
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
+
+warning: real-time wait in async test without paused clock
+  --> $DIR/main.rs:222:9
+   |
+LL |         shutdown_forwarder_in_mod(handle).await; //~ WARNING: real-time wait
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
+
+warning: 8 warnings emitted
 

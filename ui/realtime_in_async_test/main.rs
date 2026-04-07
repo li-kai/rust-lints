@@ -88,6 +88,19 @@ async fn ok_non_test() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Should NOT trigger: plain async helper (not a test) using tokio time APIs.
+// ══════════════════════════════════════════════════════════════════════
+
+/// Shared teardown: await handle with a timeout for clean exit.
+async fn shutdown_forwarder(handle: tokio::task::JoinHandle<std::io::Result<()>>) {
+    tokio::time::timeout(Duration::from_secs(2), handle)
+        .await
+        .expect("forwarder should exit within 2s")
+        .expect("task should not panic")
+        .expect("forwarder should return Ok");
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: suppressed with #[allow].
 // ══════════════════════════════════════════════════════════════════════
 
@@ -164,6 +177,67 @@ fn ok_std_instant_in_sync_test() {
 async fn ok_std_instant_without_paused() {
     let start = std::time::Instant::now(); // OK: no paused clock to conflict with
     tokio::time::sleep(Duration::from_secs(1)).await; //~ WARNING: real-time wait
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should trigger: test calls helper that transitively uses tokio time.
+// ══════════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn trigger_via_helper() {
+    let handle = tokio::spawn(async { Ok(()) });
+    shutdown_forwarder(handle).await; //~ WARNING: real-time wait
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should NOT trigger: test with start_paused calls the same helper.
+// ══════════════════════════════════════════════════════════════════════
+
+#[tokio::test(start_paused = true)]
+async fn ok_paused_via_helper() {
+    let handle = tokio::spawn(async { Ok(()) });
+    shutdown_forwarder(handle).await; // OK: paused clock
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should NOT trigger: plain async helper inside a test module
+// (only triggers when called from a test without start_paused).
+// ══════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    async fn shutdown_forwarder_in_mod(handle: tokio::task::JoinHandle<std::io::Result<()>>) {
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .expect("forwarder should exit within 2s")
+            .expect("task should not panic")
+            .expect("forwarder should return Ok");
+    }
+
+    #[tokio::test]
+    async fn trigger_via_mod_helper() {
+        let handle = tokio::spawn(async { Ok(()) });
+        shutdown_forwarder_in_mod(handle).await; //~ WARNING: real-time wait
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Should NOT trigger: helper only uses std::time::Instant::now(), which
+// is not an error without a paused clock (regression test for transitive
+// Instant::now() false positive).
+// ══════════════════════════════════════════════════════════════════════
+
+fn measure_elapsed() -> std::time::Duration {
+    let start = std::time::Instant::now();
+    std::thread::sleep(Duration::from_millis(1));
+    start.elapsed()
+}
+
+#[tokio::test]
+async fn ok_helper_only_uses_std_instant() {
+    let _elapsed = measure_elapsed(); // OK: Instant::now() without paused clock is fine
 }
 
 fn main() {}

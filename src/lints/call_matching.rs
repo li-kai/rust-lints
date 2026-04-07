@@ -17,23 +17,29 @@ use crate::config::SubLintConfig;
 /// `ExprKind::Call` (free functions, associated functions) and
 /// `ExprKind::MethodCall` (method syntax with receiver).
 pub fn resolve_callee_def_id(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<DefId> {
+    resolve_callee_def_id_with_typeck(cx.typeck_results(), expr)
+}
+
+/// Like [`resolve_callee_def_id`] but accepts explicit `TypeckResults`,
+/// allowing callee resolution on a function body other than the one
+/// currently being lint-checked.
+pub fn resolve_callee_def_id_with_typeck(
+    typeck: &rustc_middle::ty::TypeckResults<'_>,
+    expr: &Expr<'_>,
+) -> Option<DefId> {
     #[expect(
         clippy::wildcard_enum_match_arm,
         reason = "ExprKind has many variants; only Call and MethodCall are relevant"
     )]
     match &expr.kind {
         ExprKind::Call(callee, _) => {
-            // For `Foo::bar()` or `some_fn()`, the callee is a path expression.
             if let ExprKind::Path(qpath) = &callee.kind {
-                cx.qpath_res(qpath, callee.hir_id).opt_def_id()
+                typeck.qpath_res(qpath, callee.hir_id).opt_def_id()
             } else {
                 None
             }
         }
-        ExprKind::MethodCall(..) => {
-            // For `receiver.method()`, use typeck to resolve the actual method.
-            cx.typeck_results().type_dependent_def_id(expr.hir_id)
-        }
+        ExprKind::MethodCall(..) => typeck.type_dependent_def_id(expr.hir_id),
         _ => None,
     }
 }

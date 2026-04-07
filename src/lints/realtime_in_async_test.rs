@@ -33,8 +33,12 @@
 //! - Does NOT fire on `tokio::time::advance` (that's the solution, not the
 //!   problem).
 
+use std::ops::ControlFlow;
+
 use clippy_utils::diagnostics::span_lint_and_help;
-use clippy_utils::is_in_test;
+use clippy_utils::is_test_function;
+use clippy_utils::visitors::for_each_expr;
+use rustc_hir::def_id::LocalDefId;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{Body, Expr, ExprKind};
 use rustc_lint::{LateContext, LateLintPass};
@@ -42,7 +46,9 @@ use rustc_middle::hir::nested_filter;
 
 use rustc_data_structures::fx::FxHashSet;
 
-use super::call_matching::{build_path_list, find_matching_path, resolve_callee_def_id};
+use super::call_matching::{
+    build_path_list, find_matching_path, resolve_callee_def_id, resolve_callee_def_id_with_typeck,
+};
 use crate::config::SubLintConfig;
 
 rustc_session::declare_lint! {
@@ -91,6 +97,7 @@ fn is_start_paused_true(expr: &Expr<'_>) -> bool {
 }
 
 /// Walks a function body looking for tokio time calls and `start_paused(true)`.
+/// Collects local callees so the caller can check them transitively.
 struct TimeCallVisitor<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     time_paths: &'a FxHashSet<String>,
@@ -100,6 +107,8 @@ struct TimeCallVisitor<'a, 'tcx> {
     std_instant_now_span: Option<rustc_span::Span>,
     /// Whether `.start_paused(true)` was found in the body.
     has_start_paused_true: bool,
+    /// Local functions called from this body (checked transitively after visit).
+    local_callees: Vec<(LocalDefId, rustc_span::Span)>,
 }
 
 impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
@@ -122,17 +131,27 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
         let needs_time_check = self.first_time_call_span.is_none();
         let needs_instant_check = self.std_instant_now_span.is_none();
 
-        if (needs_time_check || needs_instant_check)
-            && let Some(def_id) = resolve_callee_def_id(self.cx, expr)
-        {
-            let callee_path = self.cx.tcx.def_path_str(def_id);
+        if let Some(def_id) = resolve_callee_def_id(self.cx, expr) {
+            if needs_time_check || needs_instant_check {
+                let callee_path = self.cx.tcx.def_path_str(def_id);
 
-            if needs_time_check && find_matching_path(&callee_path, self.time_paths).is_some() {
-                self.first_time_call_span = Some(expr.span);
+                if needs_time_check
+                    && find_matching_path(&callee_path, self.time_paths).is_some()
+                {
+                    self.first_time_call_span = Some(expr.span);
+                }
+
+                if needs_instant_check && callee_path == STD_INSTANT_NOW {
+                    self.std_instant_now_span = Some(expr.span);
+                }
             }
 
-            if needs_instant_check && callee_path == STD_INSTANT_NOW {
-                self.std_instant_now_span = Some(expr.span);
+            // Record local callees for transitive checking (only needed when
+            // no direct time call has been found yet).
+            if needs_time_check {
+                if let Some(local_id) = def_id.as_local() {
+                    self.local_callees.push((local_id, expr.span));
+                }
             }
         }
 
@@ -142,6 +161,45 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
 
         intravisit::walk_expr(self, expr);
     }
+}
+
+/// Checks whether a local function (transitively) calls any tokio time path.
+/// Does NOT check `std::time::Instant::now()` — that's a separate concern
+/// (Case 2) handled only for direct calls in the test body.
+/// Uses the callee's own typeck results so it is safe to call on any
+/// `LocalDefId`. Recurses into local callees with cycle detection via `visited`.
+fn has_transitive_time_call(
+    cx: &LateContext<'_>,
+    local_id: LocalDefId,
+    time_paths: &FxHashSet<String>,
+    visited: &mut FxHashSet<LocalDefId>,
+) -> bool {
+    if !visited.insert(local_id) {
+        return false;
+    }
+    let body = cx.tcx.hir_body_owned_by(local_id);
+    let typeck = cx.tcx.typeck(local_id);
+
+    // `for_each_expr` walks into async blocks (which share the parent's
+    // TypeckResults) and closures. For closures the typeck lookup may
+    // return None — that's a harmless false negative, not a false positive.
+    for_each_expr(cx, body, |expr| {
+        if let Some(def_id) = resolve_callee_def_id_with_typeck(typeck, expr) {
+            // Local functions can't match external tokio paths — recurse directly.
+            if let Some(callee_local) = def_id.as_local() {
+                if has_transitive_time_call(cx, callee_local, time_paths, visited) {
+                    return ControlFlow::Break(());
+                }
+            } else {
+                let callee_path = cx.tcx.def_path_str(def_id);
+                if find_matching_path(&callee_path, time_paths).is_some() {
+                    return ControlFlow::Break(());
+                }
+            }
+        }
+        ControlFlow::Continue(())
+    })
+    .is_some()
 }
 
 pub struct RealtimeInAsyncTest {
@@ -169,9 +227,13 @@ impl<'tcx> LateLintPass<'tcx> for RealtimeInAsyncTest {
         _span: rustc_span::Span,
         def_id: rustc_hir::def_id::LocalDefId,
     ) {
-        // Only top-level test functions (skip closures, async blocks, etc.).
+        // Only top-level test functions (skip closures, async blocks, helpers).
+        // `is_in_test` is too broad — it matches any function inside a
+        // `#[cfg(test)]` module. `is_test_function` checks that this specific
+        // function has the `#[test]` attribute (which `#[tokio::test]` expands
+        // to include).
         if !matches!(kind, rustc_hir::intravisit::FnKind::ItemFn(..))
-            || !is_in_test(cx.tcx, cx.tcx.local_def_id_to_hir_id(def_id))
+            || !is_test_function(cx.tcx, def_id)
         {
             return;
         }
@@ -184,8 +246,21 @@ impl<'tcx> LateLintPass<'tcx> for RealtimeInAsyncTest {
             first_time_call_span: None,
             std_instant_now_span: None,
             has_start_paused_true: false,
+            local_callees: Vec::new(),
         };
         intravisit::walk_body(&mut visitor, body);
+
+        // If no direct time call was found and the clock isn't paused (Case 1
+        // would be suppressed anyway), check local callees transitively.
+        if visitor.first_time_call_span.is_none() && !visitor.has_start_paused_true {
+            let mut visited = FxHashSet::default();
+            for &(callee_id, call_span) in &visitor.local_callees {
+                if has_transitive_time_call(cx, callee_id, &self.time_paths, &mut visited) {
+                    visitor.first_time_call_span = Some(call_span);
+                    break;
+                }
+            }
+        }
 
         // Case 1: tokio time call without paused clock.
         if let Some(time_span) = visitor.first_time_call_span {
