@@ -10,9 +10,7 @@
 
 use std::time::Instant;
 
-// ══════════════════════════════════════════════════════════════════════
 // Should trigger: global_side_effect_time
-// ══════════════════════════════════════════════════════════════════════
 
 fn check_deadline() -> bool {
     let now = Instant::now(); //~ WARNING: direct call to `std::time::Instant::now()`
@@ -23,9 +21,7 @@ fn get_system_time() -> std::time::SystemTime {
     std::time::SystemTime::now() //~ WARNING: direct call to `std::time::SystemTime::now()`
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should trigger: global_side_effect_env
-// ══════════════════════════════════════════════════════════════════════
 
 fn read_config() -> Option<String> {
     std::env::var("MY_CONFIG").ok() //~ WARNING: direct call to `std::env::var()`
@@ -39,9 +35,7 @@ fn get_args() {
     let _args: Vec<_> = std::env::args().collect(); //~ WARNING: direct call to `std::env::args()`
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should trigger: global_side_effect_logging_init
-// ══════════════════════════════════════════════════════════════════════
 
 fn init_tracing() {
     tracing_subscriber::fmt::init(); //~ ERROR: direct call to `tracing_subscriber::fmt::init()`
@@ -56,9 +50,7 @@ fn install_subscriber() {
     tracing::subscriber::set_global_default(subscriber); //~ ERROR: direct call to `tracing::subscriber::set_global_default()`
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: suppression zones
-// ══════════════════════════════════════════════════════════════════════
 
 // fn main() is a suppression zone.
 fn main() {
@@ -79,9 +71,7 @@ mod tests {
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: value passed as parameter (no call to flagged fn)
-// ══════════════════════════════════════════════════════════════════════
 
 fn is_expired(now: Instant, deadline: Instant) -> bool {
     now > deadline // OK: time injected as parameter

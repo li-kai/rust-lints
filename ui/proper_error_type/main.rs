@@ -8,9 +8,7 @@
 
 use std::fmt;
 
-// ══════════════════════════════════════════════════════════════════════
 // Step 1 — Unstructured error types
-// ══════════════════════════════════════════════════════════════════════
 
 // Should trigger: Result<_, String>
 pub fn parse_string(_input: &str) -> Result<(), String> {
@@ -65,9 +63,7 @@ impl fmt::Display for MyTypedError {
 }
 impl std::error::Error for MyTypedError {}
 
-// ══════════════════════════════════════════════════════════════════════
 // Step 2 — Missing source()
-// ══════════════════════════════════════════════════════════════════════
 
 // Should trigger: has io::Error field but no source()
 #[derive(Debug)]
@@ -132,10 +128,8 @@ impl fmt::Display for PubCrateConfigError {
 }
 impl std::error::Error for PubCrateConfigError {}
 
-// ══════════════════════════════════════════════════════════════════════
 // Step 3 — Duplicated source in Display
 // (Negative case covered by ConfigErrorWithSource above.)
-// ══════════════════════════════════════════════════════════════════════
 
 // Should trigger: Display renders inner error that source() also returns
 #[derive(Debug)]
@@ -157,12 +151,10 @@ impl std::error::Error for DupSourceError {
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Step 4 — Manual Error + Display  (no dedicated cases needed; every
 // type above with hand-written Error + Display impls triggers step 4.)
 //
 // Step 5 — *Error without Error impl
-// ══════════════════════════════════════════════════════════════════════
 
 // Should trigger: named *Error but doesn't implement Error
 pub enum ParseError {
@@ -201,9 +193,7 @@ mod step5_pub_super {
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // thiserror — should NOT trigger any step
-// ══════════════════════════════════════════════════════════════════════
 
 // Should NOT trigger step 4 (manual Error+Display) or step 2 (missing source):
 // thiserror generates both impls via proc macro; their spans are from_expansion().

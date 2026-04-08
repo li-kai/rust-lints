@@ -203,7 +203,7 @@ fn build_adj_list(refs: &[(usize, usize, Span)], n: usize) -> Vec<Vec<usize>> {
     adj
 }
 
-// -- Tarjan's algorithm --
+// Tarjan's algorithm
 
 #[expect(suggest_builder, reason = "internal algorithm state, not a public API")]
 struct TarjanState {

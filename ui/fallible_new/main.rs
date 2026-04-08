@@ -6,14 +6,12 @@
     topological_ordering
 )]
 
-// ══════════════════════════════════════════════════════════════════════
 // SHOULD TRIGGER
-// ══════════════════════════════════════════════════════════════════════
 
 mod triggers {
     use std::collections::HashMap;
 
-    // -- unwrap in new --
+    // unwrap in new
     struct Config {
         data: String,
     }
@@ -26,7 +24,7 @@ mod triggers {
         }
     }
 
-    // -- expect in new --
+    // expect in new
     struct DbPool {
         url: String,
     }
@@ -41,7 +39,7 @@ mod triggers {
         }
     }
 
-    // -- panic! macro in new --
+    // panic! macro in new
     struct StrictConfig;
 
     impl StrictConfig {
@@ -54,7 +52,7 @@ mod triggers {
         }
     }
 
-    // -- new_* variant with unwrap --
+    // new_* variant with unwrap
     struct Server {
         port: u16,
     }
@@ -67,7 +65,7 @@ mod triggers {
         }
     }
 
-    // -- multiple panicking operations --
+    // multiple panicking operations
     struct Multi {
         a: String,
         b: u16,
@@ -82,7 +80,7 @@ mod triggers {
         }
     }
 
-    // -- unreachable! in new --
+    // unreachable! in new
     struct Unreachable;
 
     impl Unreachable {
@@ -95,7 +93,7 @@ mod triggers {
         }
     }
 
-    // -- unwrap inside assert! should still trigger --
+    // unwrap inside assert! should still trigger
     struct AssertUnwrap;
 
     impl AssertUnwrap {
@@ -107,12 +105,10 @@ mod triggers {
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // SHOULD NOT TRIGGER
-// ══════════════════════════════════════════════════════════════════════
 
 mod no_trigger {
-    // -- Returns Result — already fallible --
+    // Returns Result — already fallible
     struct FallibleConfig;
 
     impl FallibleConfig {
@@ -122,7 +118,7 @@ mod no_trigger {
         }
     }
 
-    // -- No fallible operations --
+    // No fallible operations
     struct Point {
         x: f64,
         y: f64,
@@ -134,7 +130,7 @@ mod no_trigger {
         }
     }
 
-    // -- Trait impl — signature dictated by trait --
+    // Trait impl — signature dictated by trait
     trait Builder {
         fn new() -> Self;
     }
@@ -148,7 +144,7 @@ mod no_trigger {
         }
     }
 
-    // -- Named try_new — signals fallibility --
+    // Named try_new — signals fallibility
     struct TryServer;
 
     impl TryServer {
@@ -157,7 +153,7 @@ mod no_trigger {
         }
     }
 
-    // -- Closure with unwrap stored in field — does not panic during construction --
+    // Closure with unwrap stored in field — does not panic during construction
     struct WithCallback {
         cb: Box<dyn Fn() -> u32>,
     }
@@ -170,10 +166,10 @@ mod no_trigger {
         }
     }
 
-    // -- Method named "new" but not a constructor (free function, not impl) --
+    // Method named "new" but not a constructor (free function, not impl)
     // (This lint only checks impl items, so standalone fns are out of scope.)
 
-    // -- const fn new — struct literal, no panics (must not ICE) --
+    // const fn new — struct literal, no panics (must not ICE)
     // Regression: the lint used to call cx.typeck_results() inside
     // check_impl_item, where body-level typeck is unavailable.
     struct GlyphPalette {
@@ -190,7 +186,7 @@ mod no_trigger {
         }
     }
 
-    // -- generic impl with new — must not ICE --
+    // generic impl with new — must not ICE
     struct Tree<D> {
         root: D,
         leaves: Vec<D>,
@@ -207,7 +203,7 @@ mod no_trigger {
         }
     }
 
-    // -- Returns Result in generic impl — should be skipped --
+    // Returns Result in generic impl — should be skipped
     struct TiktokenTokenizer;
 
     impl TiktokenTokenizer {
@@ -216,7 +212,7 @@ mod no_trigger {
         }
     }
 
-    // -- Private constructor with #[expect] — intentional invariant --
+    // Private constructor with #[expect] — intentional invariant
     struct Guarded;
 
     #[expect(fallible_new)]
@@ -227,7 +223,7 @@ mod no_trigger {
         }
     }
 
-    // -- Custom type with method named "unwrap" — NOT Option/Result --
+    // Custom type with method named "unwrap" — NOT Option/Result
     struct Wrapper(String);
 
     impl Wrapper {

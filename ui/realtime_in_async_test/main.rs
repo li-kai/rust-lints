@@ -10,9 +10,7 @@
 
 use std::time::Duration;
 
-// ══════════════════════════════════════════════════════════════════════
 // Should trigger: tokio::time::sleep in a test without start_paused.
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
 async fn trigger_sleep() {
@@ -41,9 +39,7 @@ async fn trigger_sleep_until() {
     tokio::time::sleep_until(deadline).await; //~ WARNING: real-time wait
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: start_paused = true makes time instant.
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test(start_paused = true)]
 async fn ok_paused_sleep() {
@@ -61,35 +57,27 @@ async fn ok_paused_interval() {
     interval.tick().await; // OK: paused clock
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: no time operations at all.
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
 async fn ok_no_time_ops() {
     assert_eq!(2 + 2, 4); // OK: no time calls
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: synchronous test (not tokio::test).
-// ══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn ok_sync_test() {
     std::thread::sleep(Duration::from_millis(10)); // OK: not async test
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: non-test async function.
-// ══════════════════════════════════════════════════════════════════════
 
 async fn ok_non_test() {
     tokio::time::sleep(Duration::from_secs(1)).await; // OK: not a test
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: plain async helper (not a test) using tokio time APIs.
-// ══════════════════════════════════════════════════════════════════════
 
 /// Shared teardown: await handle with a timeout for clean exit.
 async fn shutdown_forwarder(handle: tokio::task::JoinHandle<std::io::Result<()>>) {
@@ -100,9 +88,7 @@ async fn shutdown_forwarder(handle: tokio::task::JoinHandle<std::io::Result<()>>
         .expect("forwarder should return Ok");
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: suppressed with #[allow].
-// ══════════════════════════════════════════════════════════════════════
 
 #[allow(realtime_in_async_test)]
 #[tokio::test]
@@ -110,9 +96,7 @@ async fn ok_allowed() {
     tokio::time::sleep(Duration::from_secs(5)).await; // OK: explicitly allowed
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Edge case: manual runtime with start_paused — should NOT trigger.
-// ══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn ok_manual_runtime_paused() {
@@ -126,18 +110,14 @@ fn ok_manual_runtime_paused() {
         });
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Edge case: tokio::time::advance is fine (it's the solution, not the problem).
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test(start_paused = true)]
 async fn ok_advance() {
     tokio::time::advance(Duration::from_secs(60)).await; // OK: this is the right pattern
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should trigger: std::time::Instant::now() in a paused-clock test.
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test(start_paused = true)]
 async fn trigger_std_instant_in_paused() {
@@ -146,9 +126,7 @@ async fn trigger_std_instant_in_paused() {
     assert!(start.elapsed() >= Duration::from_secs(30));
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: tokio::time::Instant::now() is correct in paused-clock tests.
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test(start_paused = true)]
 async fn ok_tokio_instant_in_paused() {
@@ -157,9 +135,7 @@ async fn ok_tokio_instant_in_paused() {
     assert!(tokio::time::Instant::now() >= start);
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: std::time::Instant::now() in a plain sync test.
-// ══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn ok_std_instant_in_sync_test() {
@@ -168,10 +144,8 @@ fn ok_std_instant_in_sync_test() {
     assert!(start.elapsed() >= Duration::from_millis(10));
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: std::time::Instant::now() in a non-paused async test
 // (the tokio::time::sleep is flagged separately, not the Instant).
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
 async fn ok_std_instant_without_paused() {
@@ -179,9 +153,7 @@ async fn ok_std_instant_without_paused() {
     tokio::time::sleep(Duration::from_secs(1)).await; //~ WARNING: real-time wait
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should trigger: test calls helper that transitively uses tokio time.
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
 async fn trigger_via_helper() {
@@ -189,9 +161,7 @@ async fn trigger_via_helper() {
     shutdown_forwarder(handle).await; //~ WARNING: real-time wait
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: test with start_paused calls the same helper.
-// ══════════════════════════════════════════════════════════════════════
 
 #[tokio::test(start_paused = true)]
 async fn ok_paused_via_helper() {
@@ -199,10 +169,8 @@ async fn ok_paused_via_helper() {
     shutdown_forwarder(handle).await; // OK: paused clock
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: plain async helper inside a test module
 // (only triggers when called from a test without start_paused).
-// ══════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {
@@ -223,11 +191,9 @@ mod tests {
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: helper only uses std::time::Instant::now(), which
 // is not an error without a paused clock (regression test for transitive
 // Instant::now() false positive).
-// ══════════════════════════════════════════════════════════════════════
 
 fn measure_elapsed() -> std::time::Duration {
     let start = std::time::Instant::now();
@@ -240,11 +206,9 @@ async fn ok_helper_only_uses_std_instant() {
     let _elapsed = measure_elapsed(); // OK: Instant::now() without paused clock is fine
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT ICE: enum tuple variant constructor is a local "callee"
 // but has no body. The transitive checker must not call
 // `hir_body_owned_by` on it (regression test for ICE on CtorOf).
-// ══════════════════════════════════════════════════════════════════════
 
 use std::path::PathBuf;
 

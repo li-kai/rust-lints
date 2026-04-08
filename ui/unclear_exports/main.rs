@@ -2,9 +2,7 @@
 
 fn main() {}
 
-// ══════════════════════════════════════════════════════════════════════
 // SHOULD TRIGGER — glob imports
-// ══════════════════════════════════════════════════════════════════════
 
 mod glob_triggers {
     mod inner {
@@ -16,30 +14,28 @@ mod glob_triggers {
         pub struct Qux;
     }
 
-    // -- Private glob import --
+    // Private glob import
     use inner::*;
     //~^ ERROR: glob imports (`use foo::*`) are banned
 
-    // -- pub(crate) glob import --
+    // pub(crate) glob import
     pub(crate) use inner::*;
     //~^ ERROR: glob imports (`use foo::*`) are banned
 
-    // -- pub(super) glob import --
+    // pub(super) glob import
     pub(super) use inner::*;
     //~^ ERROR: glob imports (`use foo::*`) are banned
 
-    // -- Fully public glob import --
+    // Fully public glob import
     pub use inner::*;
     //~^ ERROR: glob imports (`use foo::*`) are banned
 
-    // -- Prelude is NOT exempt --
+    // Prelude is NOT exempt
     use prelude::*;
     //~^ ERROR: glob imports (`use foo::*`) are banned
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // SHOULD TRIGGER — renamed imports
-// ══════════════════════════════════════════════════════════════════════
 
 mod rename_triggers {
     mod inner {
@@ -47,22 +43,20 @@ mod rename_triggers {
         pub struct Bar;
     }
 
-    // -- Private rename --
+    // Private rename
     //~^ ERROR: renamed imports (`use foo::Bar as Baz`) are banned
 
-    // -- Public rename --
+    // Public rename
     pub use inner::Bar as MyBar;
     use inner::Foo as MyFoo;
     //~^ ERROR: renamed imports (`use foo::Bar as Baz`) are banned
 
-    // -- pub(crate) rename --
+    // pub(crate) rename
     pub(crate) use inner::Foo as CrateFoo;
     //~^ ERROR: renamed imports (`use foo::Bar as Baz`) are banned
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // SHOULD NOT TRIGGER
-// ══════════════════════════════════════════════════════════════════════
 
 mod no_trigger {
     mod inner {
@@ -70,9 +64,9 @@ mod no_trigger {
         pub struct Bar;
     }
 
-    // -- Explicit list import --
-    // -- Single item import --
-    // -- Explicit pub re-export with original names --
+    // Explicit list import
+    // Single item import
+    // Explicit pub re-export with original names
     pub use inner::{Bar as _, Foo as _};
     use inner::{Bar, Foo as _, Foo};
 }

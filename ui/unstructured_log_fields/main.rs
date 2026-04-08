@@ -8,10 +8,8 @@
 )]
 // Tests for the `unstructured_log_fields` lint.
 
-// ══════════════════════════════════════════════════════════════════════
 // Should trigger: all captures are positional format args, none are
 // structured key-value fields.
-// ══════════════════════════════════════════════════════════════════════
 
 fn all_positional() {
     let user_id = 42;
@@ -34,9 +32,7 @@ fn error_positional() {
     tracing::error!("failed with status {}", code); //~ WARNING: unstructured
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: already uses structured fields.
-// ══════════════════════════════════════════════════════════════════════
 
 fn fully_structured() {
     let user_id = 42;
@@ -67,9 +63,7 @@ fn mixed_structured_and_format() {
     tracing::info!(user_id, "user performed {}", action); // OK: partially structured
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: bare message with no captures.
-// ══════════════════════════════════════════════════════════════════════
 
 fn bare_message() {
     tracing::info!("server started"); // OK: no values to structure
@@ -79,18 +73,14 @@ fn bare_message_with_literal() {
     tracing::info!("version: 1.0.0"); // OK: literal text, nothing to capture
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: non-tracing macros (log crate, println, etc.)
-// ══════════════════════════════════════════════════════════════════════
 
 fn log_crate_info() {
     // The `log` crate doesn't support structured fields — nothing to suggest.
     // log::info!("user {}", user_id);  // would be OK
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: inside test zones.
-// ══════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {
@@ -100,9 +90,7 @@ mod tests {
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // Should NOT trigger: suppressed with #[allow].
-// ══════════════════════════════════════════════════════════════════════
 
 #[allow(unstructured_log_fields)]
 fn allowed_positional() {
