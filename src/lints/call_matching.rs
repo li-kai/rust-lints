@@ -8,7 +8,7 @@ use clippy_utils::is_entrypoint_fn;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{DefId, LocalDefId};
-use rustc_hir::{Body, Expr, ExprKind};
+use rustc_hir::{Body, Expr, ExprKind, Node, TraitFn, TraitItemKind};
 use rustc_lint::LateContext;
 use rustc_middle::ty::TyCtxt;
 
@@ -20,10 +20,10 @@ use crate::config::SubLintConfig;
 /// trait declarations, etc.).
 ///
 /// Use instead of `tcx.hir_body_owned_by()`, which panics on bodyless defs.
-pub fn maybe_body_owned_by<'tcx>(
-    tcx: TyCtxt<'tcx>,
+pub fn maybe_body_owned_by(
+    tcx: TyCtxt<'_>,
     local_id: LocalDefId,
-) -> Option<&'tcx Body<'tcx>> {
+) -> Option<&Body<'_>> {
     if matches!(
         tcx.def_kind(local_id),
         DefKind::Fn
@@ -34,6 +34,18 @@ pub fn maybe_body_owned_by<'tcx>(
             | DefKind::AnonConst
             | DefKind::Static { .. }
     ) {
+        // Trait items without a default body (e.g. `fn foo(&self);` or
+        // `const BAR: i32;`) match AssocFn/AssocConst but have no body.
+        if let Node::TraitItem(trait_item) = tcx.hir_node_by_def_id(local_id) {
+            match &trait_item.kind {
+                TraitItemKind::Fn(_, TraitFn::Required(_)) | TraitItemKind::Const(_, None) => {
+                    return None;
+                }
+                TraitItemKind::Fn(_, TraitFn::Provided(_))
+                | TraitItemKind::Const(_, Some(_))
+                | TraitItemKind::Type(..) => {}
+            }
+        }
         Some(tcx.hir_body_owned_by(local_id))
     } else {
         None

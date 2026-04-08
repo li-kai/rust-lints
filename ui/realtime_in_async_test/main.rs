@@ -227,4 +227,30 @@ async fn ok_enum_ctor_no_ice() {
     let _err = make_sandbox_error().await;
 }
 
+// Should NOT ICE: trait method declaration has no body.
+// The transitive checker must not call `hir_body_owned_by` on it
+// (regression test for ICE on bodyless AssocFn).
+
+trait VmLike {
+    fn state(&self) -> u32;
+}
+
+struct FakeVm;
+
+impl VmLike for FakeVm {
+    fn state(&self) -> u32 {
+        42
+    }
+}
+
+fn check_vm_state(vm: &dyn VmLike) -> u32 {
+    vm.state()
+}
+
+#[tokio::test]
+async fn ok_trait_method_no_ice() {
+    let vm = FakeVm;
+    let _s = check_vm_state(&vm);
+}
+
 fn main() {}
