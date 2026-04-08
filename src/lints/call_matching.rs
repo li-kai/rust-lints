@@ -6,12 +6,39 @@ use std::borrow::Cow;
 
 use clippy_utils::is_entrypoint_fn;
 use rustc_data_structures::fx::FxHashSet;
-use rustc_hir::def_id::DefId;
-use rustc_hir::{Expr, ExprKind};
+use rustc_hir::def::DefKind;
+use rustc_hir::def_id::{DefId, LocalDefId};
+use rustc_hir::{Body, Expr, ExprKind};
 use rustc_lint::LateContext;
+use rustc_middle::ty::TyCtxt;
 
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
+
+/// Returns the HIR body for `local_id` if it has one (functions, closures,
+/// consts), or `None` for items without bodies (enum/struct constructors,
+/// trait declarations, etc.).
+///
+/// Use instead of `tcx.hir_body_owned_by()`, which panics on bodyless defs.
+pub fn maybe_body_owned_by<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    local_id: LocalDefId,
+) -> Option<&'tcx Body<'tcx>> {
+    if matches!(
+        tcx.def_kind(local_id),
+        DefKind::Fn
+            | DefKind::AssocFn
+            | DefKind::Closure
+            | DefKind::Const
+            | DefKind::AssocConst
+            | DefKind::AnonConst
+            | DefKind::Static { .. }
+    ) {
+        Some(tcx.hir_body_owned_by(local_id))
+    } else {
+        None
+    }
+}
 
 /// Resolves the `DefId` of the function being called, handling both
 /// `ExprKind::Call` (free functions, associated functions) and

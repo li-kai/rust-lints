@@ -240,4 +240,27 @@ async fn ok_helper_only_uses_std_instant() {
     let _elapsed = measure_elapsed(); // OK: Instant::now() without paused clock is fine
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Should NOT ICE: enum tuple variant constructor is a local "callee"
+// but has no body. The transitive checker must not call
+// `hir_body_owned_by` on it (regression test for ICE on CtorOf).
+// ══════════════════════════════════════════════════════════════════════
+
+use std::path::PathBuf;
+
+enum SandboxError {
+    HostPathNotAbsolute(PathBuf),
+}
+
+async fn make_sandbox_error() -> SandboxError {
+    SandboxError::HostPathNotAbsolute(PathBuf::from("/tmp"))
+}
+
+#[tokio::test]
+async fn ok_enum_ctor_no_ice() {
+    // Calls a local helper that constructs an enum tuple variant.
+    // The variant constructor resolves as a local callee — must not ICE.
+    let _err = make_sandbox_error().await;
+}
+
 fn main() {}

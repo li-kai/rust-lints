@@ -47,7 +47,8 @@ use rustc_middle::hir::nested_filter;
 use rustc_data_structures::fx::FxHashSet;
 
 use super::call_matching::{
-    build_path_list, find_matching_path, resolve_callee_def_id, resolve_callee_def_id_with_typeck,
+    build_path_list, find_matching_path, maybe_body_owned_by, resolve_callee_def_id,
+    resolve_callee_def_id_with_typeck,
 };
 use crate::config::SubLintConfig;
 
@@ -177,7 +178,9 @@ fn has_transitive_time_call(
     if !visited.insert(local_id) {
         return false;
     }
-    let body = cx.tcx.hir_body_owned_by(local_id);
+    let Some(body) = maybe_body_owned_by(cx.tcx, local_id) else {
+        return false;
+    };
     let typeck = cx.tcx.typeck(local_id);
 
     // `for_each_expr` walks into async blocks (which share the parent's
