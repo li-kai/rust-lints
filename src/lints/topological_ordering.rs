@@ -82,8 +82,7 @@ fn item_display_name(cx: &LateContext<'_>, item: &hir::Item<'_>) -> String {
     let name = cx
         .tcx
         .opt_item_name(def_id)
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "?".into());
+        .map_or_else(|| "?".into(), |s| s.to_string());
 
     #[expect(
         clippy::wildcard_enum_match_arm,
@@ -205,7 +204,6 @@ fn build_adj_list(refs: &[(usize, usize, Span)], n: usize) -> Vec<Vec<usize>> {
 
 // Tarjan's algorithm
 
-#[expect(suggest_builder, reason = "internal algorithm state, not a public API")]
 struct TarjanState {
     index_counter: usize,
     stack: Vec<usize>,
@@ -281,7 +279,7 @@ struct OrderingViolation {
     /// Span of the first reference that demonstrates the violation.
     ref_span: Span,
     item_name: String,
-    /// (referenced item name, ref_span, def_span)
+    /// (referenced item name, `ref_span`, `def_span`)
     witnesses: Vec<(String, Span, Span)>,
 }
 
@@ -536,8 +534,7 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
         let ident_span = cx
             .tcx
             .def_ident_span(item_def_id.to_def_id())
-            .map(|id_sp| item.span.with_hi(id_sp.hi()))
-            .unwrap_or(item.span);
+            .map_or(item.span, |id_sp| item.span.with_hi(id_sp.hi()));
 
         self.modules.entry(parent_local).or_default().push(ModuleItem {
             def_id: item_def_id,
@@ -615,8 +612,7 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
 
             let resolved_refs = module_refs
                 .get(&module_def_id)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
+                .map_or(&[][..], Vec::as_slice);
 
             let item_def_id_to_idx = build_def_id_to_idx(items);
 

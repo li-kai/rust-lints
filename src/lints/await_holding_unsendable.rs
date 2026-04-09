@@ -1,6 +1,6 @@
 use clippy_utils::diagnostics::span_lint_and_then;
 use rustc_data_structures::fx::FxHashMap;
-use rustc_hir as hir;
+use rustc_hir::{Closure, ClosureKind, CoroutineDesugaring, CoroutineKind, Expr, ExprKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::mir::CoroutineLayout;
 use rustc_span::Span;
@@ -91,13 +91,10 @@ impl AwaitHoldingUnsendable {
 rustc_session::impl_lint_pass!(AwaitHoldingUnsendable => [AWAIT_HOLDING_UNSENDABLE]);
 
 impl<'tcx> LateLintPass<'tcx> for AwaitHoldingUnsendable {
-    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
-        if let hir::ExprKind::Closure(hir::Closure {
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
+        if let ExprKind::Closure(Closure {
             kind:
-                hir::ClosureKind::Coroutine(hir::CoroutineKind::Desugared(
-                    hir::CoroutineDesugaring::Async,
-                    _,
-                )),
+                ClosureKind::Coroutine(CoroutineKind::Desugared(CoroutineDesugaring::Async, _)),
             def_id,
             ..
         }) = expr.kind
@@ -115,6 +112,12 @@ impl<'tcx> LateLintPass<'tcx> for AwaitHoldingUnsendable {
 }
 
 impl AwaitHoldingUnsendable {
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "`variant_fields` and `variant_source_info` are parallel \
+                  `IndexVec<VariantIdx, _>`s, so the index from `iter_enumerated` \
+                  on one is always valid in the other"
+    )]
     fn check_interior_types(&self, cx: &LateContext<'_>, coroutine: &CoroutineLayout<'_>) {
         for (ty_index, ty_cause) in coroutine.field_tys.iter_enumerated() {
             if let rustc_middle::ty::Adt(adt, _) = ty_cause.ty.kind() {

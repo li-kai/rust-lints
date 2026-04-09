@@ -10,7 +10,6 @@ pub use runner::run_ui_test;
     clippy::indexing_slicing,
     clippy::let_underscore_must_use,
     clippy::multiple_unsafe_ops_per_block,
-    clippy::panic,
     clippy::undocumented_unsafe_blocks,
     unclear_exports,
     reason = "test-only module; env var mutation, panics, and indexing are acceptable"

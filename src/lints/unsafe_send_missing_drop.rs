@@ -17,6 +17,24 @@ rustc_session::declare_lint! {
     "`unsafe impl Send` with `!Send` fields and no `Drop` impl"
 }
 
+/// Returns `true` if `ty` is `ManuallyDrop<_>`.
+fn is_manually_drop<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
+    if let ty::Adt(adt, _) = ty.kind() {
+        cx.tcx.is_lang_item(adt.did(), LangItem::ManuallyDrop)
+    } else {
+        false
+    }
+}
+
+/// Returns `true` if `ty` is `PhantomData<_>`.
+fn is_phantom_data<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
+    if let ty::Adt(adt, _) = ty.kind() {
+        cx.tcx.is_lang_item(adt.did(), LangItem::PhantomData)
+    } else {
+        false
+    }
+}
+
 pub struct UnsafeSendMissingDrop;
 
 impl UnsafeSendMissingDrop {
@@ -107,24 +125,6 @@ impl<'tcx> LateLintPass<'tcx> for UnsafeSendMissingDrop {
             "the implicit destructor drops `!Send` fields on the caller's thread; \
              implement `Drop` to ensure `!Send` fields are destroyed in the correct context",
         );
-    }
-}
-
-/// Returns `true` if `ty` is `ManuallyDrop<_>`.
-fn is_manually_drop<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
-    if let ty::Adt(adt, _) = ty.kind() {
-        cx.tcx.is_lang_item(adt.did(), LangItem::ManuallyDrop)
-    } else {
-        false
-    }
-}
-
-/// Returns `true` if `ty` is `PhantomData<_>`.
-fn is_phantom_data<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
-    if let ty::Adt(adt, _) = ty.kind() {
-        cx.tcx.is_lang_item(adt.did(), LangItem::PhantomData)
-    } else {
-        false
     }
 }
 
