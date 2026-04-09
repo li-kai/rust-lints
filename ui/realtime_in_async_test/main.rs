@@ -169,6 +169,22 @@ async fn ok_paused_via_helper() {
     shutdown_forwarder(handle).await; // OK: paused clock
 }
 
+// Should trigger: unrelated `.start_paused(true)` must not suppress the lint.
+
+struct FakeBuilder;
+
+impl FakeBuilder {
+    fn start_paused(self, _yes: bool) -> Self {
+        self
+    }
+}
+
+#[tokio::test]
+async fn trigger_fake_start_paused_method() {
+    let _fake = FakeBuilder.start_paused(true);
+    tokio::time::sleep(Duration::from_secs(1)).await; //~ WARNING: real-time wait
+}
+
 // Should NOT trigger: plain async helper inside a test module
 // (only triggers when called from a test without start_paused).
 

@@ -61,12 +61,20 @@ LL |     shutdown_forwarder(handle).await; //~ WARNING: real-time wait
    = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
 
 warning: real-time wait in async test without paused clock
-  --> $DIR/main.rs:190:9
+  --> $DIR/main.rs:185:5
+   |
+LL |     tokio::time::sleep(Duration::from_secs(1)).await; //~ WARNING: real-time wait
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
+
+warning: real-time wait in async test without paused clock
+  --> $DIR/main.rs:206:9
    |
 LL |         shutdown_forwarder_in_mod(handle).await; //~ WARNING: real-time wait
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: switch to `#[tokio::test(start_paused = true)]` to resolve sleeps instantly; use `tokio::time::advance()` for precise control
 
-warning: 8 warnings emitted
+warning: 9 warnings emitted
 

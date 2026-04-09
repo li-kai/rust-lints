@@ -83,14 +83,18 @@ const fn is_bool_lit_true(expr: &Expr<'_>) -> bool {
     }
 }
 
-/// Returns `true` if `expr` is a method call `.start_paused(true)`.
-fn is_start_paused_true(expr: &Expr<'_>) -> bool {
-    if let ExprKind::MethodCall(method, _receiver, args, _span) = &expr.kind
+/// Returns `true` if `expr` is a call to `tokio::runtime::Builder::start_paused(true)`.
+///
+/// The `method.ident` prefilter keeps this cheap on the visitor's hot path —
+/// the `def_path_str` lookup only runs on method calls literally named
+/// `start_paused`.
+fn is_start_paused_true(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
+    if let ExprKind::MethodCall(method, _receiver, [arg], _span) = &expr.kind
         && method.ident.as_str() == "start_paused"
-        && let [arg] = args
         && is_bool_lit_true(arg)
+        && let Some(def_id) = fn_def_id(cx, expr)
     {
-        return true;
+        return cx.tcx.def_path_str(def_id) == "tokio::runtime::Builder::start_paused";
     }
     false
 }
@@ -154,7 +158,7 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
             }
         }
 
-        if !self.has_start_paused_true && is_start_paused_true(expr) {
+        if !self.has_start_paused_true && is_start_paused_true(self.cx, expr) {
             self.has_start_paused_true = true;
         }
 
