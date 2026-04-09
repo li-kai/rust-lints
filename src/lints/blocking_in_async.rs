@@ -1,10 +1,11 @@
 use clippy_utils::diagnostics::span_lint_and_help;
+use clippy_utils::fn_def_id;
 use rustc_hir::{ClosureKind, CoroutineDesugaring, CoroutineKind, Expr, ExprKind, Node};
 use rustc_lint::{LateContext, LateLintPass};
 
 use rustc_data_structures::fx::FxHashSet;
 
-use super::call_matching::{build_path_list, find_matching_path, resolve_callee_def_id};
+use super::call_matching::{build_path_list, find_matching_path};
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
 
@@ -117,7 +118,7 @@ fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
                 // Found a closure ancestor — check if its parent is a
                 // call to a known spawn_blocking function.
                 if let Node::Expr(parent) = cx.tcx.hir_node(cx.tcx.parent_hir_id(hir_id))
-                    && let Some(def_id) = resolve_callee_def_id(cx, parent)
+                    && let Some(def_id) = fn_def_id(cx, parent)
                 {
                     let path = cx.tcx.def_path_str(def_id);
                     if SPAWN_BLOCKING_PATHS.iter().any(|&p| p == path) {
@@ -155,7 +156,7 @@ impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
             return;
         }
 
-        let Some(def_id) = resolve_callee_def_id(cx, expr) else {
+        let Some(def_id) = fn_def_id(cx, expr) else {
             return;
         };
 

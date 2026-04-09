@@ -36,6 +36,7 @@
 use std::ops::ControlFlow;
 
 use clippy_utils::diagnostics::span_lint_and_help;
+use clippy_utils::fn_def_id;
 use clippy_utils::is_test_function;
 use clippy_utils::visitors::for_each_expr;
 use rustc_hir::def_id::LocalDefId;
@@ -46,10 +47,7 @@ use rustc_middle::hir::nested_filter;
 
 use rustc_data_structures::fx::FxHashSet;
 
-use super::call_matching::{
-    build_path_list, find_matching_path, maybe_body_owned_by, resolve_callee_def_id,
-    resolve_callee_def_id_with_typeck,
-};
+use super::call_matching::{build_path_list, find_matching_path, resolve_callee_def_id_with_typeck};
 use crate::config::SubLintConfig;
 
 rustc_session::declare_lint! {
@@ -132,7 +130,7 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
         let needs_time_check = self.first_time_call_span.is_none();
         let needs_instant_check = self.std_instant_now_span.is_none();
 
-        if let Some(def_id) = resolve_callee_def_id(self.cx, expr) {
+        if let Some(def_id) = fn_def_id(self.cx, expr) {
             if needs_time_check || needs_instant_check {
                 let callee_path = self.cx.tcx.def_path_str(def_id);
 
@@ -178,7 +176,7 @@ fn has_transitive_time_call(
     if !visited.insert(local_id) {
         return false;
     }
-    let Some(body) = maybe_body_owned_by(cx.tcx, local_id) else {
+    let Some(body) = cx.tcx.hir_maybe_body_owned_by(local_id) else {
         return false;
     };
     let typeck = cx.tcx.typeck(local_id);

@@ -1,12 +1,11 @@
 use clippy_utils::diagnostics::span_lint_and_help;
+use clippy_utils::fn_def_id;
 use rustc_hir::Expr;
 use rustc_lint::{LateContext, LateLintPass};
 
 use rustc_data_structures::fx::FxHashSet;
 
-use super::call_matching::{
-    build_path_list, find_matching_path, is_in_suppression_zone, resolve_callee_def_id,
-};
+use super::call_matching::{build_path_list, find_matching_path, is_in_suppression_zone};
 use crate::config::SubLintConfig;
 
 rustc_session::declare_lint! {
@@ -55,7 +54,7 @@ impl<'tcx> LateLintPass<'tcx> for UnboundedChannel {
             return;
         }
 
-        let Some(def_id) = resolve_callee_def_id(cx, expr) else {
+        let Some(def_id) = fn_def_id(cx, expr) else {
             return;
         };
 

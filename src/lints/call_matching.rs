@@ -6,62 +6,18 @@ use std::borrow::Cow;
 
 use clippy_utils::is_entrypoint_fn;
 use rustc_data_structures::fx::FxHashSet;
-use rustc_hir::def::DefKind;
-use rustc_hir::def_id::{DefId, LocalDefId};
-use rustc_hir::{Body, Expr, ExprKind, Node, TraitFn, TraitItemKind};
+use rustc_hir::def::{DefKind, Res};
+use rustc_hir::def_id::DefId;
+use rustc_hir::{Expr, ExprKind};
 use rustc_lint::LateContext;
-use rustc_middle::ty::TyCtxt;
 
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
 
-/// Returns the HIR body for `local_id` if it has one (functions, closures,
-/// consts), or `None` for items without bodies (enum/struct constructors,
-/// trait declarations, etc.).
-///
-/// Use instead of `tcx.hir_body_owned_by()`, which panics on bodyless defs.
-pub fn maybe_body_owned_by(
-    tcx: TyCtxt<'_>,
-    local_id: LocalDefId,
-) -> Option<&Body<'_>> {
-    if matches!(
-        tcx.def_kind(local_id),
-        DefKind::Fn
-            | DefKind::AssocFn
-            | DefKind::Closure
-            | DefKind::Const
-            | DefKind::AssocConst
-            | DefKind::AnonConst
-            | DefKind::Static { .. }
-    ) {
-        // Trait items without a default body (e.g. `fn foo(&self);` or
-        // `const BAR: i32;`) match AssocFn/AssocConst but have no body.
-        if let Node::TraitItem(trait_item) = tcx.hir_node_by_def_id(local_id) {
-            match &trait_item.kind {
-                TraitItemKind::Fn(_, TraitFn::Required(_)) | TraitItemKind::Const(_, None) => {
-                    return None;
-                }
-                TraitItemKind::Fn(_, TraitFn::Provided(_))
-                | TraitItemKind::Const(_, Some(_))
-                | TraitItemKind::Type(..) => {}
-            }
-        }
-        Some(tcx.hir_body_owned_by(local_id))
-    } else {
-        None
-    }
-}
-
-/// Resolves the `DefId` of the function being called, handling both
-/// `ExprKind::Call` (free functions, associated functions) and
-/// `ExprKind::MethodCall` (method syntax with receiver).
-pub fn resolve_callee_def_id(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<DefId> {
-    resolve_callee_def_id_with_typeck(cx.typeck_results(), expr)
-}
-
-/// Like [`resolve_callee_def_id`] but accepts explicit `TypeckResults`,
-/// allowing callee resolution on a function body other than the one
-/// currently being lint-checked.
+/// Typeck-parameterized equivalent of [`clippy_utils::fn_def_id`] — resolves
+/// the callee `DefId` of a `Call` or `MethodCall` against explicit
+/// `TypeckResults` rather than `cx.typeck_results()`. Needed when walking a
+/// function body other than the one currently being lint-checked.
 pub fn resolve_callee_def_id_with_typeck(
     typeck: &rustc_middle::ty::TypeckResults<'_>,
     expr: &Expr<'_>,
@@ -71,13 +27,17 @@ pub fn resolve_callee_def_id_with_typeck(
         reason = "ExprKind has many variants; only Call and MethodCall are relevant"
     )]
     match &expr.kind {
-        ExprKind::Call(callee, _) => {
-            if let ExprKind::Path(qpath) = &callee.kind {
-                typeck.qpath_res(qpath, callee.hir_id).opt_def_id()
-            } else {
-                None
-            }
-        }
+        ExprKind::Call(
+            Expr {
+                kind: ExprKind::Path(qpath),
+                hir_id: path_hir_id,
+                ..
+            },
+            ..,
+        ) => match typeck.qpath_res(qpath, *path_hir_id) {
+            Res::Def(DefKind::Fn | DefKind::Ctor(..) | DefKind::AssocFn, id) => Some(id),
+            _ => None,
+        },
         ExprKind::MethodCall(..) => typeck.type_dependent_def_id(expr.hir_id),
         _ => None,
     }
