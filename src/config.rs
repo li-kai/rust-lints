@@ -21,9 +21,8 @@ impl LogFramework {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(default)]
-#[derive(Default)]
 pub struct DebugRemnantsConfig {
     /// Which logging framework to suggest: `"tracing"` (default) or `"log"`.
     pub suggested_framework: LogFramework,
