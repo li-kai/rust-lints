@@ -83,6 +83,24 @@ pub fn receiver_is_option_or_result<'tcx>(
     false
 }
 
+/// If `expr` is a panicking `.unwrap()` or `.expect()` on `Option`/`Result`,
+/// returns the method-call span and a short description for diagnostics.
+pub fn panicking_unwrap_or_expect<'tcx>(
+    cx: &LateContext<'tcx>,
+    typeck: &rustc_middle::ty::TypeckResults<'tcx>,
+    expr: &Expr<'tcx>,
+) -> Option<(Span, &'static str)> {
+    let ExprKind::MethodCall(method, receiver, _, span) = &expr.kind else {
+        return None;
+    };
+    let desc = match method.ident.as_str() {
+        "unwrap" => ".unwrap()",
+        "expect" => ".expect()",
+        _ => return None,
+    };
+    receiver_is_option_or_result(cx, typeck, receiver).then_some((*span, desc))
+}
+
 /// If `expr` is a closure that is immediately invoked (e.g. `(|| panic!())()`),
 /// returns its body for the caller to walk. Returns `None` for closures stored
 /// in a field, passed as a callback, returned, etc. — those don't run eagerly.

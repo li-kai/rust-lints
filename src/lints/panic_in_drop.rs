@@ -87,18 +87,8 @@ impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
             return;
         }
 
-        if let ExprKind::MethodCall(method, receiver, _args, span) = &expr.kind {
-            let name = method.ident.as_str();
-            if (name == "unwrap" || name == "expect")
-                && hir_refs::receiver_is_option_or_result(self.cx, self.typeck, receiver)
-            {
-                let desc = if name == "unwrap" {
-                    ".unwrap()"
-                } else {
-                    ".expect()"
-                };
-                self.findings.push((*span, desc));
-            }
+        if let Some(finding) = hir_refs::panicking_unwrap_or_expect(self.cx, self.typeck, expr) {
+            self.findings.push(finding);
         }
 
         intravisit::walk_expr(self, expr);
