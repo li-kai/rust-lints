@@ -1,5 +1,5 @@
 use clippy_utils::diagnostics::span_lint_and_help;
-use clippy_utils::path_to_local_with_projections;
+use clippy_utils::{fn_def_id, is_expr_default, path_to_local_with_projections};
 use rustc_hir::{Block, Expr, ExprKind, HirId, PatKind, QPath, Stmt, StmtKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
@@ -62,22 +62,20 @@ fn callee_type_name(callee: &Expr<'_>) -> Option<rustc_span::Symbol> {
     path.segments.last().map(|seg| seg.ident.name)
 }
 
+/// Returns `true` if the call expression is a recognized map constructor:
+/// `Default::default()` (via the `default_fn` diagnostic item) or an
+/// inherent `new`/`with_capacity` (matched by item name, since those are
+/// standard constructor names shared across all map types).
+fn is_map_constructor<'tcx>(cx: &LateContext<'tcx>, call: &'tcx Expr<'tcx>) -> bool {
+    if is_expr_default(cx, call) {
+        return true;
+    }
 
-/// Returns `true` if the callee expression resolves to one of the recognized
-/// constructors: `new`, `default`, or `with_capacity`.
-///
-/// Chose name-based matching over `DefId` matching: these are standard
-/// constructor names shared across all map types.
-fn is_map_constructor(cx: &LateContext<'_>, callee: &Expr<'_>) -> bool {
-    let ExprKind::Path(ref qpath) = callee.kind else {
+    let Some(def_id) = fn_def_id(cx, call) else {
         return false;
     };
-    let Some(def_id) = cx.qpath_res(qpath, callee.hir_id).opt_def_id() else {
-        return false;
-    };
 
-    let name = cx.tcx.item_name(def_id);
-    matches!(name.as_str(), "new" | "default" | "with_capacity")
+    matches!(cx.tcx.item_name(def_id).as_str(), "new" | "with_capacity")
 }
 
 /// Minimum number of consecutive `.insert()` calls required to fire the lint.
@@ -164,7 +162,7 @@ impl MapInitThenInsert {
         let ty = cx.typeck_results().expr_ty(init);
         let fallback_name = self.recognized_map_type(cx, ty)?;
 
-        if !is_map_constructor(cx, callee) {
+        if !is_map_constructor(cx, init) {
             return None;
         }
 
