@@ -134,18 +134,17 @@ impl MapInitThenInsert {
     }
 
     /// If `stmt` is `let [mut] <name> = <MapType>::new()` (or `::default()` or
-    /// `::with_capacity(_)`), returns the binding's `HirId` and a display name
-    /// for the map type.
+    /// `::with_capacity(_)`), returns the binding's `HirId` along with the
+    /// info needed to render a display name on demand.
     ///
-    /// The display name is taken from the callee path (what the user wrote, e.g.
-    /// `"FxHashMap"`) so that type aliases of `HashMap` produce the correct
-    /// suggestion. Falls back to the resolved type name when the callee is a
-    /// plain `Default::default()` call without a type qualifier.
+    /// The display name is resolved lazily (see [`Self::format_type_name`])
+    /// because rendering allocates and the vast majority of `let` bindings
+    /// don't trigger the lint.
     fn map_init_binding<'tcx>(
         &self,
         cx: &LateContext<'tcx>,
-        stmt: &Stmt<'tcx>,
-    ) -> Option<(HirId, String)> {
+        stmt: &'tcx Stmt<'tcx>,
+    ) -> Option<(HirId, &'tcx Expr<'tcx>, &'static str)> {
         let StmtKind::Let(local) = &stmt.kind else {
             return None;
         };
@@ -166,16 +165,19 @@ impl MapInitThenInsert {
             return None;
         }
 
-        // Prefer the name the user wrote so that type aliases (e.g. `FxHashMap`,
-        // `AHashMap`) produce `FxHashMap::from([..])` rather than `HashMap::from([..])`.
-        let type_name =
-            callee_type_name(callee).map_or_else(|| fallback_name.to_owned(), |s| s.to_string());
-
         let PatKind::Binding(_, hir_id, _, _) = local.pat.kind else {
             return None;
         };
 
-        Some((hir_id, type_name))
+        Some((hir_id, callee, fallback_name))
+    }
+
+    /// Renders the display name for a map binding. Preferred: the name the
+    /// user wrote on the callee (so that type aliases like `FxHashMap` render
+    /// as `FxHashMap::from([..])`). Falls back to the resolved type name when
+    /// the callee is a plain `Default::default()` without a type qualifier.
+    fn format_type_name(callee: &Expr<'_>, fallback: &'static str) -> String {
+        callee_type_name(callee).map_or_else(|| fallback.to_owned(), |s| s.to_string())
     }
 }
 
@@ -191,7 +193,9 @@ impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
         let mut i = 0;
 
         while i < stmts.len() {
-            let Some((binding_id, map_type_name)) = self.map_init_binding(cx, &stmts[i]) else {
+            let Some((binding_id, callee, fallback_name)) =
+                self.map_init_binding(cx, &stmts[i])
+            else {
                 i += 1;
                 continue;
             };
@@ -203,6 +207,7 @@ impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
                 let init_span = stmts[i].span;
                 let last_insert_span = stmts[insert_start + insert_count - 1].span;
                 let full_span = init_span.to(last_insert_span);
+                let map_type_name = Self::format_type_name(callee, fallback_name);
 
                 span_lint_and_help(
                     cx,
