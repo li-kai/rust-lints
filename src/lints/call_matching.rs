@@ -1,10 +1,8 @@
 //! Shared utilities for lints that match function calls against configured path lists.
-//!
-//! Used by `global_side_effect` and `unbounded_channel`.
 
 use std::borrow::Cow;
 
-use clippy_utils::is_entrypoint_fn;
+use clippy_utils::{fn_def_id, is_entrypoint_fn};
 use rustc_data_structures::fx::FxHashSet;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
@@ -99,6 +97,23 @@ fn strip_generic_args(path: &str) -> Cow<'_, str> {
 pub fn find_matching_path<'a>(callee_path: &str, paths: &'a FxHashSet<String>) -> Option<&'a str> {
     let normalized = strip_generic_args(callee_path);
     paths.get(normalized.as_ref()).map(String::as_str)
+}
+
+/// Resolves the callee of `expr` and returns the matching configured path,
+/// if any. Combines [`fn_def_id`], [`LateContext::tcx.def_path_str`], and
+/// [`find_matching_path`] into a single helper for single-set lints.
+///
+/// For lints that check a call against *multiple* path sets, call
+/// `cx.tcx.def_path_str` once and then invoke [`find_matching_path`] directly
+/// for each set to avoid recomputing the callee path.
+pub fn match_call_path<'a>(
+    cx: &LateContext<'_>,
+    expr: &Expr<'_>,
+    paths: &'a FxHashSet<String>,
+) -> Option<&'a str> {
+    let def_id = fn_def_id(cx, expr)?;
+    let callee_path = cx.tcx.def_path_str(def_id);
+    find_matching_path(&callee_path, paths)
 }
 
 /// Builds the effective path set from defaults and config overrides.

@@ -5,7 +5,7 @@ use rustc_lint::{LateContext, LateLintPass};
 
 use rustc_data_structures::fx::FxHashSet;
 
-use super::call_matching::{build_path_list, find_matching_path};
+use super::call_matching::{build_path_list, match_call_path};
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
 
@@ -156,18 +156,13 @@ impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
             return;
         }
 
-        let Some(def_id) = fn_def_id(cx, expr) else {
+        let Some(matched_path) = match_call_path(cx, expr, &self.paths) else {
             return;
         };
 
-        let callee_path = cx.tcx.def_path_str(def_id);
-
-        let Some(matched_path) = find_matching_path(&callee_path, &self.paths) else {
-            return;
-        };
-
-        if !is_in_async_context(cx, expr)
-            || is_in_test_zone(cx, expr)
+        // Ordered cheap-first: attribute-based test check before HIR parent walks.
+        if is_in_test_zone(cx, expr)
+            || !is_in_async_context(cx, expr)
             || is_inside_spawn_blocking(cx, expr)
         {
             return;
