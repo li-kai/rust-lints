@@ -106,5 +106,20 @@ LL |         assert_ne!(self.val, 42);
    |         ^^^^^^^^^^^^^^^^^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
 
-error: aborting due to 7 previous errors
+error: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:87:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         (|| panic!("boom"))();
+LL | |     }
+   | |_____^
+   |
+note: `panic!()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:88:13
+   |
+LL |         (|| panic!("boom"))();
+   |             ^^^^^^^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+
+error: aborting due to 8 previous errors
 

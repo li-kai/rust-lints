@@ -80,6 +80,15 @@ impl Drop for WithAssertNe {
     }
 }
 
+struct IifeDrop;
+
+impl Drop for IifeDrop {
+    //~v ERROR: panic-able expression in `Drop` impl
+    fn drop(&mut self) {
+        (|| panic!("boom"))();
+    }
+}
+
 // ── SHOULD NOT TRIGGER ──────────────────────────────────────────────
 
 // Errors silently ignored — safe during unwinding

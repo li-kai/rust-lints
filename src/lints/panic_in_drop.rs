@@ -1,7 +1,7 @@
 use clippy_utils::diagnostics::span_lint_and_then;
 use clippy_utils::is_trait_impl_item;
 use rustc_hir::intravisit::{self, Visitor};
-use rustc_hir::{Closure, Expr, ExprKind, ImplItem, ImplItemKind, LangItem, Node};
+use rustc_hir::{Expr, ExprKind, ImplItem, ImplItemKind, LangItem, Node};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::Span;
 
@@ -17,6 +17,10 @@ rustc_session::declare_lint! {
 
 /// Returns `true` if the expression is `std::thread::panicking()` or
 /// `!std::thread::panicking()`.
+///
+/// Uses `qpath_res` rather than `clippy_utils::fn_def_id` because the latter
+/// calls `cx.typeck_results()`, which panics in `check_impl_item` contexts
+/// that run outside an active body.
 fn is_panicking_guard<'tcx>(cx: &LateContext<'tcx>, cond: &Expr<'tcx>) -> bool {
     let inner = if let ExprKind::Unary(rustc_hir::UnOp::Not, inner) = &cond.kind {
         inner
@@ -43,12 +47,17 @@ struct DropPanicFinder<'a, 'tcx> {
     findings: Vec<(Span, &'static str)>,
 }
 
-// No NestedFilter — deliberately skip closures and async blocks.
-// A closure stored in a field or passed to a callback doesn't panic during drop.
+// No NestedFilter — closures are handled explicitly: stored/passed closures
+// don't run during drop, but immediately-invoked ones (IIFEs) do.
 impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        // Skip closure/async block bodies — panics there don't run during drop
-        if matches!(expr.kind, ExprKind::Closure(Closure { .. })) || self.inside_panicking_guard {
+        if self.inside_panicking_guard {
+            return;
+        }
+        if matches!(expr.kind, ExprKind::Closure(_)) {
+            if let Some(body) = hir_refs::iife_closure_body(self.cx.tcx, expr) {
+                intravisit::walk_body(self, body);
+            }
             return;
         }
 

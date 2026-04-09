@@ -8,7 +8,7 @@
 use clippy_utils::is_in_test;
 use rustc_hir::def::Res;
 use rustc_hir::definitions::DefPathData;
-use rustc_hir::{Expr, ExprKind, HirId, Item, ItemKind};
+use rustc_hir::{Body, Expr, ExprKind, HirId, Item, ItemKind, Node};
 use rustc_lint::{LateContext, LintContext as _};
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::def_id::DefId;
@@ -81,6 +81,23 @@ pub fn receiver_is_option_or_result<'tcx>(
             || cx.tcx.is_diagnostic_item(sym::Result, did);
     }
     false
+}
+
+/// If `expr` is a closure that is immediately invoked (e.g. `(|| panic!())()`),
+/// returns its body for the caller to walk. Returns `None` for closures stored
+/// in a field, passed as a callback, returned, etc. — those don't run eagerly.
+pub fn iife_closure_body<'tcx>(tcx: TyCtxt<'tcx>, expr: &Expr<'_>) -> Option<&'tcx Body<'tcx>> {
+    let ExprKind::Closure(closure) = expr.kind else {
+        return None;
+    };
+    let is_iife = matches!(
+        tcx.parent_hir_node(expr.hir_id),
+        Node::Expr(Expr {
+            kind: ExprKind::Call(callee, _),
+            ..
+        }) if callee.hir_id == expr.hir_id
+    );
+    is_iife.then(|| tcx.hir_body(closure.body))
 }
 
 /// Which panic-family macro was detected.

@@ -103,6 +103,17 @@ mod triggers {
             Self
         }
     }
+
+    // immediately-invoked closure still runs during construction
+    struct IifeClosure;
+
+    impl IifeClosure {
+        pub fn new() -> Self {
+            //~^ ERROR: constructor `new` can panic
+            (|| panic!("boom"))();
+            Self
+        }
+    }
 }
 
 // SHOULD NOT TRIGGER

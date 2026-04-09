@@ -1,7 +1,7 @@
 use clippy_utils::diagnostics::span_lint_and_then;
 use clippy_utils::is_trait_impl_item;
 use rustc_hir::intravisit::{self, Visitor};
-use rustc_hir::{Closure, Expr, ExprKind, ImplItem, ImplItemKind};
+use rustc_hir::{Expr, ExprKind, ImplItem, ImplItemKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
@@ -37,12 +37,14 @@ struct PanicFinder<'a, 'tcx> {
     findings: Vec<(Span, &'static str)>,
 }
 
-// No NestedFilter — deliberately skip closures and async blocks.
-// A closure stored in a field or returned doesn't panic during construction.
+// No NestedFilter — closures are handled explicitly: stored/returned closures
+// don't run during construction, but immediately-invoked ones (IIFEs) do.
 impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        // Skip closure/async block bodies — panics there don't run during construction
-        if matches!(expr.kind, ExprKind::Closure(Closure { .. })) {
+        if matches!(expr.kind, ExprKind::Closure(_)) {
+            if let Some(body) = hir_refs::iife_closure_body(self.cx.tcx, expr) {
+                intravisit::walk_body(self, body);
+            }
             return;
         }
 
