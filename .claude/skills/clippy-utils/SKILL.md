@@ -4,88 +4,146 @@ description: Reference for clippy_utils and rustc internals used in this repo's 
 user-invocable: false
 ---
 
-# clippy_utils 0.1.95 (nightly 1.95) — Available APIs
+# clippy_utils 0.1.95 (nightly 1.95) — lint-writing reference
 
-This repo pins `clippy_utils 0.1.95` on `rustc 1.95.0-nightly`. Many APIs from older clippy_utils versions have been removed or inlined. Always verify availability before suggesting an import.
+This repo pins `clippy_utils 0.1.95` on `rustc 1.95.0-nightly`. Many APIs from
+older clippy_utils versions have been removed. **Verify availability before
+suggesting an import** — check `src/lints/` for a working example first.
 
-## Confirmed available imports
+## Confirmed imports
 
-These are used successfully across lints in this repo:
+All paths below are rooted at `clippy_utils::`.
+
+Predicates (`-> bool`):
 
 | Import | Purpose |
 |---|---|
-| `clippy_utils::diagnostics::span_lint_and_help` | Emit lint with a help message |
-| `clippy_utils::diagnostics::span_lint_and_then` | Emit lint with structured sub-diagnostics |
-| `clippy_utils::is_entrypoint_fn` | Check if a function is `main` |
-| `clippy_utils::is_trait_impl_item` | Check if an item is inside a trait impl (any trait) |
-| `clippy_utils::is_def_id_trait_method` | Check if a `DefId` is a trait method |
-| `clippy_utils::is_in_test` | Check if code is inside a `#[test]` function |
-| `clippy_utils::is_in_cfg_test` | Check if code is inside `#[cfg(test)]` |
-| `clippy_utils::return_ty` | Get the return type of a function |
-| `clippy_utils::path_to_local_with_projections` | Resolve a path to a local variable with field projections |
-| `clippy_utils::ty::implements_trait` | Check if a type implements a given trait |
-| `clippy_utils::visitors::for_each_expr_without_closures` | Walk expressions, automatically skipping closures/async blocks |
+| `is_entrypoint_fn` | Check if a function is `main` |
+| `is_expr_default` | Check if an expression is `Default::default()` |
+| `is_test_function` | Check if a fn has `#[test]` (incl. `#[tokio::test]`) |
+| `is_in_test` | Check if code is inside a `#[test]` function |
+| `is_in_cfg_test` | Check if code is inside `#[cfg(test)]` |
+| `is_trait_impl_item` | Check if an item is inside any trait impl |
+| `is_def_id_trait_method` | Check if a `DefId` is a trait method |
+| `ty::implements_trait` | Check if a type implements a trait |
+
+Other:
+
+| Import | Purpose | Example |
+|---|---|---|
+| `diagnostics::span_lint_and_help` | Emit lint with a help message | `debug_remnants.rs` |
+| `diagnostics::span_lint_and_then` | Emit lint with structured sub-diagnostics (multi-span, notes) | `panic_in_drop.rs`, `acyclic_modules.rs` |
+| `fn_def_id` | Resolve a call expression to the callee's `DefId` | `map_init_then_insert.rs`, `blocking_in_async.rs` |
+| `return_ty` | Get the return type of a function | `proper_error_type.rs` |
+| `path_to_local_with_projections` | Resolve a path to a local with field projections | `map_init_then_insert.rs` |
+| `visitors::for_each_expr` | Walk expressions, descending into closures | `realtime_in_async_test.rs` |
+| `visitors::for_each_expr_without_closures` | Walk expressions, skipping closures | `proper_error_type.rs` |
+
+### Shared helper modules (read these first)
+
+- `src/lints/hir_refs.rs` — `resolve_expr_def_id`, `resolve_ty_def_id`,
+  `def_path_segments`, `iife_closure_body`, `find_panic_macro`,
+  `panicking_unwrap_or_expect`, `receiver_is_option_or_result`,
+  `should_skip_ref`.
+- `src/lints/call_matching.rs` — `match_call_path`, `find_matching_path`,
+  `build_path_list`, `resolve_callee_def_id_with_typeck`,
+  `is_in_suppression_zone`.
+- `src/lints/suppression.rs` — `is_in_test_zone`.
 
 ## Removed / unavailable APIs
 
-These do NOT exist in clippy_utils 0.1.95. Do not suggest them:
-
-| Removed API | What to use instead |
+| Removed API | Replacement |
 |---|---|
-| `clippy_utils::match_def_path` | Use `cx.tcx.is_diagnostic_item(sym::Name, def_id)`, `cx.tcx.is_lang_item(def_id, LangItem::Name)`, or `cx.tcx.def_path_str(def_id) == "std::path::to::item"` as a last resort |
-| `clippy_utils::ty::is_type_diagnostic_item` | Inline it: `ty.peel_refs()` then match `ty::Adt(adt, _)` and call `cx.tcx.is_diagnostic_item(sym::Name, adt.did())` |
-| `clippy_utils::ty::is_type_lang_item` | Same pattern as above but with `cx.tcx.is_lang_item(adt.did(), LangItem::Name)` |
-| `TyCtxt::trait_of_item` | Walk the parent HIR node manually: `parent_hir_id` -> `Node::Item` -> `ItemKind::Impl` -> `of_trait` |
+| `clippy_utils::match_def_path` | `cx.tcx.is_diagnostic_item(sym::Name, def_id)`, `cx.tcx.is_lang_item(def_id, LangItem::Name)`, or `cx.tcx.def_path_str(def_id) == "…"` as last resort |
+| `clippy_utils::ty::is_type_diagnostic_item` | Inline: `ty.peel_refs()`, match `ty::Adt(adt, _)`, then `is_diagnostic_item(sym::Name, adt.did())` |
+| `clippy_utils::ty::is_type_lang_item` | Same shape with `is_lang_item(adt.did(), LangItem::Name)` |
+| `TyCtxt::trait_of_item` | Walk HIR parents — see `panic_in_drop.rs:99` (`is_drop_impl`) |
 
-## Common patterns
+## Task → file
 
-### Check if an impl is for a specific trait
+| Task | Where to look |
+|---|---|
+| Check a type by diagnostic item (`Option`/`Result`) | `hir_refs::receiver_is_option_or_result` |
+| Check a type by `LangItem` | `unsafe_send_missing_drop.rs:21` (`is_manually_drop`, `is_phantom_data`) |
+| Match a third-party type with no diagnostic item | `map_init_then_insert.rs:109` (`recognized_map_type`) |
+| Check `ty: Trait` | `unsafe_send_missing_drop.rs` (`implements_trait`) |
+| Match a call against a configurable path list | `blocking_in_async.rs` (single set), `global_side_effect.rs` (multi-set) |
+| Walk a body, simple | `proper_error_type.rs:295` (`for_each_expr_without_closures`) |
+| Walk a body, incl. closures + transitive callees | `realtime_in_async_test.rs:174` (`has_transitive_time_call`) |
+| Stateful body visitor | `panic_in_drop.rs:40` (`DropPanicFinder` toggles on `panicking()` guard) |
+| Visitor with nested body descent (`NestedFilter::OnlyBodies`) | `realtime_in_async_test.rs:117` |
+| IIFE-only closure descent | `hir_refs::iife_closure_body`, used from `panic_in_drop.rs` / `fallible_new.rs` |
+| Detect `impl Drop for T` (parent HIR walk) | `panic_in_drop.rs:99` (`is_drop_impl`) |
+| Detect `unsafe impl Send for T` (safety on `TraitImplHeader`) | `unsafe_send_missing_drop.rs:49` |
+| Detect a macro expansion, dedup by call site | `debug_remnants.rs`, `unstructured_log_fields.rs` |
+| Walk expansion chain through internal panic helpers | `hir_refs::find_panic_macro` |
+| Identify macro crate origin via `macro_def_id` | `unstructured_log_fields.rs:131` |
+| Walk HIR parents until item boundary | `blocking_in_async.rs:77` (`is_in_async_context`), `blocking_in_async.rs:111` (`is_inside_spawn_blocking`) |
+| Resolve expr/ty/use to `DefId` for cross-module lints | `acyclic_modules.rs` (built entirely on `hir_refs::*`) |
+| Inspect coroutine layout for await-held types | `await_holding_unsendable.rs:107` |
+| Detect `async fn` / `async {}` via desugared `Closure` | `blocking_in_async.rs:77`, `await_holding_unsendable.rs:95` |
+| One lint pass declaring multiple lints | `global_side_effect.rs` |
+| Suppress in tests / `main` | `is_in_test_zone` / `is_in_suppression_zone` — ordered cheapest-first per `blocking_in_async.rs:164` |
+| Pre-expansion AST pass (name-only collection) | `bon_builder_collector.rs` + `lints/mod.rs` thread-locals |
+| UI test harness | `testing.rs` + `crate::testing::run_ui_test`. Bless with `DYLINT_BLESS=1 cargo test <name>` |
+| Register a new lint | `src/lib.rs` (`register_lints` + `register_late_pass`) |
 
-There is no shortcut. Walk the HIR parent manually:
+## Non-obvious gotchas
 
-```rust
-let parent_id = cx.tcx.parent_hir_id(impl_item.hir_id());
-let Node::Item(item) = cx.tcx.hir_node(parent_id) else { return false };
-let rustc_hir::ItemKind::Impl(impl_block) = &item.kind else { return false };
-let Some(trait_header) = impl_block.of_trait else { return false };
-let Some(trait_def_id) = trait_header.trait_ref.trait_def_id() else { return false };
-cx.tcx.is_lang_item(trait_def_id, LangItem::Drop)
-```
+- `cx.typeck_results()` panics outside an active body. In `check_impl_item` /
+  `check_item`, fetch via `cx.tcx.typeck(def_id)` and pass `&TypeckResults`
+  down. `clippy_utils::fn_def_id` panics for the same reason in those
+  contexts — use `call_matching::resolve_callee_def_id_with_typeck` or
+  `cx.qpath_res(...).opt_def_id()` instead. See the comment at
+  `panic_in_drop.rs:22` and the helpers in `hir_refs.rs` that take an
+  explicit `TypeckResults`.
 
-### Check if a type is Option or Result
+- When recursing into another body's expressions, use *that* body's typeck
+  results, not the caller's. See `realtime_in_async_test.rs:186`.
 
-```rust
-let ty = typeck.expr_ty_adjusted(receiver).peel_refs();
-if let rustc_middle::ty::Adt(adt, _) = ty.kind() {
-    let did = adt.did();
-    cx.tcx.is_diagnostic_item(sym::Option, did)
-        || cx.tcx.is_diagnostic_item(sym::Result, did)
-}
-```
+- `implements_trait` returns `false` for unbounded generics. Treat that as
+  "impl is unsound", not "type might not be Send" — an `unsafe impl Send for
+  T` promises Send for *all* `T`. See `unsafe_send_missing_drop.rs:106`.
 
-### Match a function by its def path (no diagnostic item available)
+- Path strings are normalized to strip turbofish `::<T>` segments before
+  matching against configured paths — configure
+  `tracing_subscriber::fmt::SubscriberBuilder::try_init`, not the generic
+  form. See `strip_generic_args` in `call_matching.rs` (private helper).
 
-```rust
-if let Some(def_id) = cx.qpath_res(qpath, expr.hir_id).opt_def_id() {
-    cx.tcx.def_path_str(def_id) == "std::thread::panicking"
-}
-```
+- `impl_block.of_trait` carries `safety` and `trait_ref`, not `Impl` itself.
+  See `unsafe_send_missing_drop.rs:57`.
 
-This is fragile but necessary when no `sym::` diagnostic item exists for the target.
+- `#[tokio::test(start_paused = true)]` attribute tokens are consumed before
+  HIR exists. Detect by finding the generated `.start_paused(true)` call
+  instead. See `realtime_in_async_test.rs` module docs.
 
-### Walk a function body, skipping closures
+## Performance conventions
 
-Use `for_each_expr_without_closures` for simple cases. Use a manual `Visitor` impl (without `NestedFilter`) when you need stateful traversal like toggling suppression flags inside guarded branches.
+Match these in new code.
 
-### Detect macro expansions
+1. Prefilter syntactically (`method.ident.as_str() == "…"`) before calling
+   `def_path_str`, which allocates.
+2. Intern `Symbol`s once in `new()`, cache on the lint-pass struct. Never
+   `Symbol::intern` on a hot path. Example: `map_init_then_insert.rs:97`.
+3. Run suppression-zone checks *after* the cheap match, not before.
+   Example: `global_side_effect.rs:182`, `blocking_in_async.rs:164`.
+4. Dedup macro findings by call-site `Span` via `FxHashSet<Span>` on the
+   pass struct. Example: `debug_remnants.rs:25`.
+5. Short-circuit visitors once all signals are collected.
+   Example: `realtime_in_async_test.rs:126`.
+6. In module-level lints, short-circuit intra-module references by `DefId`
+   before allocating path segments. Example: `acyclic_modules.rs:291`.
 
-```rust
-if expr.span.from_expansion() {
-    let expn_data = expr.span.ctxt().outer_expn_data();
-    if let ExpnKind::Macro(_, macro_name) = &expn_data.kind {
-        // macro_name.as_str() gives e.g. "panic", "assert_eq"
-    }
-}
-```
+## Diagnostic item / LangItem cheat sheet
 
-Walk up the expansion chain via `expn_data.call_site` to find the outermost user-facing macro.
+Reach for these before `def_path_str`.
+
+**Diagnostic items** (`sym::…`, `is_diagnostic_item`, `get_diagnostic_item`):
+`Option`, `Result`, `HashMap`, `BTreeMap`, `Cow`, `Error`, `Display`, `Send`.
+
+**LangItems** (`LangItem::…`, `is_lang_item`): `Drop`, `String`, `OwnedBox`,
+`ManuallyDrop`, `PhantomData`.
+
+When neither exists: `crate_name` + `item_name` matching
+(`map_init_then_insert.rs:109`), or `def_path_str` string comparison as a
+last resort — fragile across compiler versions, so cover with a UI test.
