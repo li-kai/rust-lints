@@ -6,18 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(cargo (test|check|build|fmt)*)",
-            "command": "jq -r '.tool_input.command' | sed -E 's/^cargo (test|check|build|fmt)/just \\1/' | jq -Rnc '{hookSpecificOutput:{hookEventName:\"PreToolUse\",updatedInput:{command:input}}}'"
-          },
-          {
-            "type": "command",
-            "if": "Bash(cargo (fix|clippy --fix|clippy --lib --fix)*)",
-            "command": "jq -r '.tool_input.command' | sed -E 's/^cargo (fix|clippy --fix|clippy --lib[^ ]* --fix)/just fix/' | jq -Rnc '{hookSpecificOutput:{hookEventName:\"PreToolUse\",updatedInput:{command:input}}}'"
-          },
-          {
-            "type": "command",
-            "if": "Bash(cargo clippy*)",
-            "command": "jq -r '.tool_input.command' | sed 's/^cargo clippy/just check/' | jq -Rnc '{hookSpecificOutput:{hookEventName:\"PreToolUse\",updatedInput:{command:input}}}'"
+            "if": "Bash(cargo *)",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/rewrite-cargo-command.sh"
           }
         ]
       }
