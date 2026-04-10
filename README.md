@@ -7,6 +7,7 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | Lint | Level | Description |
 |------|-------|-------------|
 | [`acyclic_modules`](#acyclic_modules) | deny | Cyclic dependencies between sibling modules at any depth |
+| [`await_holding_unsendable`](#await_holding_unsendable) | deny | Guards, pool connections, and span handles held across `.await` points |
 | [`blocking_in_async`](#blocking_in_async) | deny | Blocking operations inside `async fn` or `async {}` blocks |
 | [`debug_remnants`](#debug_remnants) | warn | Debug macros (`println!`, `eprintln!`, `dbg!`) in non-test code |
 | [`fallible_new`](#fallible_new) | deny | `fn new()` constructors that can panic |
@@ -18,13 +19,14 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | [`module_dependencies`](#module_dependencies) | deny | Cross-module dependencies not declared in the allowlist |
 | [`needless_builder`](#needless_builder) | warn | Structs with ≤ 2 named fields that unnecessarily derive `bon::Builder` |
 | [`panic_in_drop`](#panic_in_drop) | deny | Panic-able expressions inside `Drop` implementations |
-| [`proper_error_type`](#proper_error_type) | warn | Incomplete or unstructured error types in public APIs |
+| [`proper_error_type`](#proper_error_type) | warn | Incomplete or unstructured error types in `pub`/`pub(crate)` APIs |
 | [`realtime_in_async_test`](#realtime_in_async_test) | warn | Tokio time calls in async tests without `start_paused = true` |
 | [`result_result`](#result_result) | warn | Nested `Result<Result<T, E1>, E2>` in function signatures |
 | [`suggest_builder`](#suggest_builder) | warn | Structs with ≥ 6 named fields that could use a `#[builder]` constructor |
 | [`topological_ordering`](#topological_ordering) | warn | Items within a module not ordered by their dependency graph |
 | [`unbounded_channel`](#unbounded_channel) | deny | Creation of unbounded channels that can exhaust memory |
 | [`unclear_exports`](#unclear_exports) | deny | Glob imports (`use foo::*`) and renamed imports (`use foo::Bar as Baz`) |
+| [`unsafe_send_missing_drop`](#unsafe_send_missing_drop) | warn | `unsafe impl Send` on types with `!Send` fields and no `Drop` impl |
 | [`unstructured_log_fields`](#unstructured_log_fields) | warn | `tracing` macros using format args instead of structured fields |
 
 ---
@@ -54,6 +56,29 @@ error: cyclic dependency between sibling modules under `crate`:
 Tracks path expressions, use statements, type annotations, and method calls. Parent-child references are excluded by construction (only siblings are compared). Does not fire inside `#[cfg(test)]` code or on macro-expanded spans.
 
 No configuration required. Use `#[expect(acyclic_modules, reason = "...")]` for per-site opt-out. Complementary to `module_dependencies` — see [docs/acyclic-modules.md](docs/acyclic-modules.md) for the full design.
+
+### `await_holding_unsendable`
+
+Flags guards, pool connections, and span handles held across `.await` points. Complements Clippy's `await_holding_lock` and `await_holding_refcell_ref` by covering types those lints don't know about.
+
+```
+error: `Entered` held across `.await` — corrupted span nesting — events on other tasks attributed to wrong span
+  --> src/handler.rs:20:9
+   |
+20 |     let _entered = span.enter();
+   |         ^^^^^^^^
+   |
+   = help: scope the guard so it is dropped before the `.await`, or use an async-aware alternative
+note: the value is held across these await points
+  --> src/handler.rs:21:15
+   |
+21 |     do_work().await;
+   |               ^^^^^
+```
+
+Flagged by default: `parking_lot` mutex and rwlock guards (including `Mapped*` and `Arc*` variants), `tracing::span::Entered` / `EnteredSpan`, `crossbeam_epoch::Guard`, `rusqlite::Transaction` / `Savepoint`, `r2d2::PooledConnection`, `diesel::r2d2::PooledConnection`.
+
+Does not fire inside `#[test]` / `#[tokio::test]` or `#[cfg(test)]` modules. Extend via `additional_types` in `dylint.toml`, or disable the defaults with `skip_default_types = true`.
 
 ### `blocking_in_async`
 
@@ -198,13 +223,13 @@ Does not fire on macro-generated `Drop` impls or inside `if !std::thread::panick
 
 ### `proper_error_type`
 
-Flags error types in public APIs that are incomplete, unstructured, or missing error chain information. Fires in five cases:
+Flags error types exposed in `pub` or `pub(crate)` APIs that are incomplete, unstructured, or missing error chain information. Fires in five cases:
 
-1. Public functions returning `Result<T, String>`, `Result<T, &str>`, `Result<T, Box<dyn Error>>`, or `anyhow::Error`/`miette::Report` on effectively-public surfaces.
+1. Functions returning `Result<T, String>`, `Result<T, &str>`, `Result<T, Box<dyn Error>>`, or `anyhow::Error`/`miette::Report` on effectively-public surfaces.
 2. Manual `impl Error` blocks missing `source()` when the type wraps other errors.
 3. `Display` impls that render an inner error also returned by `source()` (double-printing).
 4. Types with both manual `impl Display` and `impl Error` (use `thiserror` instead).
-5. Public types named `*Error` or `*Err` that don't implement `std::error::Error`.
+5. Types named `*Error` or `*Err` that don't implement `std::error::Error`.
 
 ```
 warning: public function returns `Result<_, String>` — use a type that implements `Error`
@@ -231,7 +256,10 @@ Complements Clippy's `option_option` (pedantic), which catches `Option<Option<T>
 
 ### `realtime_in_async_test`
 
-Flags `tokio::time::sleep`, `sleep_until`, `timeout`, `timeout_at`, `interval`, `interval_at` inside async test functions that don't have the tokio clock paused. Tests using real wall-clock time are slow and flaky; `start_paused = true` makes the clock auto-advance instantly.
+Flags two clock-correctness issues in async tests:
+
+1. `tokio::time::sleep`, `sleep_until`, `timeout`, `timeout_at`, `interval`, `interval_at` inside async tests without a paused clock. Real wall-clock waits are slow and flaky; `start_paused = true` makes the clock auto-advance instantly.
+2. `std::time::Instant::now()` inside tests that *do* set `start_paused = true`. The std clock ignores Tokio's paused clock, so measurements drift from the simulated time. Use `tokio::time::Instant::now()` instead.
 
 ```
 warning: real-time wait in async test without paused clock
@@ -244,7 +272,7 @@ warning: real-time wait in async test without paused clock
            `#[tokio::test(start_paused = true)]`
 ```
 
-Does not fire outside test functions, when `.start_paused(true)` is present, or on `tokio::time::advance` (which is the correct tool for stepping a paused clock).
+Walks local helper functions transitively, so tokio time calls hidden inside a helper called from the test are still flagged. Does not fire outside test functions or on `tokio::time::advance` (the correct tool for stepping a paused clock).
 
 ### `suggest_builder`
 
@@ -256,7 +284,7 @@ warning: struct `Config` has 5 fields and may be a good candidate for a `#[build
    = help: prefer `#[bon] impl` with `#[builder] fn new(...) -> Self` to enable the builder pattern
 ```
 
-Does not fire on structs that already have a bon builder, derive any trait in `skip_derives` (default: `Default`, `Queryable`, `Insertable`, `Selectable`), are named `*Builder`, have lifetime parameters, are `#[repr(C)]`, or are generated by macros. `PhantomData` fields are not counted toward the threshold.
+Does not fire on structs that already have a bon builder, have no constructor (no inherent `fn` returning `Self`, `Result<Self, _>`, or `Box<Self>`), derive any trait in `skip_derives` (default: `Default`, `Queryable`, `Insertable`, `Selectable`), are named `*Builder`, have lifetime parameters, are `#[repr(C)]`, or are generated by macros. `PhantomData` fields are not counted toward the threshold.
 
 ### `topological_ordering`
 
@@ -323,6 +351,23 @@ error: renamed imports (`use foo::Bar as Baz`) are banned — use the original n
 ```
 
 Does not fire on underscore imports (`use foo::Bar as _`) or macro-expanded spans.
+
+### `unsafe_send_missing_drop`
+
+Warns when a type has `unsafe impl Send` but contains `!Send` fields and no `Drop` implementation. The implicit destructor will drop those `!Send` fields on whichever thread drops the owning struct, which is unsound when the fields have thread-affinity requirements (e.g. ObjC pointers that must be released on a specific dispatch queue).
+
+```
+warning: `Handle` has `unsafe impl Send` but contains `!Send` fields and no `Drop` impl
+  --> src/handle.rs:19:1
+   |
+19 | struct Handle {
+   | ^^^^^^^^^^^^^
+   |
+   = help: the implicit destructor drops `!Send` fields on the caller's thread;
+           implement `Drop` to ensure `!Send` fields are destroyed in the correct context
+```
+
+`PhantomData<T>` and `ManuallyDrop<T>` fields are excluded — the former is zero-sized, the latter opts out of the implicit destructor. Unbounded generic fields (`T` without a `T: Send` bound) count as `!Send`, since the `unsafe impl` claims `Send` for all instantiations.
 
 ### `unstructured_log_fields`
 
@@ -440,6 +485,10 @@ allow_in_test_modules = true
 
 [blocking_in_async]
 # additional_paths = ["my_lib::database::connect_blocking"]
+
+[await_holding_unsendable]
+# additional_types = ["my_crate::MyGuard"]
+# skip_default_types = false
 
 [global_side_effect.time]
 # additional_paths = ["my_crate::util::current_time"]
