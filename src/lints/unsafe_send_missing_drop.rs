@@ -17,24 +17,6 @@ rustc_session::declare_lint! {
     "`unsafe impl Send` with `!Send` fields and no `Drop` impl"
 }
 
-/// Returns `true` if `ty` is `ManuallyDrop<_>`.
-fn is_manually_drop<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
-    if let ty::Adt(adt, _) = ty.kind() {
-        cx.tcx.is_lang_item(adt.did(), LangItem::ManuallyDrop)
-    } else {
-        false
-    }
-}
-
-/// Returns `true` if `ty` is `PhantomData<_>`.
-fn is_phantom_data<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
-    if let ty::Adt(adt, _) = ty.kind() {
-        cx.tcx.is_lang_item(adt.did(), LangItem::PhantomData)
-    } else {
-        false
-    }
-}
-
 pub struct UnsafeSendMissingDrop;
 
 impl UnsafeSendMissingDrop {
@@ -47,7 +29,6 @@ rustc_session::impl_lint_pass!(UnsafeSendMissingDrop => [UNSAFE_SEND_MISSING_DRO
 
 impl<'tcx> LateLintPass<'tcx> for UnsafeSendMissingDrop {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
-        // 1. Match `unsafe impl Send for T` (with or without generics).
         if item.span.from_expansion() {
             return;
         }
@@ -71,38 +52,31 @@ impl<'tcx> LateLintPass<'tcx> for UnsafeSendMissingDrop {
             return;
         }
 
-        // 2. Resolve self type to an ADT.
         let self_ty = cx.tcx.type_of(item.owner_id.def_id).instantiate_identity();
         let ty::Adt(adt_def, args) = self_ty.kind() else {
             return;
         };
 
-        // 3. Check: does the ADT have a Drop impl?
-        //    If yes, the author has taken responsibility for destruction.
+        // A Drop impl means the author has taken responsibility for destruction.
         if adt_def.destructor(cx.tcx).is_some() {
             return;
         }
 
-        // 4. Check: does any field have a type that is !Send?
-        //    Skip ManuallyDrop (suppresses implicit drop) and PhantomData (no value).
-
         let has_non_send_field = adt_def.all_fields().any(|field| {
             let field_ty = field.ty(cx.tcx, args);
-
-            // ManuallyDrop<T>: the implicit destructor won't run for this field,
-            // so the caller has opted into manual destruction — not our concern.
-            if is_manually_drop(cx, field_ty) {
+            let is_lang = |item| {
+                field_ty
+                    .ty_adt_def()
+                    .is_some_and(|adt| cx.tcx.is_lang_item(adt.did(), item))
+            };
+            // ManuallyDrop<T> suppresses implicit destruction; PhantomData<T>
+            // is a zero-sized marker with nothing to drop.
+            if is_lang(LangItem::ManuallyDrop) || is_lang(LangItem::PhantomData) {
                 return false;
             }
-
-            // PhantomData<T>: zero-sized marker, nothing to drop.
-            if is_phantom_data(cx, field_ty) {
-                return false;
-            }
-
-            // For unbounded generics (e.g. field type is just `T` with no
-            // `T: Send` bound), the trait solver will say "unknown" — we treat
-            // that as !Send because the unsafe impl promises Send for ALL T.
+            // For unbounded generics (e.g. bare `T` with no `T: Send` bound),
+            // the trait solver says "unknown" — treat as !Send because the
+            // unsafe impl promises Send for ALL T.
             !implements_trait(cx, field_ty, send_trait_id, &[])
         });
 
@@ -110,7 +84,6 @@ impl<'tcx> LateLintPass<'tcx> for UnsafeSendMissingDrop {
             return;
         }
 
-        // 5. Emit diagnostic on the struct definition.
         let struct_span = cx.tcx.def_span(adt_def.did());
         let type_name = cx.tcx.item_name(adt_def.did());
 
