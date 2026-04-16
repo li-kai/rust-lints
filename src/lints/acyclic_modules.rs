@@ -130,11 +130,9 @@ fn dfs(
     color.insert(node, Color::Black);
 }
 
-/// Rotates a cycle so it starts at the lexicographically smallest module name.
+/// Rotates a non-empty cycle so it starts at the lexicographically smallest
+/// module name.
 fn normalize_cycle(cycle: &[Symbol]) -> Cycle {
-    if cycle.is_empty() {
-        return Vec::new();
-    }
     let min_pos = cycle
         .iter()
         .enumerate()
@@ -151,7 +149,6 @@ fn normalize_cycle(cycle: &[Symbol]) -> Cycle {
 /// Uses Gray (on stack) / Black (finished) coloring with absence meaning
 /// unvisited.  Returns cycles normalized and deduplicated.
 fn detect_cycles(graph: &[SiblingEdge]) -> Vec<Cycle> {
-    // Build adjacency list, deduplicating edges.
     let mut adj: FxHashMap<Symbol, Vec<Symbol>> = FxHashMap::default();
     let mut node_set: FxHashSet<Symbol> = FxHashSet::default();
     let mut seen_edges: FxHashSet<(Symbol, Symbol)> = FxHashSet::default();
@@ -181,7 +178,6 @@ fn detect_cycles(graph: &[SiblingEdge]) -> Vec<Cycle> {
         }
     }
 
-    // Normalize, sort, and deduplicate.
     let mut result: Vec<Cycle> = cycles.into_iter().map(|c| normalize_cycle(&c)).collect();
     result.sort_by(|a, b| {
         a.iter()

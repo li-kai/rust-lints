@@ -328,7 +328,6 @@ impl ProperErrorType {
 rustc_session::impl_lint_pass!(ProperErrorType => [PROPER_ERROR_TYPE]);
 
 impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
-    // Step 1: Unstructured error types
     fn check_fn(
         &mut self,
         cx: &LateContext<'tcx>,
@@ -405,19 +404,13 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
         }
     }
 
-    // Steps 2, 4, 5
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
-        // Step 5: *Error without Error impl
         Self::check_error_named_type(cx, item);
-
-        // Steps 2-4: collect impl Error / impl Display
         self.collect_trait_impls(cx, item);
     }
 
-    // Steps 3, 4
     fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
         for (adt_did, error_info) in &self.error_impls {
-            // Step 4: Manual Error + Display
             if let Some(display_info) = self.display_impls.get(adt_did) {
                 span_lint_and_help(
                     cx,
@@ -428,7 +421,6 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
                     "thiserror eliminates boilerplate and keeps Display in sync with variants",
                 );
 
-                // Step 3: Duplicated source in Display
                 if error_info.has_source
                     && !error_info.source_field_names.is_empty()
                     && let Some(fmt_def_id) = display_info.fmt_def_id

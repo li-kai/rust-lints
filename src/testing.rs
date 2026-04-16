@@ -112,11 +112,9 @@ mod runner {
             .find_map(|line| {
                 let caps = RE.captures(line)?;
                 let args: Vec<String> = caps[1].split(' ').map(str::to_owned).collect();
-                let is_rustc = args.first().map_or(false, |a| {
-                    std::path::Path::new(a)
-                        .file_stem()
-                        .is_some_and(|s| s == "rustc")
-                });
+                let is_rustc = std::path::Path::new(&args[0])
+                    .file_stem()
+                    .is_some_and(|s| s == "rustc");
                 let matches_example = args
                     .windows(2)
                     .any(|w| w[0] == "--crate-name" && w[1] == crate_name);
