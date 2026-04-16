@@ -3,6 +3,7 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{Closure, ClosureKind, CoroutineDesugaring, CoroutineKind, Expr, ExprKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::mir::CoroutineLayout;
+use rustc_middle::ty;
 use rustc_span::Span;
 use serde::Deserialize;
 
@@ -98,15 +99,10 @@ impl<'tcx> LateLintPass<'tcx> for AwaitHoldingUnsendable {
             def_id,
             ..
         }) = expr.kind
+            && !is_in_test_zone(cx, expr)
+            && let Some(coroutine_layout) = cx.tcx.mir_coroutine_witnesses(*def_id)
         {
-            // Skip test code.
-            if is_in_test_zone(cx, expr) {
-                return;
-            }
-
-            if let Some(coroutine_layout) = cx.tcx.mir_coroutine_witnesses(*def_id) {
-                self.check_interior_types(cx, coroutine_layout);
-            }
+            self.check_interior_types(cx, coroutine_layout);
         }
     }
 }
@@ -120,14 +116,14 @@ impl AwaitHoldingUnsendable {
     )]
     fn check_interior_types(&self, cx: &LateContext<'_>, coroutine: &CoroutineLayout<'_>) {
         for (ty_index, ty_cause) in coroutine.field_tys.iter_enumerated() {
-            if let rustc_middle::ty::Adt(adt, _) = ty_cause.ty.kind() {
+            if let ty::Adt(adt, _) = ty_cause.ty.kind() {
                 let def_path = cx.tcx.def_path_str(adt.did());
 
                 let Some(risk) = self.types.get(def_path.as_str()) else {
                     continue;
                 };
 
-                let short_name = def_path.rsplit("::").next().unwrap_or(&def_path);
+                let short_name = cx.tcx.item_name(adt.did());
 
                 let await_points: Vec<Span> = coroutine
                     .variant_source_info
@@ -150,12 +146,10 @@ impl AwaitHoldingUnsendable {
                             "scope the guard so it is dropped before the `.await`, \
                              or use an async-aware alternative",
                         );
-                        if !await_points.is_empty() {
-                            diag.span_note(
-                                await_points,
-                                "the value is held across these await points",
-                            );
-                        }
+                        diag.span_note(
+                            await_points,
+                            "the value is held across these await points",
+                        );
                     },
                 );
             }
