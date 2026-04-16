@@ -66,10 +66,6 @@ const HELP: &str = "use an async-aware alternative, or wrap the blocking call \
 
 /// Returns `true` if `expr` is syntactically inside an `async fn` or
 /// `async {}` block.
-///
-/// Walks up the HIR parent chain. If we encounter an async fn signature
-/// or an async closure/block before hitting a sync function boundary,
-/// the expression is in async context.
 #[expect(
     clippy::wildcard_enum_match_arm,
     reason = "we only care about closures and function boundaries"
@@ -91,7 +87,6 @@ fn is_in_async_context(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
             {
                 return true;
             }
-            // Stop at any function boundary — we're in sync context.
             Node::Item(_) | Node::ImplItem(_) | Node::TraitItem(_) => return false,
             _ => {}
         }
@@ -101,9 +96,6 @@ fn is_in_async_context(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 
 /// Returns `true` if `expr` is inside a closure passed to
 /// `tokio::task::spawn_blocking()` or equivalent escape hatch.
-///
-/// Walks up the HIR parent chain looking for a closure whose parent
-/// is a call to a known `spawn_blocking` function.
 #[expect(
     clippy::wildcard_enum_match_arm,
     reason = "we only care about closures and function boundaries"
@@ -115,8 +107,6 @@ fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
                 kind: ExprKind::Closure(_),
                 ..
             }) => {
-                // Found a closure ancestor — check if its parent is a
-                // call to a known spawn_blocking function.
                 if let Node::Expr(parent) = cx.tcx.hir_node(cx.tcx.parent_hir_id(hir_id))
                     && let Some(def_id) = fn_def_id(cx, parent)
                 {
@@ -151,7 +141,6 @@ rustc_session::impl_lint_pass!(BlockingInAsync => [BLOCKING_IN_ASYNC]);
 
 impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
-        // Skip macro-generated code.
         if expr.span.from_expansion() {
             return;
         }
