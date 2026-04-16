@@ -1,12 +1,11 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::fn_def_id;
-use rustc_hir::Expr;
-use rustc_lint::{LateContext, LateLintPass};
-
 use rustc_data_structures::fx::FxHashSet;
+use rustc_hir::Expr;
+use rustc_lint::{LateContext, LateLintPass, Lint};
 
 use super::call_matching::{build_path_list, find_matching_path, is_in_suppression_zone};
-use crate::config::GlobalSideEffectConfig;
+use crate::config::{GlobalSideEffectConfig, SubLintConfig};
 
 rustc_session::declare_lint! {
     /// Flags direct calls to wall-clock or monotonic time functions.
@@ -120,18 +119,32 @@ const HELP_ENV: &str =
     "move this to your application's entry point and pass the value as a parameter";
 const HELP_LOGGING_INIT: &str = "move global tracing subscriber initialization to `main()` so library code does not mutate process-global state";
 
-/// A single lint pass that checks for all four categories of global side effects.
-/// Each category has its own `Lint` and configured path list, but the detection
-/// logic is identical: match call expressions against known function paths.
-///
-/// Chose a single pass over four separate passes to avoid repeated traversal
-/// the HIR for what is essentially the same check with different path lists.
+/// One category's rule: lint to emit, path set to match against, help text.
+struct Sublint {
+    lint: &'static Lint,
+    paths: FxHashSet<String>,
+    help: &'static str,
+}
+
+impl Sublint {
+    fn new(
+        lint: &'static Lint,
+        defaults: &[&str],
+        config: &SubLintConfig,
+        help: &'static str,
+    ) -> Self {
+        Self {
+            lint,
+            paths: build_path_list(defaults, config),
+            help,
+        }
+    }
+}
+
+/// Single pass over four categories — one HIR traversal, four path-set lookups
+/// per call expression.
 pub struct GlobalSideEffect {
-    /// Effective path sets after applying config overrides.
-    time_paths: FxHashSet<String>,
-    randomness_paths: FxHashSet<String>,
-    env_paths: FxHashSet<String>,
-    logging_init_paths: FxHashSet<String>,
+    sublints: [Sublint; 4],
 }
 
 impl GlobalSideEffect {
@@ -140,10 +153,32 @@ impl GlobalSideEffect {
             dylint_linting::config_or_default("global_side_effect");
 
         Self {
-            time_paths: build_path_list(DEFAULT_TIME_PATHS, &config.time),
-            randomness_paths: build_path_list(DEFAULT_RANDOMNESS_PATHS, &config.randomness),
-            env_paths: build_path_list(DEFAULT_ENV_PATHS, &config.env),
-            logging_init_paths: build_path_list(DEFAULT_LOGGING_INIT_PATHS, &config.logging_init),
+            sublints: [
+                Sublint::new(
+                    GLOBAL_SIDE_EFFECT_TIME,
+                    DEFAULT_TIME_PATHS,
+                    &config.time,
+                    HELP_TIME,
+                ),
+                Sublint::new(
+                    GLOBAL_SIDE_EFFECT_RANDOMNESS,
+                    DEFAULT_RANDOMNESS_PATHS,
+                    &config.randomness,
+                    HELP_RANDOMNESS,
+                ),
+                Sublint::new(
+                    GLOBAL_SIDE_EFFECT_ENV,
+                    DEFAULT_ENV_PATHS,
+                    &config.env,
+                    HELP_ENV,
+                ),
+                Sublint::new(
+                    GLOBAL_SIDE_EFFECT_LOGGING_INIT,
+                    DEFAULT_LOGGING_INIT_PATHS,
+                    &config.logging_init,
+                    HELP_LOGGING_INIT,
+                ),
+            ],
         }
     }
 }
@@ -166,32 +201,27 @@ impl<'tcx> LateLintPass<'tcx> for GlobalSideEffect {
         };
 
         let callee_path = cx.tcx.def_path_str(def_id);
-        let (lint, matched_path, help) =
-            if let Some(p) = find_matching_path(&callee_path, &self.time_paths) {
-                (&GLOBAL_SIDE_EFFECT_TIME, p, HELP_TIME)
-            } else if let Some(p) = find_matching_path(&callee_path, &self.randomness_paths) {
-                (&GLOBAL_SIDE_EFFECT_RANDOMNESS, p, HELP_RANDOMNESS)
-            } else if let Some(p) = find_matching_path(&callee_path, &self.env_paths) {
-                (&GLOBAL_SIDE_EFFECT_ENV, p, HELP_ENV)
-            } else if let Some(p) = find_matching_path(&callee_path, &self.logging_init_paths) {
-                (&GLOBAL_SIDE_EFFECT_LOGGING_INIT, p, HELP_LOGGING_INIT)
-            } else {
-                return;
-            };
+        let Some((sublint, matched_path)) = self
+            .sublints
+            .iter()
+            .find_map(|s| find_matching_path(&callee_path, &s.paths).map(|p| (s, p)))
+        else {
+            return;
+        };
 
-        // Check suppression zones only for matched calls (avoids work on
-        // the vast majority of expressions that are not flagged).
+        // Suppression check runs only after a match, since most expressions
+        // are not flagged and the HIR parent walk is the expensive step.
         if is_in_suppression_zone(cx, expr) {
             return;
         }
 
         span_lint_and_help(
             cx,
-            lint,
+            sublint.lint,
             expr.span,
             format!("direct call to `{matched_path}()`"),
             None,
-            help,
+            sublint.help,
         );
     }
 }
