@@ -85,34 +85,38 @@ fn has_only_format_args(snippet: &str) -> bool {
     let Some((before_fmt, fmt_str)) = split_at_format_string(snippet) else {
         return false;
     };
-    if !has_format_placeholders(fmt_str) {
-        return false;
-    }
-    before_fmt.trim().trim_end_matches(',').trim().is_empty()
+    has_format_placeholders(fmt_str) && before_fmt.trim().trim_end_matches(',').trim().is_empty()
 }
 
-/// Walk up the macro expansion chain to find a tracing macro (`info`, `warn`,
-/// `debug`, `error`, `trace`) defined in the `tracing` crate. Returns the
-/// display label (e.g. `"tracing::info"`) and the call site span.
-fn find_tracing_macro_callsite(cx: &LateContext<'_>, span: Span) -> Option<(String, Span)> {
+/// Walk up the macro expansion chain to find a tracing level macro defined in
+/// the `tracing` crate. Returns the display label (e.g. `"tracing::info"`) and
+/// the call site span.
+fn find_tracing_macro_callsite(
+    cx: &LateContext<'_>,
+    span: Span,
+) -> Option<(&'static str, Span)> {
     let mut current = span;
     while current.from_expansion() {
         let expn = current.ctxt().outer_expn_data();
-        if let ExpnKind::Macro(_, name) = &expn.kind {
-            let name_str = name.as_str();
-            let base = name_str.strip_prefix("tracing::").unwrap_or(name_str);
-            if matches!(base, "info" | "warn" | "debug" | "error" | "trace")
-                && let Some(def_id) = expn.macro_def_id
-            {
-                let crate_name = cx.tcx.crate_name(def_id.krate);
-                if crate_name.as_str() == "tracing" {
-                    let label = if name_str.contains("::") {
-                        name_str.to_owned()
-                    } else {
-                        format!("tracing::{name_str}")
-                    };
-                    return Some((label, expn.call_site));
-                }
+        if let ExpnKind::Macro(_, name) = &expn.kind
+            && let Some(def_id) = expn.macro_def_id
+            && cx.tcx.crate_name(def_id.krate).as_str() == "tracing"
+        {
+            // The expansion name may be the bare ident (`info`) or a
+            // crate-qualified path (`tracing::info`), depending on how the
+            // macro was invoked. Accept both.
+            let base = name.as_str();
+            let base = base.strip_prefix("tracing::").unwrap_or(base);
+            let label = match base {
+                "info" => Some("tracing::info"),
+                "warn" => Some("tracing::warn"),
+                "debug" => Some("tracing::debug"),
+                "error" => Some("tracing::error"),
+                "trace" => Some("tracing::trace"),
+                _ => None,
+            };
+            if let Some(label) = label {
+                return Some((label, expn.call_site));
             }
         }
         current = expn.call_site;
