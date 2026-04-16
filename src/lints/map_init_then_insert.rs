@@ -27,7 +27,6 @@ fn is_insert_on_binding(stmt: &Stmt<'_>, binding_id: HirId) -> bool {
         return false;
     }
 
-    // MethodCall fields: (PathSegment, receiver, args, span).
     let ExprKind::MethodCall(method, receiver, args, _) = &expr.kind else {
         return false;
     };
