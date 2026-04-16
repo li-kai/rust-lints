@@ -39,8 +39,6 @@ rustc_session::declare_lint! {
     "items are not in topological order in this module"
 }
 
-// Item classification helpers
-
 fn is_relevant_item_kind(kind: &hir::ItemKind<'_>) -> bool {
     matches!(
         kind,
@@ -118,9 +116,6 @@ fn resolve_self_ty_def_id(cx: &LateContext<'_>, impl_block: &hir::Impl<'_>) -> O
     }
 }
 
-// Reference resolution
-
-/// Walk up the parent chain from `def_id` until we find a module-level item.
 fn find_module_item(
     tcx: TyCtxt<'_>,
     def_id: LocalDefId,
@@ -144,32 +139,20 @@ fn find_module_item(
     }
 }
 
-/// Represents a top-level item (or item group) within a single module,
-/// tracked for ordering analysis.
 struct ModuleItem {
     def_id: LocalDefId,
     span: Span,
     /// Tight span covering just the declaration head (e.g. `fn callee` or
     /// `struct Config`), used for "defined here" labels.
     ident_span: Span,
-    /// Human-readable name for diagnostics (e.g. "fn process", "struct Config").
     display_name: String,
-    /// For impl blocks whose self type is defined in this module, the
-    /// `LocalDefId` of the self type.  Used to group the impl with its type.
+    /// When the impl's self type is defined in this same module, the `LocalDefId`
+    /// of the self type. Used to group the impl with its type for ordering.
     impl_self_ty: Option<LocalDefId>,
 }
 
-/// Build a map from `LocalDefId` → item index for O(1) lookups.
-fn build_def_id_to_idx(items: &[ModuleItem]) -> FxHashMap<LocalDefId, usize> {
-    items
-        .iter()
-        .enumerate()
-        .map(|(idx, item)| (item.def_id, idx))
-        .collect()
-}
-
-/// Remap refs so that impl items are treated as part of their type
-/// definition (when the self type is local to the module).
+/// Remap refs so impl items share their self-type's index (merging edges from
+/// `impl T` into edges from `T`), then drop self-loops.
 fn remap_impl_refs(
     items: &[ModuleItem],
     def_id_to_idx: &FxHashMap<LocalDefId, usize>,
@@ -188,8 +171,6 @@ fn remap_impl_refs(
         .collect()
 }
 
-// Graph construction & SCC computation
-
 fn build_adj_list(refs: &[(usize, usize, Span)], n: usize) -> Vec<Vec<usize>> {
     let mut adj = vec![Vec::new(); n];
     for &(from, to, _) in refs {
@@ -201,8 +182,6 @@ fn build_adj_list(refs: &[(usize, usize, Span)], n: usize) -> Vec<Vec<usize>> {
     }
     adj
 }
-
-// Tarjan's algorithm
 
 struct TarjanState {
     index_counter: usize,
@@ -242,7 +221,8 @@ fn strongconnect(v: usize, adj: &[Vec<usize>], state: &mut TarjanState) {
     }
 }
 
-fn tarjan_scc(adj: &[Vec<usize>], n: usize) -> Vec<Vec<usize>> {
+/// Returns a vector mapping each item index to its SCC id.
+fn compute_sccs(adj: &[Vec<usize>], n: usize) -> Vec<usize> {
     let mut state = TarjanState {
         index_counter: 0,
         stack: Vec::new(),
@@ -256,13 +236,8 @@ fn tarjan_scc(adj: &[Vec<usize>], n: usize) -> Vec<Vec<usize>> {
             strongconnect(v, adj, &mut state);
         }
     }
-    state.sccs
-}
-
-fn compute_sccs(adj: &[Vec<usize>], n: usize) -> Vec<usize> {
-    let sccs = tarjan_scc(adj, n);
     let mut item_to_scc = vec![0usize; n];
-    for (scc_idx, scc) in sccs.iter().enumerate() {
+    for (scc_idx, scc) in state.sccs.iter().enumerate() {
         for &item_idx in scc {
             item_to_scc[item_idx] = scc_idx;
         }
@@ -270,25 +245,17 @@ fn compute_sccs(adj: &[Vec<usize>], n: usize) -> Vec<usize> {
     item_to_scc
 }
 
-// Violation detection
-
-/// A single ordering violation: an item that appears at the wrong position.
 struct OrderingViolation {
-    /// `LocalDefId` of the out-of-order item (used for lint-level resolution).
     item_def_id: LocalDefId,
-    /// Span of the first reference that demonstrates the violation.
     ref_span: Span,
     item_name: String,
-    /// (referenced item name, `ref_span`, `def_span`)
+    /// `(referenced item name, ref_span, def_span)`
     witnesses: Vec<(String, Span, Span)>,
 }
 
-/// A grouping violation: an impl separated from its type.
 struct GroupingViolation {
-    /// `LocalDefId` of the impl block (used for lint-level resolution).
     impl_def_id: LocalDefId,
     impl_span: Span,
-    /// Display name of the impl item (e.g. "impl Widget", "impl .. for Point").
     impl_name: String,
     type_name: String,
     type_span: Span,
@@ -322,7 +289,6 @@ fn find_ordering_violations(
             item_name: items[from_idx].display_name.clone(),
             witnesses,
         })
-
         .collect();
     violations.sort_by_key(|v| v.ref_span.lo());
     violations
@@ -369,8 +335,6 @@ fn check_impl_grouping(
 
     violations
 }
-
-// Diagnostics
 
 fn emit_module_diagnostic(
     cx: &LateContext<'_>,
@@ -440,25 +404,20 @@ fn emit_module_diagnostic(
     }
 }
 
-/// A raw reference collected during the lint pass, before resolution to
-/// module-level items.
+/// A reference edge from the containing owner to the referenced target,
+/// collected eagerly in `check_expr` / `check_ty`. Owner → module-item
+/// resolution is deferred to `check_crate_post` (items are not yet collected
+/// when the ref is seen).
 struct RawRef {
-    /// The owner (function/method/const) containing the reference.
     source_owner: LocalDefId,
-    /// The `DefId` being referenced (may be a nested item like a method).
     target: LocalDefId,
-    /// Span of the reference site, for diagnostic labels.
     ref_span: Span,
 }
 
 pub struct TopologicalOrdering {
-    /// Per-module items in source order, built up during the lint pass and
-    /// analyzed in `check_crate_post`.
     modules: FxHashMap<LocalDefId, Vec<ModuleItem>>,
-    /// Raw reference edges collected during `check_expr` / `check_ty`.
     raw_refs: Vec<RawRef>,
-    /// Cached lint-level check: `false` when the lint is disabled at crate level.
-    /// Set once in `check_crate`; when `false`, all callbacks short-circuit.
+    /// Short-circuits all callbacks when the lint is `#[allow]`'d at crate level.
     enabled: bool,
 }
 
@@ -471,19 +430,13 @@ impl TopologicalOrdering {
         }
     }
 
-    fn record_ref(
-        &mut self,
-        owner: LocalDefId,
-        resolved: Option<(rustc_span::def_id::DefId, Span)>,
-    ) {
-        if let Some((def_id, span)) = resolved {
-            if let Some(local_id) = def_id.as_local() {
-                self.raw_refs.push(RawRef {
-                    source_owner: owner,
-                    target: local_id,
-                    ref_span: span,
-                });
-            }
+    fn record_ref(&mut self, owner: LocalDefId, def_id: rustc_span::def_id::DefId, span: Span) {
+        if let Some(target) = def_id.as_local() {
+            self.raw_refs.push(RawRef {
+                source_owner: owner,
+                target,
+                ref_span: span,
+            });
         }
     }
 }
@@ -509,7 +462,6 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
 
         let item_def_id = item.owner_id.def_id;
 
-        // Only process direct children of modules.
         let parent_def_id = cx.tcx.parent(item_def_id.to_def_id());
         let Some(parent_local) = parent_def_id.as_local() else {
             return;
@@ -518,7 +470,6 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
             return;
         }
 
-        // Skip items in test code.
         if is_in_test(cx.tcx, item.hir_id()) {
             return;
         }
@@ -546,24 +497,20 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
-        if !self.enabled {
+        if !self.enabled || expr.span.from_expansion() {
             return;
         }
-        if !expr.span.from_expansion() {
-            let resolved = hir_refs::resolve_expr_def_id(cx, expr)
-                .map(|(def_id, _hir_id, span)| (def_id, span));
-            self.record_ref(expr.hir_id.owner.def_id, resolved);
+        if let Some((def_id, _, span)) = hir_refs::resolve_expr_def_id(cx, expr) {
+            self.record_ref(expr.hir_id.owner.def_id, def_id, span);
         }
     }
 
     fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, hir::AmbigArg>) {
-        if !self.enabled {
+        if !self.enabled || ty.span.from_expansion() {
             return;
         }
-        if !ty.span.from_expansion() {
-            let resolved =
-                hir_refs::resolve_ty_def_id(cx, ty).map(|(def_id, _hir_id, span)| (def_id, span));
-            self.record_ref(ty.hir_id.owner.def_id, resolved);
+        if let Some((def_id, _, span)) = hir_refs::resolve_ty_def_id(cx, ty) {
+            self.record_ref(ty.hir_id.owner.def_id, def_id, span);
         }
     }
 
@@ -614,11 +561,13 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
                 .get(&module_def_id)
                 .map_or(&[][..], Vec::as_slice);
 
-            let item_def_id_to_idx = build_def_id_to_idx(items);
+            let item_def_id_to_idx: FxHashMap<LocalDefId, usize> = items
+                .iter()
+                .enumerate()
+                .map(|(idx, item)| (item.def_id, idx))
+                .collect();
 
-            // Apply impl grouping to refs (merge impl refs with type).
-            let remapped_refs =
-                remap_impl_refs(items, &item_def_id_to_idx, resolved_refs);
+            let remapped_refs = remap_impl_refs(items, &item_def_id_to_idx, resolved_refs);
 
             let n = items.len();
             let adj = build_adj_list(&remapped_refs, n);
