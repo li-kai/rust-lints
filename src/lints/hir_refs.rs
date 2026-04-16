@@ -6,6 +6,7 @@
 //! Shared helpers for resolving cross-module references from HIR nodes.
 
 use clippy_utils::is_in_test;
+use clippy_utils::macros::expn_backtrace;
 use rustc_hir::def::Res;
 use rustc_hir::definitions::DefPathData;
 use rustc_hir::{Body, Expr, ExprKind, HirId, Item, ItemKind, Node};
@@ -145,31 +146,20 @@ impl PanicMacro {
 /// expansion chain to handle cases like `panic!` expanding through internal
 /// macros (`panic_fmt`, `panic_2021`, etc.).
 pub fn find_panic_macro(span: Span) -> Option<(Span, PanicMacro)> {
-    let mut sp = span;
-    loop {
-        let expn_data = sp.ctxt().outer_expn_data();
-        if let ExpnKind::Macro(_, macro_name) = &expn_data.kind {
-            let kind = match macro_name.as_str() {
-                "panic" => Some(PanicMacro::Panic),
-                "unreachable" => Some(PanicMacro::Unreachable),
-                "assert" => Some(PanicMacro::Assert),
-                "assert_eq" => Some(PanicMacro::AssertEq),
-                "assert_ne" => Some(PanicMacro::AssertNe),
-                _ => None,
-            };
-            if let Some(kind) = kind {
-                return Some((expn_data.call_site, kind));
-            }
-            // Walk up to the parent expansion (e.g. panic_fmt -> panic)
-            let parent = expn_data.call_site;
-            if parent.ctxt() == sp.ctxt() || !parent.from_expansion() {
-                return None;
-            }
-            sp = parent;
-        } else {
+    expn_backtrace(span).find_map(|(_, data)| {
+        let ExpnKind::Macro(_, name) = data.kind else {
             return None;
-        }
-    }
+        };
+        let kind = match name.as_str() {
+            "panic" => PanicMacro::Panic,
+            "unreachable" => PanicMacro::Unreachable,
+            "assert" => PanicMacro::Assert,
+            "assert_eq" => PanicMacro::AssertEq,
+            "assert_ne" => PanicMacro::AssertNe,
+            _ => return None,
+        };
+        Some((data.call_site, kind))
+    })
 }
 
 /// Returns the named module path components for a definition (e.g. `[payments, checkout]`).
