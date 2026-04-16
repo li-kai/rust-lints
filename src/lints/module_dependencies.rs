@@ -1,5 +1,6 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
+use rustc_hir::definitions::DefPathData;
 use rustc_hir::{Expr, HirId, Item};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::TyCtxt;
@@ -42,7 +43,16 @@ fn top_level_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Symbol> {
     if !def_id.is_local() {
         return None;
     }
-    hir_refs::def_path_segments(tcx, def_id).into_iter().next()
+    tcx.def_path(def_id).data.iter().find_map(|d| {
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "only the TypeNs variant names a module"
+        )]
+        match d.data {
+            DefPathData::TypeNs(sym) => Some(sym),
+            _ => None,
+        }
+    })
 }
 
 pub struct ModuleDependencies {
@@ -124,13 +134,11 @@ impl ModuleDependencies {
             return;
         }
 
-        // If the source module isn't in the config at all (non-exhaustive mode),
-        // don't enforce — only configured modules are checked.
+        // In non-exhaustive mode, unconfigured source modules are silently allowed.
         let Some(allowed) = self.allow.get(&source) else {
             return;
         };
 
-        // Record for dead-edge detection (only for configured modules).
         self.used_edges.insert((source, target));
 
         if allowed.contains(&target) {
