@@ -74,15 +74,6 @@ const HELP: &str = "switch to `#[tokio::test(start_paused = true)]` to resolve \
 const STD_INSTANT_HELP: &str = "use `tokio::time::Instant::now()` instead; \
                                 it advances with `tokio::time::advance()` and auto-advance";
 
-/// Returns `true` if `expr` is a boolean literal `true`.
-const fn is_bool_lit_true(expr: &Expr<'_>) -> bool {
-    if let ExprKind::Lit(lit) = &expr.kind {
-        matches!(lit.node, rustc_ast::LitKind::Bool(true))
-    } else {
-        false
-    }
-}
-
 /// Returns `true` if `expr` is a call to `tokio::runtime::Builder::start_paused(true)`.
 ///
 /// The `method.ident` prefilter keeps this cheap on the visitor's hot path —
@@ -91,7 +82,8 @@ const fn is_bool_lit_true(expr: &Expr<'_>) -> bool {
 fn is_start_paused_true(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     if let ExprKind::MethodCall(method, _receiver, [arg], _span) = &expr.kind
         && method.ident.as_str() == "start_paused"
-        && is_bool_lit_true(arg)
+        && let ExprKind::Lit(lit) = &arg.kind
+        && matches!(lit.node, rustc_ast::LitKind::Bool(true))
         && let Some(def_id) = fn_def_id(cx, expr)
     {
         return cx.tcx.def_path_str(def_id) == "tokio::runtime::Builder::start_paused";
@@ -130,31 +122,24 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
             return;
         }
 
-        // Check for tokio time calls and std::time::Instant::now().
         let needs_time_check = self.first_time_call_span.is_none();
         let needs_instant_check = self.std_instant_now_span.is_none();
 
-        if let Some(def_id) = fn_def_id(self.cx, expr) {
-            if needs_time_check || needs_instant_check {
-                let callee_path = self.cx.tcx.def_path_str(def_id);
+        if (needs_time_check || needs_instant_check)
+            && let Some(def_id) = fn_def_id(self.cx, expr)
+        {
+            let callee_path = self.cx.tcx.def_path_str(def_id);
 
-                if needs_time_check
-                    && find_matching_path(&callee_path, self.time_paths).is_some()
-                {
-                    self.first_time_call_span = Some(expr.span);
-                }
-
-                if needs_instant_check && callee_path == STD_INSTANT_NOW {
-                    self.std_instant_now_span = Some(expr.span);
-                }
+            if needs_time_check && find_matching_path(&callee_path, self.time_paths).is_some() {
+                self.first_time_call_span = Some(expr.span);
             }
-
-            // Record local callees for transitive checking (only needed when
-            // no direct time call has been found yet).
-            if needs_time_check {
-                if let Some(local_id) = def_id.as_local() {
-                    self.local_callees.push((local_id, expr.span));
-                }
+            if needs_instant_check && callee_path == STD_INSTANT_NOW {
+                self.std_instant_now_span = Some(expr.span);
+            }
+            if needs_time_check
+                && let Some(local_id) = def_id.as_local()
+            {
+                self.local_callees.push((local_id, expr.span));
             }
         }
 
