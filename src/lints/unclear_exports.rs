@@ -46,8 +46,8 @@ impl<'tcx> LateLintPass<'tcx> for UnclearExports {
             return;
         }
 
-        // Detect renames: `use foo::Bar as Baz` where ident != last path segment.
-        // Skip `use foo::Bar as _` (underscore imports for trait methods).
+        // `Bar as _` is the idiomatic way to import a trait for its methods
+        // without binding the name — not a rename.
         if let UseKind::Single(bound_ident) = *kind {
             if let Some(last_seg) = path.segments.last() {
                 let original = last_seg.ident.name;

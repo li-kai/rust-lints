@@ -15,10 +15,6 @@ rustc_session::declare_lint! {
     "debug macro in committed code \u{2014} replace with structured logging"
 }
 
-/// Detects debug print macros and suggests structured logging replacements.
-///
-/// Uses `LateLintPass` (not `EarlyLintPass`) because we need `LateContext`
-/// for suppression zone checks.
 pub struct DebugRemnants {
     framework: LogFramework,
     /// Dedup: one diagnostic per macro call site, not per expanded HIR node.
@@ -57,14 +53,13 @@ impl<'tcx> LateLintPass<'tcx> for DebugRemnants {
             _ => return,
         };
 
-        // Dedup: fire once per call site, not per expanded HIR node.
         let call_site = expn_data.call_site;
         if !self.seen_callsites.insert(call_site) {
             return;
         }
 
-        // Suppress in test zones. No fn main() exemption — keeps the lint
-        // visible for CLI tools unless explicitly `#[allow]`ed.
+        // No `fn main()` exemption — keeps the lint visible for CLI tools
+        // unless explicitly `#[allow]`ed.
         if is_in_test_zone(cx, expr) {
             return;
         }
