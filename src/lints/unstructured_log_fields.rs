@@ -78,67 +78,45 @@ fn has_format_placeholders(fmt: &str) -> bool {
     false
 }
 
-/// Returns `true` if the text before the format string contains at least one
-/// structured tracing field: `key = value`, `?field`, `%field`, or a bare
-/// identifier (shorthand for `field = field`).
-///
-/// The `target: "..."` pseudo-field is excluded since it's metadata, not a
-/// structured data field.
-fn has_structured_fields(before: &str) -> bool {
-    let trimmed = before.trim().trim_end_matches(',').trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-    // `target: "value"` is tracing metadata, not a structured field.
-    // If that's the only thing before the format string, no fields are present.
-    // target: "..." would have been consumed as the format string by our parser
-    // only if it's the first string literal. Since `target:` uses a colon (not `=`),
-    // and the value is a string literal, our parser would find that string as the
-    // format string. To handle this: if `before` ends with `target:` (possibly with
-    // whitespace), it's the target specifier and we already parsed its value as
-    // the "format string" — which means we're looking at the wrong string.
-    // However, in practice split_at_format_string finds the *first* string literal,
-    // so `target: "x", "real fmt {}", v` would pick "x". This is an edge case we
-    // accept as a known limitation.
-    true
-}
-
 /// Returns `true` when the macro invocation snippet has format placeholders in
-/// its format string but no structured tracing fields before it.
+/// its format string but no structured tracing fields (`key = value`, `?field`,
+/// `%field`, or bare identifier) before it.
 fn has_only_format_args(snippet: &str) -> bool {
     let Some((before_fmt, fmt_str)) = split_at_format_string(snippet) else {
         return false;
     };
-
-    if !has_format_placeholders(fmt_str) {
-        return false;
-    }
-
-    !has_structured_fields(before_fmt)
+    has_format_placeholders(fmt_str) && before_fmt.trim_end_matches(',').trim_end().is_empty()
 }
 
-/// Walk up the macro expansion chain to find a tracing macro (`info`, `warn`,
-/// `debug`, `error`, `trace`) defined in the `tracing` crate. Returns the
-/// display label (e.g. `"tracing::info"`) and the call site span.
-fn find_tracing_macro_callsite(cx: &LateContext<'_>, span: Span) -> Option<(String, Span)> {
+/// Walk up the macro expansion chain to find a tracing level macro defined in
+/// the `tracing` crate. Returns the display label (e.g. `"tracing::info"`) and
+/// the call site span.
+fn find_tracing_macro_callsite(
+    cx: &LateContext<'_>,
+    span: Span,
+) -> Option<(&'static str, Span)> {
     let mut current = span;
     while current.from_expansion() {
         let expn = current.ctxt().outer_expn_data();
-        if let ExpnKind::Macro(_, name) = &expn.kind {
-            let name_str = name.as_str();
-            let base = name_str.strip_prefix("tracing::").unwrap_or(name_str);
-            if matches!(base, "info" | "warn" | "debug" | "error" | "trace")
-                && let Some(def_id) = expn.macro_def_id
-            {
-                let crate_name = cx.tcx.crate_name(def_id.krate);
-                if crate_name.as_str() == "tracing" {
-                    let label = if name_str.contains("::") {
-                        name_str.to_owned()
-                    } else {
-                        format!("tracing::{name_str}")
-                    };
-                    return Some((label, expn.call_site));
-                }
+        if let ExpnKind::Macro(_, name) = &expn.kind
+            && let Some(def_id) = expn.macro_def_id
+            && cx.tcx.crate_name(def_id.krate).as_str() == "tracing"
+        {
+            // The expansion name may be the bare ident (`info`) or a
+            // crate-qualified path (`tracing::info`), depending on how the
+            // macro was invoked. Accept both.
+            let base = name.as_str();
+            let base = base.strip_prefix("tracing::").unwrap_or(base);
+            let label = match base {
+                "info" => Some("tracing::info"),
+                "warn" => Some("tracing::warn"),
+                "debug" => Some("tracing::debug"),
+                "error" => Some("tracing::error"),
+                "trace" => Some("tracing::trace"),
+                _ => None,
+            };
+            if let Some(label) = label {
+                return Some((label, expn.call_site));
             }
         }
         current = expn.call_site;
