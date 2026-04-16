@@ -35,7 +35,6 @@ mod runner {
 
     fn init() -> &'static TestEnv {
         ENV.get_or_init(|| {
-            // Build the lint library.
             assert!(
                 std::process::Command::new("cargo")
                     .arg("build")
