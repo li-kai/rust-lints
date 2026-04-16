@@ -52,7 +52,6 @@ pub fn is_in_suppression_zone(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
         return true;
     }
 
-    // fn main() — the composition root.
     let enclosing_def_id = cx.tcx.hir_enclosing_body_owner(expr.hir_id);
     is_entrypoint_fn(cx, enclosing_def_id.to_def_id())
 }
