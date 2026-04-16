@@ -58,7 +58,7 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
         span: Span,
         def_id: rustc_hir::def_id::LocalDefId,
     ) {
-        // Skip macros, and trait impl methods as signature is dictated by the trait
+        // Trait impl methods: signature is dictated by the trait, not the impl.
         if span.from_expansion()
             || matches!(kind, FnKind::Closure)
             || is_def_id_trait_method(cx, def_id)
@@ -82,7 +82,6 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
             return;
         };
 
-        // Resolve the aliased type to check its shape
         let ty = cx.tcx.type_of(item.owner_id.def_id).instantiate_identity();
 
         if is_nested_result(cx, ty) {
