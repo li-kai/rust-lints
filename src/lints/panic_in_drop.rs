@@ -27,9 +27,14 @@ fn is_panicking_guard<'tcx>(cx: &LateContext<'tcx>, cond: &Expr<'tcx>) -> bool {
     } else {
         cond
     };
-
+    // Cheap name prefilter — only then pay for `def_path_str`.
     if let ExprKind::Call(callee, _) = &inner.kind
         && let ExprKind::Path(qpath) = &callee.kind
+        && let last = match qpath {
+            rustc_hir::QPath::Resolved(_, p) => p.segments.last().map(|s| s.ident),
+            rustc_hir::QPath::TypeRelative(_, seg) => Some(seg.ident),
+        }
+        && last.is_some_and(|i| i.as_str() == "panicking")
         && let Some(def_id) = cx.qpath_res(qpath, callee.hir_id).opt_def_id()
     {
         return cx.tcx.def_path_str(def_id) == "std::thread::panicking";
@@ -40,20 +45,13 @@ fn is_panicking_guard<'tcx>(cx: &LateContext<'tcx>, cond: &Expr<'tcx>) -> bool {
 struct DropPanicFinder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     typeck: &'a rustc_middle::ty::TypeckResults<'tcx>,
-    /// When true, we're inside an `if std::thread::panicking()` guard —
-    /// skip findings there since the author already handles double-panic.
-    inside_panicking_guard: bool,
-    /// Collected (span, description) pairs for each panicking expression found.
     findings: Vec<(Span, &'static str)>,
 }
 
-// No NestedFilter — closures are handled explicitly: stored/passed closures
-// don't run during drop, but immediately-invoked ones (IIFEs) do.
+// No NestedFilter — stored/passed closures don't run during drop; only
+// immediately-invoked ones (IIFEs) do, and those are handled explicitly.
 impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        if self.inside_panicking_guard {
-            return;
-        }
         if matches!(expr.kind, ExprKind::Closure(_)) {
             if let Some(body) = hir_refs::iife_closure_body(self.cx.tcx, expr) {
                 intravisit::walk_body(self, body);
@@ -61,25 +59,15 @@ impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
             return;
         }
 
-        // Detect `if std::thread::panicking()` or `if !std::thread::panicking()`
-        // and suppress findings in the branch that only runs during unwinding.
-        if let ExprKind::If(cond, then_branch, else_branch) = &expr.kind
+        // `if [!]std::thread::panicking() { … }` — both branches are safe from
+        // double-panic: one runs only when unwinding, the other only when not.
+        if let ExprKind::If(cond, ..) = &expr.kind
             && is_panicking_guard(self.cx, cond)
         {
-            // The author has guarded with `panicking()` — both branches
-            // are safe from double-panic: one runs only when unwinding,
-            // the other only when not. Suppress findings in both.
-            self.inside_panicking_guard = true;
-            intravisit::walk_expr(self, then_branch);
-            if let Some(else_branch) = else_branch {
-                intravisit::walk_expr(self, else_branch);
-            }
-            self.inside_panicking_guard = false;
             return;
         }
 
-        // Check for panic macros: panic!, unreachable!, assert!, assert_eq!, assert_ne!
-        // (checked before method calls to avoid double-reporting macro internals)
+        // Check panic macros before method calls to avoid reporting macro internals.
         if expr.span.from_expansion()
             && let Some((call_site, kind)) = hir_refs::find_panic_macro(expr.span)
         {
@@ -131,10 +119,9 @@ impl<'tcx> LateLintPass<'tcx> for PanicInDrop {
             return;
         };
 
-        // Skip macro-generated impls, and must be a drop impl
         if impl_item.span.from_expansion()
             || impl_item.ident.as_str() != "drop"
-            // Fast pre-check: avoids HIR parent walk for inherent impls
+            // Cheap pre-check before `is_drop_impl`'s HIR parent walk.
             || !is_trait_impl_item(cx, impl_item.hir_id())
             || !is_drop_impl(cx, impl_item)
         {
@@ -146,7 +133,6 @@ impl<'tcx> LateLintPass<'tcx> for PanicInDrop {
         let mut finder = DropPanicFinder {
             cx,
             typeck,
-            inside_panicking_guard: false,
             findings: Vec::new(),
         };
         intravisit::walk_body(&mut finder, body);

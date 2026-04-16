@@ -17,10 +17,9 @@ rustc_session::declare_lint! {
     "constructor `new` can panic \u{2014} consider returning `Result` or renaming to `try_new`"
 }
 
-/// Returns `true` if the function's return type is `Result<_, _>`.
+/// Returns `true` if the function's return type resolves to `Result<_, _>`
+/// (after resolving type aliases).
 fn returns_result<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
-    // Use the type-checked return type to handle type aliases
-    // like `type MyResult<T> = Result<T, MyError>`.
     let def_id = impl_item.owner_id.to_def_id();
     let fn_sig = cx.tcx.fn_sig(def_id).instantiate_identity();
     let ret_ty = fn_sig.output().skip_binder();
@@ -33,12 +32,11 @@ fn returns_result<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>)
 struct PanicFinder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     typeck: &'a rustc_middle::ty::TypeckResults<'tcx>,
-    /// Collected (span, description) pairs for each panicking expression found.
     findings: Vec<(Span, &'static str)>,
 }
 
-// No NestedFilter — closures are handled explicitly: stored/returned closures
-// don't run during construction, but immediately-invoked ones (IIFEs) do.
+// No NestedFilter — stored/returned closures don't run during construction;
+// only immediately-invoked ones (IIFEs) do, and those are handled explicitly.
 impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         if matches!(expr.kind, ExprKind::Closure(_)) {
@@ -52,17 +50,14 @@ impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
             self.findings.push(finding);
         }
 
-        if expr.span.from_expansion() {
-            if let Some((call_site, kind)) = hir_refs::find_panic_macro(expr.span) {
-                if matches!(kind, hir_refs::PanicMacro::Panic | hir_refs::PanicMacro::Unreachable)
-                {
-                    self.findings.push((call_site, kind.desc()));
-                    // Don't walk into panic!/unreachable! expansion
-                    return;
-                }
-                // For assert macros: don't report the assert itself, but walk
-                // into the expansion so inner unwrap()/expect() are still caught.
-            }
+        // For assert macros, walk into the expansion so inner unwrap()/expect()
+        // are still caught but the assert itself is not reported.
+        if expr.span.from_expansion()
+            && let Some((call_site, kind)) = hir_refs::find_panic_macro(expr.span)
+            && matches!(kind, hir_refs::PanicMacro::Panic | hir_refs::PanicMacro::Unreachable)
+        {
+            self.findings.push((call_site, kind.desc()));
+            return;
         }
 
         intravisit::walk_expr(self, expr);
