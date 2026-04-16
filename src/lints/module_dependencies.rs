@@ -85,6 +85,21 @@ impl ModuleDependencies {
         !self.allow.is_empty() || self.exhaustive
     }
 
+    fn warn_unlisted_once(&mut self, cx: &LateContext<'_>, module: Symbol, span: Span) -> bool {
+        if self.all_modules.contains(&module) || !self.warned_unlisted.insert(module) {
+            return false;
+        }
+        span_lint_and_help(
+            cx,
+            MODULE_DEPENDENCIES_UNLISTED,
+            span,
+            format!("module `{module}` is not listed in module_dependencies config"),
+            None,
+            "add this module to [module_dependencies.allow] in dylint.toml",
+        );
+        true
+    }
+
     fn check_dependency(&mut self, cx: &LateContext<'_>, def_id: DefId, hir_id: HirId, span: Span) {
         if !self.is_configured() || hir_refs::should_skip_ref(cx, def_id, hir_id, span) {
             return;
@@ -102,30 +117,11 @@ impl ModuleDependencies {
             return;
         }
 
-        // Exhaustive mode: both modules must be in the config.
-        if self.exhaustive {
-            if !self.all_modules.contains(&source) && self.warned_unlisted.insert(source) {
-                span_lint_and_help(
-                    cx,
-                    MODULE_DEPENDENCIES_UNLISTED,
-                    span,
-                    format!("module `{source}` is not listed in module_dependencies config"),
-                    None,
-                    "add this module to [module_dependencies.allow] in dylint.toml",
-                );
-                return;
-            }
-            if !self.all_modules.contains(&target) && self.warned_unlisted.insert(target) {
-                span_lint_and_help(
-                    cx,
-                    MODULE_DEPENDENCIES_UNLISTED,
-                    span,
-                    format!("module `{target}` is not listed in module_dependencies config"),
-                    None,
-                    "add this module to [module_dependencies.allow] in dylint.toml",
-                );
-                return;
-            }
+        if self.exhaustive
+            && (self.warn_unlisted_once(cx, source, span)
+                || self.warn_unlisted_once(cx, target, span))
+        {
+            return;
         }
 
         // If the source module isn't in the config at all (non-exhaustive mode),
