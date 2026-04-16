@@ -24,7 +24,6 @@ pub mod unstructured_log_fields;
 
 use core::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
 
 use rustc_span::Symbol;
 
@@ -54,6 +53,5 @@ pub fn has_any_derive(name: Symbol, derives: &[Symbol]) -> bool {
 /// both will be treated identically.  Switching to a `LateLintPass` would fix
 /// this at the cost of not seeing derives consumed by macro expansion.
 pub fn has_bon_builder(name: Symbol) -> bool {
-    static BUILDER: LazyLock<Symbol> = LazyLock::new(|| Symbol::intern("Builder"));
-    has_any_derive(name, &[*BUILDER])
+    has_any_derive(name, &[Symbol::intern("Builder")])
 }
