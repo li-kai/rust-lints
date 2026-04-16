@@ -15,21 +15,16 @@ use rustc_span::{Span, Symbol, sym};
 struct ErrorImplInfo {
     span: Span,
     has_source: bool,
-    /// Fields of self type that implement Error (for step 3 cross-ref).
     source_field_names: Vec<Symbol>,
 }
 
 struct DisplayImplInfo {
     span: Span,
-    /// `LocalDefId` of the `fmt` method, for body inspection in step 3.
     fmt_def_id: Option<rustc_hir::def_id::LocalDefId>,
 }
 
-/// Describes which kind of unstructured error was detected.
 enum UnstructuredKind {
-    /// String, &str, Cow<str>, Box<dyn Error>
     Basic(&'static str),
-    /// `anyhow::Error` or `miette::Report`
     ErasedCrate {
         crate_name: &'static str,
         type_name: &'static str,
@@ -45,15 +40,10 @@ rustc_session::declare_lint! {
 }
 
 pub struct ProperErrorType {
-    /// `impl Error for T` blocks seen, keyed by the self type's ADT `DefId`.
     error_impls: FxHashMap<rustc_hir::def_id::DefId, ErrorImplInfo>,
-    /// `impl Display for T` blocks seen, keyed by the self type's ADT `DefId`.
     display_impls: FxHashMap<rustc_hir::def_id::DefId, DisplayImplInfo>,
-    /// Cached interned symbols.
     sym_source: Symbol,
-    sym_fmt: Symbol,
     sym_anyhow: Symbol,
-    sym_anyhow_error: Symbol,
     sym_miette: Symbol,
     sym_miette_report: Symbol,
 }
@@ -64,9 +54,7 @@ impl Default for ProperErrorType {
             error_impls: FxHashMap::default(),
             display_impls: FxHashMap::default(),
             sym_source: Symbol::intern("source"),
-            sym_fmt: Symbol::intern("fmt"),
             sym_anyhow: Symbol::intern("anyhow"),
-            sym_anyhow_error: Symbol::intern("Error"),
             sym_miette: Symbol::intern("miette"),
             sym_miette_report: Symbol::intern("Report"),
         }
@@ -107,7 +95,6 @@ impl ProperErrorType {
             .then_some(vis)
     }
 
-    /// Check if `err_ty` is one of the unstructured error patterns.
     fn classify_unstructured<'tcx>(
         &self,
         cx: &LateContext<'tcx>,
@@ -138,7 +125,7 @@ impl ProperErrorType {
                 }
                 let crate_name = cx.tcx.crate_name(did.krate);
                 let item_name = cx.tcx.item_name(did);
-                if crate_name == self.sym_anyhow && item_name == self.sym_anyhow_error {
+                if crate_name == self.sym_anyhow && item_name == sym::Error {
                     Some(UnstructuredKind::ErasedCrate { crate_name: "anyhow", type_name: "Error" })
                 } else if crate_name == self.sym_miette && item_name == self.sym_miette_report {
                     Some(UnstructuredKind::ErasedCrate { crate_name: "miette", type_name: "Report" })
@@ -150,7 +137,6 @@ impl ProperErrorType {
         }
     }
 
-    /// Step 5: Check if a struct/enum named `*Error` or `*Err` implements `Error`.
     fn check_error_named_type<'tcx>(cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
         #[expect(
             clippy::wildcard_enum_match_arm,
@@ -192,7 +178,6 @@ impl ProperErrorType {
         }
     }
 
-    /// Collect `impl Error for T` and `impl Display for T` blocks.
     fn collect_trait_impls<'tcx>(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
         let ItemKind::Impl(impl_) = &item.kind else {
             return;
@@ -216,14 +201,12 @@ impl ProperErrorType {
         let error_trait_id = cx.tcx.get_diagnostic_item(sym::Error);
         let display_trait_id = cx.tcx.get_diagnostic_item(sym::Display);
 
-        // impl Error for T
         if Some(trait_def_id) == error_trait_id {
             let has_source = impl_.items.iter().any(|impl_item_ref| {
                 let impl_item = cx.tcx.hir_impl_item(*impl_item_ref);
                 impl_item.ident.name == self.sym_source
             });
 
-            // Find fields that implement Error
             let mut source_field_names = Vec::new();
             if let (Some(error_tid), ty::Adt(_, args)) = (error_trait_id, self_ty.kind()) {
                 for variant in adt_def.variants() {
@@ -236,7 +219,6 @@ impl ProperErrorType {
                 }
             }
 
-            // Step 2: Missing source() — emit for pub and pub(crate) types
             if !has_source
                 && !source_field_names.is_empty()
                 && Self::vis_if_at_least_pub_crate(cx, adt_did).is_some()
@@ -262,11 +244,10 @@ impl ProperErrorType {
             );
         }
 
-        // impl Display for T
         if Some(trait_def_id) == display_trait_id {
             let fmt_def_id = impl_.items.iter().find_map(|impl_item_ref| {
                 let impl_item = cx.tcx.hir_impl_item(*impl_item_ref);
-                (impl_item.ident.name == self.sym_fmt).then_some(impl_item.owner_id.def_id)
+                (impl_item.ident.name == sym::fmt).then_some(impl_item.owner_id.def_id)
             });
 
             self.display_impls.insert(
@@ -279,7 +260,6 @@ impl ProperErrorType {
         }
     }
 
-    /// Step 3: Check if Display fmt body references error-typed fields.
     fn check_duplicated_source(
         cx: &LateContext<'_>,
         fmt_def_id: rustc_hir::def_id::LocalDefId,
@@ -293,15 +273,13 @@ impl ProperErrorType {
         let typeck = cx.tcx.typeck(fmt_def_id);
 
         let found = for_each_expr_without_closures(body, |expr| {
-            // Check field access by name (struct-style fields)
             if let ExprKind::Field(_, ident) = expr.kind
                 && source_field_names.contains(&ident.name)
             {
                 return ControlFlow::Break(());
             }
-            // Check if any expression whose type implements Error is used.
-            // This catches pattern-bound variables from enum tuple variants
-            // (e.g. `Self::Io(e) => write!(f, "{e}")`)
+            // Catches pattern-bound variables from enum tuple variants
+            // (e.g. `Self::Io(e) => write!(f, "{e}")`) — not accessible by name.
             if let Some(expr_ty) = typeck.node_type_opt(expr.hir_id)
                 && implements_trait(cx, expr_ty.peel_refs(), error_trait_id, &[])
                 && !matches!(expr.kind, ExprKind::Path(rustc_hir::QPath::Resolved(_, path))
@@ -337,8 +315,6 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
         span: Span,
         def_id: rustc_hir::def_id::LocalDefId,
     ) {
-        // Only lint pub/pub(crate), non-test, named functions that aren't
-        // macro-generated, trait method implementations, or binary entry points.
         if span.from_expansion()
             || is_def_id_trait_method(cx, def_id)
             || is_entrypoint_fn(cx, def_id.to_def_id())
@@ -386,7 +362,6 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
                 );
             }
             UnstructuredKind::ErasedCrate { crate_name, type_name } => {
-                // Only flag if effectively public
                 if !cx.tcx.effective_visibilities(()).is_reachable(def_id) {
                     return;
                 }
