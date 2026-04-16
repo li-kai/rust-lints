@@ -78,43 +78,17 @@ fn has_format_placeholders(fmt: &str) -> bool {
     false
 }
 
-/// Returns `true` if the text before the format string contains at least one
-/// structured tracing field: `key = value`, `?field`, `%field`, or a bare
-/// identifier (shorthand for `field = field`).
-///
-/// The `target: "..."` pseudo-field is excluded since it's metadata, not a
-/// structured data field.
-fn has_structured_fields(before: &str) -> bool {
-    let trimmed = before.trim().trim_end_matches(',').trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-    // `target: "value"` is tracing metadata, not a structured field.
-    // If that's the only thing before the format string, no fields are present.
-    // target: "..." would have been consumed as the format string by our parser
-    // only if it's the first string literal. Since `target:` uses a colon (not `=`),
-    // and the value is a string literal, our parser would find that string as the
-    // format string. To handle this: if `before` ends with `target:` (possibly with
-    // whitespace), it's the target specifier and we already parsed its value as
-    // the "format string" — which means we're looking at the wrong string.
-    // However, in practice split_at_format_string finds the *first* string literal,
-    // so `target: "x", "real fmt {}", v` would pick "x". This is an edge case we
-    // accept as a known limitation.
-    true
-}
-
 /// Returns `true` when the macro invocation snippet has format placeholders in
-/// its format string but no structured tracing fields before it.
+/// its format string but no structured tracing fields (`key = value`, `?field`,
+/// `%field`, or bare identifier) before it.
 fn has_only_format_args(snippet: &str) -> bool {
     let Some((before_fmt, fmt_str)) = split_at_format_string(snippet) else {
         return false;
     };
-
     if !has_format_placeholders(fmt_str) {
         return false;
     }
-
-    !has_structured_fields(before_fmt)
+    before_fmt.trim().trim_end_matches(',').trim().is_empty()
 }
 
 /// Walk up the macro expansion chain to find a tracing macro (`info`, `warn`,
