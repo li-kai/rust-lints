@@ -32,6 +32,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::cmp_owned \
   -W clippy::collapsible_else_if \
   -W clippy::collapsible_if \
+  -W clippy::collapsible_match \
   -W clippy::collapsible_str_replace \
   -W clippy::comparison_to_empty \
   -W clippy::crate_in_macro_def \
@@ -48,6 +49,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::double_comparisons \
   -W clippy::double_ended_iterator_last \
   -W clippy::double_parens \
+  -W clippy::duration_suboptimal_units \
   -W clippy::duration_subsec \
   -W clippy::equatable_if_let \
   -W clippy::err_expect \
@@ -288,6 +290,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::unnecessary_result_map_or_else \
   -W clippy::unnecessary_safety_comment \
   -W clippy::unnecessary_semicolon \
+  -W clippy::unnecessary_trailing_comma \
   -W clippy::unneeded_struct_pattern \
   -W clippy::unneeded_wildcard_pattern \
   -W clippy::unnested_or_patterns \
