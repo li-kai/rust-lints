@@ -56,3 +56,7 @@ doc *args='--open':
 check-all:
     just check
     just test
+
+ci:
+    cargo fmt --all -- --check
+    just check-all
