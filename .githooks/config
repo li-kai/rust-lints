@@ -1,0 +1,6 @@
+# Tracked git hook declarations (Git 2.54+ config-based hooks).
+# Wired into `.git/config` via `include.path` by the Nix dev shell.
+# `command` is resolved relative to the top of the working tree.
+[hook "rust-pre-commit"]
+	event = pre-commit
+	command = .githooks/pre-commit

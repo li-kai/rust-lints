@@ -327,10 +327,14 @@
                 RUST_BACKTRACE = "1";
               };
               shellHook = ''
-                if git rev-parse --git-dir >/dev/null 2>&1 && [ -d .githooks ] && \
-                   [ "$(git config --local --get core.hooksPath 2>/dev/null)" != ".githooks" ]; then
-                  git config --local core.hooksPath .githooks
-                  echo "pre-commit hook installed (core.hooksPath=.githooks)"
+                # Pull in the tracked hook declarations (Git 2.54+ config-based
+                # hooks) by adding .githooks/config to the local config's
+                # include.path. Relative to .git/config → ../.githooks/config.
+                hook_include="../.githooks/config"
+                if git rev-parse --git-dir >/dev/null 2>&1 && [ -f .githooks/config ] && \
+                   ! git config --local --get-all include.path 2>/dev/null | grep -Fxq "$hook_include"; then
+                  git config --local --add include.path "$hook_include"
+                  echo "git hooks included from .githooks/config"
                 fi
               '';
             };
