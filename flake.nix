@@ -326,6 +326,13 @@
               extraEnv = {
                 RUST_BACKTRACE = "1";
               };
+              shellHook = ''
+                if git rev-parse --git-dir >/dev/null 2>&1 && [ -d .githooks ] && \
+                   [ "$(git config --local --get core.hooksPath 2>/dev/null)" != ".githooks" ]; then
+                  git config --local core.hooksPath .githooks
+                  echo "pre-commit hook installed (core.hooksPath=.githooks)"
+                fi
+              '';
             };
 
             checks.dylint-version-compat = pkgs.runCommand "dylint-version-compat" { } ''
