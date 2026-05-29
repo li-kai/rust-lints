@@ -1,7 +1,7 @@
 # Auto-generated — do not edit manually.
 # MachineApplicable lints without Known problems/issues:
 # silent during dev, auto-fixed at commit time.
-# complexity (89 lints)
+# complexity (90 lints)
 bind_instead_of_map = "allow"
 bool_comparison = "allow"
 bytes_count_to_len = "allow"
@@ -38,6 +38,7 @@ manual_is_multiple_of = "allow"
 manual_main_separator_str = "allow"
 manual_ok_err = "allow"
 manual_option_as_slice = "allow"
+manual_option_zip = "allow"
 manual_rem_euclid = "allow"
 manual_slice_size_calculation = "allow"
 manual_split_once = "allow"

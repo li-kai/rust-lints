@@ -136,6 +136,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::manual_ok_err \
   -W clippy::manual_ok_or \
   -W clippy::manual_option_as_slice \
+  -W clippy::manual_option_zip \
   -W clippy::manual_pattern_char_comparison \
   -W clippy::manual_range_contains \
   -W clippy::manual_rem_euclid \
