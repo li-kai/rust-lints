@@ -57,6 +57,12 @@ fn main() {
     let _now = Instant::now(); // OK: in main
     let _var = std::env::var("HOME"); // OK: in main
     tracing_subscriber::fmt().init(); // OK: in main
+
+    // Inside a closure in `fn main()` — still the composition root, so this
+    // should NOT trigger. is_in_suppression_zone walks out through enclosing
+    // closures to the entrypoint `fn main`, so `is_entrypoint_fn` returns true
+    // and the call is suppressed.
+    let _times: Vec<_> = (0..1).map(|_| Instant::now()).collect();
 }
 
 // #[cfg(test)] is a suppression zone.

@@ -52,8 +52,13 @@ pub fn is_in_suppression_zone(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
         return true;
     }
 
-    let enclosing_def_id = cx.tcx.hir_enclosing_body_owner(expr.hir_id);
-    is_entrypoint_fn(cx, enclosing_def_id.to_def_id())
+    // `hir_get_parent_item` walks out to the enclosing item, treating closures
+    // as transparent (they are bodies, not items). So a call inside a closure
+    // nested in `fn main()` still resolves to `fn main`, keeping the entrypoint
+    // recognized as the composition root — unlike `hir_enclosing_body_owner`,
+    // which stops at the innermost closure.
+    let enclosing_item = cx.tcx.hir_get_parent_item(expr.hir_id).to_def_id();
+    is_entrypoint_fn(cx, enclosing_item)
 }
 
 fn strip_generic_args(path: &str) -> Cow<'_, str> {
