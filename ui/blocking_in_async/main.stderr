@@ -31,5 +31,29 @@ LL |         let _ = std::fs::read_to_string("bar.txt"); //~ WARNING: blocking c
    |
    = help: use an async-aware alternative, or wrap the blocking call in `tokio::task::spawn_blocking()`
 
-error: aborting due to 4 previous errors
+error: blocking call to `parking_lot::lock_api::Mutex::lock()` inside async context
+  --> $DIR/main.rs:32:14
+   |
+LL |     let _g = m.lock(); //~ WARNING: blocking call
+   |              ^^^^^^^^
+   |
+   = help: use an async-aware alternative, or wrap the blocking call in `tokio::task::spawn_blocking()`
+
+error: blocking call to `std::fs::read_to_string()` inside async context
+  --> $DIR/main.rs:42:17
+   |
+LL |         let _ = std::fs::read_to_string("foo.txt"); //~ WARNING: blocking call
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use an async-aware alternative, or wrap the blocking call in `tokio::task::spawn_blocking()`
+
+error: blocking call to `std::fs::read_to_string()` inside async context
+  --> $DIR/main.rs:50:17
+   |
+LL |         let _ = std::fs::read_to_string("foo.txt"); //~ WARNING: blocking call
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use an async-aware alternative, or wrap the blocking call in `tokio::task::spawn_blocking()`
+
+error: aborting due to 7 previous errors
 

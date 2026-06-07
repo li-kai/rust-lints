@@ -1,6 +1,6 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::fn_def_id;
-use rustc_hir::{ClosureKind, CoroutineDesugaring, CoroutineKind, Expr, ExprKind, Node};
+use rustc_hir::{ClosureKind, CoroutineDesugaring, CoroutineKind, Expr, ExprKind, HirId, Node};
 use rustc_lint::{LateContext, LateLintPass};
 
 use rustc_data_structures::fx::FxHashSet;
@@ -44,10 +44,11 @@ const DEFAULT_PATHS: &[&str] = &[
     "std::sync::Mutex::lock",
     "std::sync::RwLock::read",
     "std::sync::RwLock::write",
-    // parking_lot
-    "parking_lot::Mutex::lock",
-    "parking_lot::RwLock::read",
-    "parking_lot::RwLock::write",
+    // parking_lot — `Mutex`/`RwLock` are `lock_api` types re-exported by
+    // parking_lot, so `def_path_str` yields the `lock_api` segment.
+    "parking_lot::lock_api::Mutex::lock",
+    "parking_lot::lock_api::RwLock::read",
+    "parking_lot::lock_api::RwLock::write",
     // std::thread::spawn — bypasses executor
     "std::thread::spawn",
     // tokio::task::block_in_place — risky on single-threaded executors
@@ -64,6 +65,34 @@ const SPAWN_BLOCKING_PATHS: &[&str] = &[
 const HELP: &str = "use an async-aware alternative, or wrap the blocking call \
                      in `tokio::task::spawn_blocking()`";
 
+/// Returns `true` if the closure identified by `closure_hir_id` is invoked
+/// synchronously at its definition site, so its body runs in the enclosing
+/// execution context rather than being deferred to another thread/task.
+///
+/// Two shapes qualify: an immediately-invoked closure (`(|| …)()`, where the
+/// closure is the call target) and a closure passed as an argument to a method
+/// call (`recv.for_each(|…| …)`, `opt.map(|…| …)`, …), which iterator / `Option`
+/// / `Result` adapters drive on the spot. A closure passed to a *free function*
+/// (e.g. `std::thread::spawn(|| …)`, `spawn_blocking(|| …)`) is the call target's
+/// argument but not synchronously invoked, so it is correctly treated as opaque.
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "ExprKind has many variants; only call/method-call parents matter"
+)]
+fn is_synchronously_invoked(cx: &LateContext<'_>, closure_hir_id: HirId) -> bool {
+    let Node::Expr(parent) = cx.tcx.parent_hir_node(closure_hir_id) else {
+        return false;
+    };
+    match parent.kind {
+        // IIFE: the closure is the thing being called.
+        ExprKind::Call(callee, _) => callee.hir_id == closure_hir_id,
+        // Iterator / `Option` / `Result` adapter: `recv.method(|…| …)` drives
+        // the closure synchronously on the current thread.
+        ExprKind::MethodCall(..) => true,
+        _ => false,
+    }
+}
+
 /// Returns `true` if `expr` is syntactically inside an `async fn` or
 /// `async {}` block.
 #[expect(
@@ -71,21 +100,32 @@ const HELP: &str = "use an async-aware alternative, or wrap the blocking call \
     reason = "we only care about closures and function boundaries"
 )]
 fn is_in_async_context(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
-    for (_, node) in cx.tcx.hir_parent_iter(expr.hir_id) {
+    for (hir_id, node) in cx.tcx.hir_parent_iter(expr.hir_id) {
         match node {
-            // async fn/block desugars into a closure with Coroutine(Async) kind.
-            Node::Expr(e)
+            Node::Expr(Expr {
+                kind: ExprKind::Closure(c),
+                ..
+            }) => {
+                // An async coroutine closure puts us directly on the executor.
                 if matches!(
-                    e.kind,
-                    ExprKind::Closure(c) if matches!(
-                        c.kind,
-                        ClosureKind::Coroutine(CoroutineKind::Desugared(
-                            CoroutineDesugaring::Async, _,
-                        ))
-                    )
-                ) =>
-            {
-                return true;
+                    c.kind,
+                    ClosureKind::Coroutine(CoroutineKind::Desugared(
+                        CoroutineDesugaring::Async,
+                        _,
+                    ))
+                ) {
+                    return true;
+                }
+                // A sync closure normally breaks the chain — its body runs
+                // wherever it is later invoked, not necessarily on the executor.
+                // But a closure that is invoked *synchronously in place* still
+                // runs on the executor: an IIFE (`(|| …)()`) or one handed to an
+                // iterator / `Option` / `Result` adapter (`.for_each`, `.map`,
+                // …). Treat those as transparent and keep walking outward;
+                // otherwise the chain is genuinely broken.
+                if !is_synchronously_invoked(cx, hir_id) {
+                    return false;
+                }
             }
             Node::Item(_) | Node::ImplItem(_) | Node::TraitItem(_) => return false,
             _ => {}
