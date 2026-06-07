@@ -3,6 +3,55 @@ amends "package://github.com/jdx/hk/releases/download/v1.46.0/hk@1.46.0#/Config.
 // Stop the whole hook on the first failure (matches the old `set -e` script).
 fail_fast = true
 
+// Shared steps. Each hook sets its own `depends` order, since the chain differs.
+
+// Reject banned crates before any mutation work happens.
+local bannedCrates = new Step {
+  glob = List("**/Cargo.toml")
+  check = "scripts/hk-banned-crates.sh {{files}}"
+}
+
+// Auto-fix the workspace with clippy's machine-applicable fixes
+// (hence exclusive).
+local clippyAutofix = new Step {
+  glob = List("*.rs")
+  exclusive = true
+  check = "scripts/hk-clippy-autofix.sh"
+  fix = "scripts/hk-clippy-autofix.sh"
+}
+
+// Strip decorative comment dividers (language-agnostic //-comments).
+local stripComments = new Step {
+  glob = List("*.rs", "*.ts", "*.tsx", "*.js", "*.jsx")
+  fix = "scripts/hk-strip-comments.sh {{files}}"
+}
+
+// Format the workspace (hence exclusive).
+local cargoFmt = new Step {
+  glob = List("*.rs")
+  exclusive = true
+  check = "cargo fmt --all -- --check"
+  fix = "cargo fmt --all"
+}
+
+// Files that gate a commit: Rust sources and any Cargo.toml.
+local gateGlob = List("*.rs", "**/Cargo.toml")
+
+// Gate on clippy + dylint over the snapshot. Never mutates, so it stays a check
+// even in fix mode.
+local checkGate = new Step {
+  glob = gateGlob
+  exclusive = true
+  check = "just check"
+}
+
+// Gate on the test suite over the snapshot.
+local testGate = new Step {
+  glob = gateGlob
+  exclusive = true
+  check = "just test"
+}
+
 hooks {
   ["pre-commit"] {
     // Operate on the staged snapshot only: stash unstaged + untracked changes,
@@ -11,69 +60,23 @@ hooks {
     stash = "git"
     stage = true
 
+    // Linear pipeline: reject banned crates, auto-fix, strip comments, format,
+    // then gate on check + test over the exact snapshot that would be committed.
     steps {
-      // 1. Reject banned crates before any mutation work happens.
-      ["banned-crates"] {
-        glob = List("**/Cargo.toml")
-        check = "scripts/hk-banned-crates.sh {{files}}"
-      }
-
-      // 2. Auto-fix idioms — machine-applicable clippy fixes (the set tracked in
-      //    fixable-lints.cargo.toml), applied silently over the whole workspace.
-      ["clippy-autofix"] {
-        glob = List("*.rs")
-        exclusive = true
-        depends = List("banned-crates")
-        check = "scripts/hk-clippy-autofix.sh"
-        fix = "scripts/hk-clippy-autofix.sh"
-      }
-
-      // 3. Strip decorative comment dividers (language-agnostic //-comments).
-      ["strip-decorative-comments"] {
-        glob = List("*.rs", "*.ts", "*.tsx", "*.js", "*.jsx")
-        depends = List("clippy-autofix")
-        fix = "scripts/hk-strip-comments.sh {{files}}"
-      }
-
-      // 4. Format the post-fix tree.
-      ["cargo-fmt"] {
-        glob = List("*.rs")
-        depends = List("strip-decorative-comments")
-        exclusive = true
-        check = "cargo fmt --all -- --check"
-        fix = "cargo fmt --all"
-      }
-
-      // 5. Gate the commit on clippy, dylint, and tests over the exact snapshot
-      //    that would be committed. These never mutate, so they run as checks
-      //    even in fix mode. `just check` runs clippy + dylint-on-self.
-      ["check"] {
-        glob = List("*.rs", "**/Cargo.toml")
-        depends = List("cargo-fmt")
-        exclusive = true
-        check = "just check"
-      }
-      ["test"] {
-        glob = List("*.rs", "**/Cargo.toml")
-        depends = List("check")
-        exclusive = true
-        check = "just test"
-      }
+      ["banned-crates"] = bannedCrates
+      ["clippy-autofix"] = (clippyAutofix) { depends = List("banned-crates") }
+      ["strip-decorative-comments"] = (stripComments) { depends = List("clippy-autofix") }
+      ["cargo-fmt"] = (cargoFmt) { depends = List("strip-decorative-comments") }
+      ["check"] = (checkGate) { depends = List("cargo-fmt") }
+      ["test"] = (testGate) { depends = List("check") }
     }
   }
 
-  // `hk check` — read-only gate, no mutations.
+  // `hk check` — read-only gate.
   ["check"] {
     steps {
-      ["check"] {
-        glob = List("*.rs", "**/Cargo.toml")
-        check = "just check"
-      }
-      ["test"] {
-        glob = List("*.rs", "**/Cargo.toml")
-        depends = List("check")
-        check = "just test"
-      }
+      ["check"] = checkGate
+      ["test"] = (testGate) { depends = List("check") }
     }
   }
 
@@ -81,16 +84,8 @@ hooks {
   ["fix"] {
     fix = true
     steps {
-      ["clippy-autofix"] {
-        glob = List("*.rs")
-        exclusive = true
-        fix = "scripts/hk-clippy-autofix.sh"
-      }
-      ["cargo-fmt"] {
-        glob = List("*.rs")
-        depends = List("clippy-autofix")
-        fix = "cargo fmt --all"
-      }
+      ["clippy-autofix"] = clippyAutofix
+      ["cargo-fmt"] = (cargoFmt) { depends = List("clippy-autofix") }
     }
   }
 }
