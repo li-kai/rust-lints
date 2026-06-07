@@ -1,6 +1,7 @@
 use clippy_utils::diagnostics::span_lint_and_help;
-use clippy_utils::{fn_def_id, is_expr_default, path_to_local_with_projections};
-use rustc_hir::{Block, Expr, ExprKind, HirId, PatKind, QPath, Stmt, StmtKind};
+use clippy_utils::{fn_def_id, is_expr_default};
+use rustc_hir::def::Res;
+use rustc_hir::{Block, Expr, ExprKind, HirId, PatKind, Path, QPath, Stmt, StmtKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
 use rustc_span::{Symbol, sym};
@@ -18,6 +19,11 @@ rustc_session::declare_lint! {
 
 /// Returns `true` if `stmt` is `<binding>.insert(k, v)` — a semicolon
 /// expression statement calling the `insert` method on the given binding.
+///
+/// The receiver must be the bare local binding with no projections: an
+/// indexing or field projection such as `m[i].insert(..)` or
+/// `m.inner.insert(..)` targets the projected value, not the map itself, and
+/// can't be rewritten to `Type::from([..])`.
 fn is_insert_on_binding(stmt: &Stmt<'_>, binding_id: HirId) -> bool {
     let StmtKind::Semi(expr) = &stmt.kind else {
         return false;
@@ -35,7 +41,16 @@ fn is_insert_on_binding(stmt: &Stmt<'_>, binding_id: HirId) -> bool {
         return false;
     }
 
-    path_to_local_with_projections(receiver) == Some(binding_id)
+    matches!(
+        receiver.kind,
+        ExprKind::Path(QPath::Resolved(
+            _,
+            Path {
+                res: Res::Local(local),
+                ..
+            },
+        )) if *local == binding_id
+    )
 }
 
 /// Counts how many consecutive statements are `.insert(k, v)` calls on the

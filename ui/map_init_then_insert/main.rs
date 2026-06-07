@@ -155,4 +155,15 @@ fn ahashmap_new_two_inserts() {
     m.insert("b", 2);
 }
 
+// Should NOT trigger: the `.insert(..)` calls target the inner `Vec`s of
+// existing entries via `m[i]`, not the map itself, so `IndexMap::from([..])`
+// is not a valid rewrite. is_insert_on_binding requires the receiver to be the
+// bare map binding (no `Index` projection), so `m[i].insert(..)` is correctly
+// not attributed to `m`.
+fn insert_into_indexed_value() {
+    let mut m: IndexMap<&str, Vec<i32>> = IndexMap::new();
+    m[0].insert(0, 1);
+    m[1].insert(0, 2);
+}
+
 fn main() {}
