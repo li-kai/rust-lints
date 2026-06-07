@@ -3,7 +3,7 @@ use clippy_utils::ty::implements_trait;
 use rustc_hir::{GenericParamKind, Item, ItemKind, LangItem, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
-use rustc_span::Symbol;
+use rustc_span::{Symbol, sym};
 
 use crate::config::SuggestBuilderConfig;
 
@@ -112,14 +112,29 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
                         .instantiate_identity()
                         .output()
                         .skip_binder();
-                    ret_ty
+                    // Peel only the allowed constructor wrappers — `Result<_, _>`
+                    // (taking the `Ok` arg) and `Box<_>` (taking the inner arg) —
+                    // then require an exact match to the struct's `Self` type.
+                    // A return type that merely *contains* `Self` as a nested or
+                    // generic arg (e.g. `Option<&Self>`) is NOT a constructor.
+                    #[expect(
+                        clippy::wildcard_enum_match_arm,
+                        reason = "TyKind has many variants; only Result and Box are unwrapped"
+                    )]
+                    let inner_ty = match ret_ty.kind() {
+                        // `Result<_, _>` (the `Ok` arg) and `Box<_>` (the inner
+                        // arg) both carry the constructed type at generic arg 0.
+                        ty::Adt(adt, args)
+                            if cx.tcx.is_diagnostic_item(sym::Result, adt.did())
+                                || cx.tcx.is_lang_item(adt.did(), LangItem::OwnedBox) =>
+                        {
+                            args.type_at(0)
+                        }
+                        _ => ret_ty,
+                    };
+                    inner_ty
                         .ty_adt_def()
                         .is_some_and(|adt| adt.did() == struct_def_id)
-                        || ret_ty.walk().any(|arg| {
-                            arg.as_type().is_some_and(|t| {
-                                t.ty_adt_def().is_some_and(|adt| adt.did() == struct_def_id)
-                            })
-                        })
                 })
         });
         if !has_ctor {

@@ -156,6 +156,24 @@ struct InternalRecord {
     d: u8,
 }
 
+// Should NOT trigger: has no real constructor — only a getter returning
+// `Option<&Self>`. Per the documented contract (a constructor is an inherent
+// fn returning `Self`, `Result<Self, _>`, or `Box<Self>`) this struct has no
+// constructor. `has_ctor` peels only `Result`/`Box` and then requires an exact
+// `Self` match, so a return type that merely *contains* `Self` (here
+// `Option<&Self>`) is correctly not treated as a constructor.
+struct ListNode {
+    value: u64,
+    weight: u32,
+    flags: u8,
+    label: String,
+}
+impl ListNode {
+    fn next(&self) -> Option<&Self> {
+        None
+    }
+}
+
 // Should NOT trigger: suppressed with `#[allow]`.
 #[allow(suggest_builder)]
 struct Suppressed {
