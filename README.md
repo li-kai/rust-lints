@@ -117,7 +117,7 @@ Does not fire inside `#[test]` functions or `#[cfg(test)]` modules. Supersedes `
 
 ### `fallible_new`
 
-Warns when a `fn new()` constructor contains `.unwrap()`, `.expect()`, `panic!`, `unreachable!`, `todo!`, or `unimplemented!`. These can abort the program in cases the caller cannot handle.
+Warns when a `fn new()` constructor contains `.unwrap()`, `.expect()`, `panic!`, or `unreachable!`. These can abort the program in cases the caller cannot handle.
 
 ```
 warning: constructor `new` can panic — consider returning `Result` or renaming to `try_new`

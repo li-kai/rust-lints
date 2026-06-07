@@ -29,6 +29,8 @@ The lint fires when the body of `fn new(...)` (or `fn new_*()` variants) contain
 | `panic!(...)` | Direct panic |
 | `unreachable!(...)` | Logically equivalent to panic |
 
+`todo!()` and `unimplemented!()` are intentionally omitted. rustc's `todo` and `unimplemented` lints (typically `deny`) already flag them; this lint focuses on surprising runtime failures in otherwise infallible constructors.
+
 ## Examples
 
 ### Triggers

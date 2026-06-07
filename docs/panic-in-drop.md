@@ -32,6 +32,8 @@ The lint fires when the body of a `Drop::drop` implementation contains any of:
 | `assert!(...)` | Panics on failure |
 | `assert_eq!(...)` / `assert_ne!(...)` | Panics on failure |
 
+`todo!()` and `unimplemented!()` are intentionally omitted. rustc's `todo` and `unimplemented` lints (typically `deny`) already flag them; this lint focuses on surprising runtime failures in `Drop` impls.
+
 ## Examples
 
 ### Triggers
