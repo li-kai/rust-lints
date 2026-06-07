@@ -121,5 +121,23 @@ LL |         (|| panic!("boom"))();
    |             ^^^^^^^^^^^^^^
    = help: panicking in `drop()` while already unwinding causes an immediate process abort
 
-error: aborting due to 8 previous errors
+error: panic-able expression in `Drop` impl — this will abort during unwinding
+  --> $DIR/main.rs:102:5
+   |
+LL | /     fn drop(&mut self) {
+LL | |         if !std::thread::panicking() {
+LL | |             // safe: not unwinding
+LL | |         } else {
+...  |
+LL | |     }
+   | |_____^
+   |
+note: `.unwrap()` can panic — handle the error or use `let _ = ...` to ignore it
+  --> $DIR/main.rs:106:22
+   |
+LL |             self.val.unwrap();
+   |                      ^^^^^^^^
+   = help: panicking in `drop()` while already unwinding causes an immediate process abort
+
+error: aborting due to 9 previous errors
 

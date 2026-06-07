@@ -15,17 +15,18 @@ rustc_session::declare_lint! {
     "panic-able expression in `Drop` impl \u{2014} this will abort during unwinding"
 }
 
-/// Returns `true` if the expression is `std::thread::panicking()` or
-/// `!std::thread::panicking()`.
+/// If the expression is `std::thread::panicking()` or
+/// `!std::thread::panicking()`, returns `Some(negated)` where `negated` is
+/// `true` for the `!…` form. Returns `None` otherwise.
 ///
 /// Uses `qpath_res` rather than `clippy_utils::fn_def_id` because the latter
 /// calls `cx.typeck_results()`, which panics in `check_impl_item` contexts
 /// that run outside an active body.
-fn is_panicking_guard<'tcx>(cx: &LateContext<'tcx>, cond: &Expr<'tcx>) -> bool {
-    let inner = if let ExprKind::Unary(rustc_hir::UnOp::Not, inner) = &cond.kind {
-        inner
+fn is_panicking_guard<'tcx>(cx: &LateContext<'tcx>, cond: &Expr<'tcx>) -> Option<bool> {
+    let (negated, inner) = if let ExprKind::Unary(rustc_hir::UnOp::Not, inner) = &cond.kind {
+        (true, *inner)
     } else {
-        cond
+        (false, cond)
     };
     // Cheap name prefilter — only then pay for `def_path_str`.
     if let ExprKind::Call(callee, _) = &inner.kind
@@ -36,10 +37,11 @@ fn is_panicking_guard<'tcx>(cx: &LateContext<'tcx>, cond: &Expr<'tcx>) -> bool {
         }
         && last.is_some_and(|i| i.as_str() == "panicking")
         && let Some(def_id) = cx.qpath_res(qpath, callee.hir_id).opt_def_id()
+        && cx.tcx.def_path_str(def_id) == "std::thread::panicking"
     {
-        return cx.tcx.def_path_str(def_id) == "std::thread::panicking";
+        return Some(negated);
     }
-    false
+    None
 }
 
 struct DropPanicFinder<'a, 'tcx> {
@@ -59,11 +61,18 @@ impl<'tcx> Visitor<'tcx> for DropPanicFinder<'_, 'tcx> {
             return;
         }
 
-        // `if [!]std::thread::panicking() { … }` — both branches are safe from
-        // double-panic: one runs only when unwinding, the other only when not.
-        if let ExprKind::If(cond, ..) = &expr.kind
-            && is_panicking_guard(self.cx, cond)
+        // `if [!]std::thread::panicking() { … } else { … }` — exactly one branch
+        // runs while unwinding. Skip the safe (not-unwinding) branch, but still
+        // visit the unwinding branch: a panic there is the double-panic-abort.
+        if let ExprKind::If(cond, then, opt_else) = &expr.kind
+            && let Some(negated) = is_panicking_guard(self.cx, cond)
         {
+            // `!panicking()` → `then` is safe, `else` unwinds.
+            // `panicking()`  → `then` unwinds, `else` is safe.
+            let unwinding = if negated { *opt_else } else { Some(*then) };
+            if let Some(branch) = unwinding {
+                intravisit::walk_expr(self, branch);
+            }
             return;
         }
 

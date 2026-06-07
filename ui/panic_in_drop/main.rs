@@ -89,6 +89,25 @@ impl Drop for IifeDrop {
     }
 }
 
+// The `else` branch of an `if !std::thread::panicking()` guard runs ONLY while
+// unwinding — exactly the double-panic-abort case. This SHOULD trigger, and does:
+// the visitor still descends into the branches of a `!panicking()` guard, so the
+// `self.val.unwrap()` in the `else` arm is flagged.
+struct UnwindBranchPanic {
+    val: Option<i32>,
+}
+
+impl Drop for UnwindBranchPanic {
+    //~v ERROR: panic-able expression in `Drop` impl
+    fn drop(&mut self) {
+        if !std::thread::panicking() {
+            // safe: not unwinding
+        } else {
+            self.val.unwrap();
+        }
+    }
+}
+
 // ── SHOULD NOT TRIGGER ──────────────────────────────────────────────
 
 // Errors silently ignored — safe during unwinding
