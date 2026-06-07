@@ -16,6 +16,8 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     crane.url = "github:ipetkov/crane";
+    hk.url = "github:jdx/hk/v1.46.0";
+    hk.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -25,6 +27,7 @@
       flake-utils,
       fenix,
       crane,
+      hk,
     }:
     let
       cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
@@ -314,6 +317,7 @@
                 pkgs.cargo-audit # Security vulnerability scanning
                 fenix.packages.${system}.rust-analyzer # Rust language server
                 pkgs.just # Command runner
+                hk.packages.${system}.hk # Git hook runner (hk.pkl)
 
                 # Development utilities
                 pkgs.git
@@ -327,14 +331,15 @@
                 RUST_BACKTRACE = "1";
               };
               shellHook = ''
-                # Pull in the tracked hook declarations (Git 2.54+ config-based
-                # hooks) by adding .githooks/config to the local config's
-                # include.path. Relative to .git/config → ../.githooks/config.
-                hook_include="../.githooks/config"
-                if git rev-parse --git-dir >/dev/null 2>&1 && [ -f .githooks/config ] && \
-                   ! git config --local --get-all include.path 2>/dev/null | grep -Fxq "$hook_include"; then
-                  git config --local --add include.path "$hook_include"
-                  echo "git hooks included from .githooks/config"
+                # Evaluate hk.pkl with hk's built-in Rust evaluator (pklr) instead
+                # of the pkl CLI, so the dev shell doesn't need to pull in pkl + a JDK.
+                export HK_PKL_BACKEND=pklr
+
+                # Install hk's git hooks (config-based on Git 2.54+, otherwise a
+                # .git/hooks script). Idempotent, so re-run on every shell entry
+                # to keep the hook in sync with hk.pkl.
+                if git rev-parse --git-dir >/dev/null 2>&1 && [ -f hk.pkl ]; then
+                  hk install >/dev/null 2>&1 && echo "git hooks installed via hk"
                 fi
               '';
             };
