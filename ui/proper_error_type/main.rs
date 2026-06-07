@@ -30,6 +30,14 @@ pub fn parse_boxed_send_sync(_input: &str) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
+// Should trigger: Result<_, Cow<'_, str>> — an unstructured string error that
+// classify_unstructured deliberately handles. `Cow<'a, B>`'s first generic arg
+// is the lifetime, so the inner type is read with `args.type_at(1)` (not
+// `type_at(0)`, which would index the lifetime and ICE).
+pub fn parse_cow(_input: &str) -> Result<(), std::borrow::Cow<'static, str>> {
+    Ok(())
+}
+
 // Should trigger: pub(crate) with unstructured error
 pub(crate) fn pub_crate_string_err(_path: &str) -> Result<(), String> {
     Ok(())

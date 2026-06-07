@@ -111,7 +111,7 @@ impl ProperErrorType {
                 if cx.tcx.is_lang_item(did, LangItem::String) {
                     return Some(UnstructuredKind::Basic("String"));
                 }
-                if cx.tcx.is_diagnostic_item(sym::Cow, did) && args.type_at(0).is_str() {
+                if cx.tcx.is_diagnostic_item(sym::Cow, did) && args.type_at(1).is_str() {
                     return Some(UnstructuredKind::Basic("Cow<'_, str>"));
                 }
                 if cx.tcx.is_lang_item(did, LangItem::OwnedBox)
