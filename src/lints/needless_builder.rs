@@ -1,5 +1,5 @@
 use clippy_utils::diagnostics::span_lint_and_help;
-use rustc_hir::{Item, ItemKind, VariantData};
+use rustc_hir::{Item, ItemKind, LangItem, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
 
 use crate::config::NeedlessBuilderConfig;
@@ -37,11 +37,23 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessBuilder {
         let VariantData::Struct { fields, .. } = variant_data else {
             return;
         };
-        let field_count = fields.len();
-        if field_count > self.threshold {
+        // Cheap thread-local gate first: only structs deriving `bon::Builder`
+        // can be flagged, so don't pay for the per-field `type_of` queries below
+        // on every other struct in the crate.
+        if !super::has_bon_builder(ident.name) {
             return;
         }
-        if !super::has_bon_builder(ident.name) {
+        // Don't count `PhantomData` markers as real fields — a struct of two
+        // real fields plus a `PhantomData<T>` should still be flagged.
+        let field_count = fields
+            .iter()
+            .filter(|f| {
+                let ty = cx.tcx.type_of(f.def_id).instantiate_identity();
+                !ty.ty_adt_def()
+                    .is_some_and(|adt| cx.tcx.is_lang_item(adt.did(), LangItem::PhantomData))
+            })
+            .count();
+        if field_count > self.threshold {
             return;
         }
         span_lint_and_help(

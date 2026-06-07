@@ -62,3 +62,31 @@ struct Collider {
     x: f64,
     y: f64,
 }
+
+// Should trigger: 2 real fields (PhantomData markers don't count toward the
+// field count) with a builder derive, so the effective field_count is 2 ≤ 2.
+#[derive(bon::Builder)]
+struct PhantomPair<T> {
+    x: f64,
+    y: f64,
+    _marker: std::marker::PhantomData<T>,
+}
+
+// Should trigger: 2 fields with a builder derive wrapped in an always-true
+// `cfg_attr(all(), ..)`, which always expands to `#[derive(bon::Builder)]`. The
+// pre-expansion collector honors `cfg_attr` derives whose condition is
+// unconditionally true, so has_bon_builder() is true.
+#[cfg_attr(all(), derive(bon::Builder))]
+struct CfgPair {
+    a: u8,
+    b: u8,
+}
+
+// Should NOT trigger: this derives `derive_builder::Builder`, NOT `bon::Builder`.
+// has_bon_builder is path-aware (it requires the `bon` path segment), so a
+// `Builder` from another crate is not mistaken for `bon::Builder`.
+#[derive(derive_builder::Builder)]
+struct Plain {
+    x: f64,
+    y: f64,
+}

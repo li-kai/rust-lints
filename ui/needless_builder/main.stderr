@@ -31,5 +31,28 @@ LL | | }
    |
    = help: consider using a plain constructor or struct literal instead
 
-warning: 3 warnings emitted
+warning: struct `PhantomPair` has only 2 fields; `bon::Builder` may be unnecessary
+  --> $DIR/main.rs:69:1
+   |
+LL | / struct PhantomPair<T> {
+LL | |     x: f64,
+LL | |     y: f64,
+LL | |     _marker: std::marker::PhantomData<T>,
+LL | | }
+   | |_^
+   |
+   = help: consider using a plain constructor or struct literal instead
+
+warning: struct `CfgPair` has only 2 fields; `bon::Builder` may be unnecessary
+  --> $DIR/main.rs:80:1
+   |
+LL | / struct CfgPair {
+LL | |     a: u8,
+LL | |     b: u8,
+LL | | }
+   | |_^
+   |
+   = help: consider using a plain constructor or struct literal instead
+
+warning: 5 warnings emitted
 

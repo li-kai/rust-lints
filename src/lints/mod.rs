@@ -27,31 +27,57 @@ use std::collections::{HashMap, HashSet};
 
 use rustc_span::Symbol;
 
-thread_local! {
-    /// Maps struct names to the set of derive trait names found on them during
-    /// the pre-expansion pass.  Populated by [`BonBuilderCollector`] and
-    /// consumed via [`has_any_derive`] / [`has_bon_builder`].
-    pub static STRUCT_DERIVES: RefCell<HashMap<Symbol, HashSet<Symbol>>> = RefCell::new(HashMap::new());
+/// A single `#[derive(...)]` entry recorded during the pre-expansion pass.
+///
+/// We keep both the *last* path segment (for name-only skip-derive matching,
+/// e.g. `Default` matching both `Default` and `std::default::Default`) and a
+/// path-aware flag identifying `bon::Builder` specifically — so that
+/// `derive_builder::Builder`, which shares the last segment `Builder`, is not
+/// confused for it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DeriveInfo {
+    /// The last path segment of the derive (e.g. `Builder`, `Default`).
+    pub last_segment: Symbol,
+    /// Whether the derive path is exactly `bon::Builder`.
+    pub is_bon_builder: bool,
 }
 
-/// Returns `true` if any of the given derive names were found on a struct
-/// with the given name during the pre-expansion pass.
+thread_local! {
+    /// Maps struct names to the set of derives found on them during the
+    /// pre-expansion pass.  Populated by [`BonBuilderCollector`] and consumed
+    /// via [`has_any_derive`] / [`has_bon_builder`].
+    pub static STRUCT_DERIVES: RefCell<HashMap<Symbol, HashSet<DeriveInfo>>> = RefCell::new(HashMap::new());
+}
+
+/// Returns `true` if any of the given derive names were found (by *last path
+/// segment*) on a struct with the given name during the pre-expansion pass.
+///
+/// Matching is by last segment so that, e.g., `Default` matches both
+/// `#[derive(Default)]` and `#[derive(std::default::Default)]`.
 pub fn has_any_derive(name: Symbol, derives: &[Symbol]) -> bool {
     STRUCT_DERIVES.with(|map| {
-        map.borrow()
-            .get(&name)
-            .is_some_and(|set| derives.iter().any(|d| set.contains(d)))
+        map.borrow().get(&name).is_some_and(|set| {
+            set.iter()
+                .any(|info| derives.contains(&info.last_segment))
+        })
     })
 }
 
 /// Returns `true` if a struct with the given name was found to have
-/// `#[derive(bon::Builder)]` during the pre-expansion pass.
+/// `#[derive(bon::Builder)]` (path-aware) during the pre-expansion pass.
 ///
-/// **Limitation:** Uses name-only matching (not path or `DefId`) because the
+/// Matching is path-aware: `derive_builder::Builder` shares the last segment
+/// `Builder` but is *not* `bon::Builder`, so it is excluded.
+///
+/// **Limitation:** Uses name-only *keying* (not `DefId`) because the
 /// pre-expansion AST pass runs before name resolution.  If two structs in
 /// different modules share the same name and only one derives `bon::Builder`,
 /// both will be treated identically.  Switching to a `LateLintPass` would fix
 /// this at the cost of not seeing derives consumed by macro expansion.
 pub fn has_bon_builder(name: Symbol) -> bool {
-    has_any_derive(name, &[Symbol::intern("Builder")])
+    STRUCT_DERIVES.with(|map| {
+        map.borrow()
+            .get(&name)
+            .is_some_and(|set| set.iter().any(|info| info.is_bon_builder))
+    })
 }
