@@ -32,6 +32,25 @@ fn error_positional() {
     tracing::error!("failed with status {}", code); //~ WARNING: unstructured
 }
 
+fn target_prefixed_positional() {
+    let n = 100;
+    // `target:` is a tracing directive, not a structured field, so this call is
+    // still fully unstructured and SHOULD trigger. split_at_format_string skips
+    // the directive value (`"net"`) and picks the real format string
+    // (`"sent {} bytes"`), whose positional placeholder makes it unstructured.
+    tracing::info!(target: "net", "sent {} bytes", n); //~ WARNING: unstructured
+}
+
+fn target_value_with_comma() {
+    let n = 100;
+    // The `target:` directive value itself contains a comma. The directive scan
+    // must skip the string literal when finding the directive's trailing comma;
+    // otherwise the comma inside `"a,b"` is mistaken for it and the call is
+    // wrongly treated as having a structured field. There is no real field —
+    // only a positional format string — so this SHOULD trigger.
+    tracing::info!(target: "a,b", "sent {} bytes", n); //~ WARNING: unstructured
+}
+
 // Should NOT trigger: already uses structured fields.
 
 fn fully_structured() {

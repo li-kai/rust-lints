@@ -31,5 +31,21 @@ LL |     tracing::error!("failed with status {}", code); //~ WARNING: unstructur
    |
    = help: use structured fields: `tracing::info!(key, "message")` instead of `tracing::info!("msg {}", key)`
 
-warning: 4 warnings emitted
+warning: `tracing::info!` uses format args instead of structured fields
+  --> $DIR/main.rs:41:5
+   |
+LL |     tracing::info!(target: "net", "sent {} bytes", n); //~ WARNING: unstructured
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use structured fields: `tracing::info!(key, "message")` instead of `tracing::info!("msg {}", key)`
+
+warning: `tracing::info!` uses format args instead of structured fields
+  --> $DIR/main.rs:51:5
+   |
+LL |     tracing::info!(target: "a,b", "sent {} bytes", n); //~ WARNING: unstructured
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use structured fields: `tracing::info!(key, "message")` instead of `tracing::info!("msg {}", key)`
+
+warning: 6 warnings emitted
 

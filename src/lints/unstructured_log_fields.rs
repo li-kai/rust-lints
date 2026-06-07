@@ -19,10 +19,16 @@ fn split_at_format_string(snippet: &str) -> Option<(&str, &str)> {
     let args_start = snippet.find('(')?;
     let args = &snippet[args_start + 1..];
 
-    // Walk tokens at depth 0 to find the first string literal.
+    // Walk tokens at depth 0 to find the first string literal that is the actual
+    // format string. Leading tracing directives (`target:`, `parent:`) take a
+    // value that may itself be a string literal (e.g. `target: "net"`); those
+    // are not the format string, so skip them.
     let bytes = args.as_bytes();
     let mut i = 0;
     let mut depth: u32 = 0;
+    // Start of the current top-level argument segment (after the last `,` at
+    // depth 0). Used to detect a leading `target:` / `parent:` directive name.
+    let mut seg_start = 0;
     while i < bytes.len() {
         match bytes[i] {
             b'(' | b'[' => depth += 1,
@@ -32,22 +38,41 @@ fn split_at_format_string(snippet: &str) -> Option<(&str, &str)> {
                 }
                 depth -= 1;
             }
+            b',' if depth == 0 => seg_start = i + 1,
             b'"' if depth == 0 => {
+                // Is this string the value of a leading tracing directive
+                // (`target: "..."` / `parent: "..."`)? If so, it is not the
+                // format string — skip past it and keep scanning.
+                let segment = args[seg_start..i].trim();
+                let is_directive_value = segment
+                    .strip_suffix(':')
+                    .map(str::trim_end)
+                    .is_some_and(|name| matches!(name, "target" | "parent"));
+
                 let before = &args[..i];
                 // Walk past the string literal content.
-                i += 1;
+                let str_start = i + 1;
+                i = str_start;
+                let mut terminated = false;
                 while i < bytes.len() {
                     if bytes[i] == b'\\' {
                         i += 2;
                         continue;
                     }
                     if bytes[i] == b'"' {
-                        let str_content = &args[before.len() + 1..i];
-                        return Some((before.trim(), str_content));
+                        terminated = true;
+                        break;
                     }
                     i += 1;
                 }
-                return None; // unterminated string
+                if !terminated {
+                    return None; // unterminated string
+                }
+                if !is_directive_value {
+                    let str_content = &args[str_start..i];
+                    return Some((before.trim(), str_content));
+                }
+                // Skip this directive value string and continue scanning.
             }
             _ => {}
         }
@@ -78,14 +103,84 @@ fn has_format_placeholders(fmt: &str) -> bool {
     false
 }
 
-/// Returns `true` when the macro invocation snippet has format placeholders in
-/// its format string but no structured tracing fields (`key = value`, `?field`,
-/// `%field`, or bare identifier) before it.
-fn has_only_format_args(snippet: &str) -> bool {
-    let Some((before_fmt, fmt_str)) = split_at_format_string(snippet) else {
-        return false;
-    };
-    has_format_placeholders(fmt_str) && before_fmt.trim().trim_end_matches(',').trim().is_empty()
+/// Byte index of the first top-level `,` in `s`, skipping over `"…"` string
+/// literals whose contents may themselves contain commas. Returns `None` when
+/// there is no top-level comma.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "all `bytes[i]` accesses are guarded by `i < bytes.len()` loop conditions"
+)]
+fn find_top_level_comma(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => {
+                // Skip the string literal, honoring `\"` escapes.
+                i += 1;
+                while i < bytes.len() {
+                    match bytes[i] {
+                        b'\\' => i += 2,
+                        b'"' => {
+                            i += 1;
+                            break;
+                        }
+                        _ => i += 1,
+                    }
+                }
+            }
+            b',' => return Some(i),
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+/// Strip a leading tracing directive (`target: <value>` / `parent: <value>`)
+/// from the tokens before the format string. Directives are not structured
+/// fields, so they must not count as structuring. Returns the remaining tokens
+/// and whether at least one directive was stripped.
+fn strip_leading_directives(before: &str) -> (&str, bool) {
+    let mut rest = before.trim();
+    let mut stripped = false;
+    loop {
+        let Some(name_end) = rest.find(':') else {
+            return (rest, stripped);
+        };
+        let name = rest[..name_end].trim();
+        if !matches!(name, "target" | "parent") {
+            return (rest, stripped);
+        }
+        stripped = true;
+        // Drop everything up to and including the directive's trailing comma.
+        // The comma search skips string literals so a comma *inside* the value
+        // (e.g. `target: "a, b"`) is not mistaken for the directive separator.
+        let value = &rest[name_end + 1..];
+        match find_top_level_comma(value) {
+            Some(comma) => rest = value[comma + 1..].trim(),
+            None => return ("", true), // directive with no following arg
+        }
+    }
+}
+
+/// Returns `Some(has_directive)` when the macro invocation snippet has format
+/// placeholders in its format string but no structured tracing fields
+/// (`key = value`, `?field`, `%field`, or bare identifier) before it.
+///
+/// `has_directive` reports whether the invocation began with a tracing directive
+/// (`target:` / `parent:`). With a directive the macro expands through a
+/// different arm whose call-site span covers the trailing `;`, so the diagnostic
+/// span must be extended to match.
+fn format_only_call(snippet: &str) -> Option<bool> {
+    let (before_fmt, fmt_str) = split_at_format_string(snippet)?;
+    let (after_directives, has_directive) = strip_leading_directives(before_fmt);
+    if has_format_placeholders(fmt_str)
+        && after_directives.trim().trim_end_matches(',').trim().is_empty()
+    {
+        Some(has_directive)
+    } else {
+        None
+    }
 }
 
 /// Walk up the macro expansion chain to find a tracing level macro defined in
@@ -164,18 +259,29 @@ impl<'tcx> LateLintPass<'tcx> for UnstructuredLogFields {
             return;
         }
 
-        let Ok(snippet) = cx.sess().source_map().span_to_snippet(call_site) else {
+        let sm = cx.sess().source_map();
+        let Ok(snippet) = sm.span_to_snippet(call_site) else {
             return;
         };
 
-        if !has_only_format_args(&snippet) {
+        let Some(has_directive) = format_only_call(&snippet) else {
             return;
-        }
+        };
+
+        // A directive-prefixed invocation (`target:` / `parent:`) expands
+        // through a macro arm whose call-site span swallows the statement's
+        // trailing `;`; extend the diagnostic span to cover it.
+        let lint_span = if has_directive {
+            sm.span_extend_while(call_site, |c| c == ';')
+                .unwrap_or(call_site)
+        } else {
+            call_site
+        };
 
         span_lint_and_help(
             cx,
             UNSTRUCTURED_LOG_FIELDS,
-            call_site,
+            lint_span,
             format!("`{macro_label}!` uses format args instead of structured fields"),
             None,
             "use structured fields: `tracing::info!(key, \"message\")` instead of \
