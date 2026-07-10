@@ -87,6 +87,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::infallible_destructuring_match \
   -W clippy::init_numbered_fields \
   -W clippy::inline_fn_without_body \
+  -W clippy::inline_trait_bounds \
   -W clippy::int_plus_one \
   -W clippy::into_iter_on_ref \
   -W clippy::invisible_characters \
@@ -108,9 +109,11 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::lossy_float_literal \
   -W clippy::manual_abs_diff \
   -W clippy::manual_assert \
+  -W clippy::manual_assert_eq \
   -W clippy::manual_async_fn \
   -W clippy::manual_bits \
   -W clippy::manual_c_str_literals \
+  -W clippy::manual_clear \
   -W clippy::manual_contains \
   -W clippy::manual_dangling_ptr \
   -W clippy::manual_div_ceil \
@@ -301,6 +304,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::unused_trait_names \
   -W clippy::unused_unit \
   -W clippy::useless_asref \
+  -W clippy::useless_borrows_in_formatting \
   -W clippy::useless_concat \
   -W clippy::useless_conversion \
   -W clippy::useless_format \
