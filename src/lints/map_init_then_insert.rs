@@ -1,6 +1,7 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::{fn_def_id, is_expr_default};
 use rustc_hir::def::Res;
+use rustc_hir::def_id::DefId;
 use rustc_hir::{Block, Expr, ExprKind, HirId, PatKind, Path, QPath, Stmt, StmtKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
@@ -77,10 +78,17 @@ fn callee_type_name(callee: &Expr<'_>) -> Option<rustc_span::Symbol> {
 }
 
 /// Returns `true` if the call expression is a recognized map constructor:
-/// `Default::default()` (via the `default_fn` diagnostic item) or an
-/// inherent `new`/`with_capacity` (matched by item name, since those are
-/// standard constructor names shared across all map types).
-fn is_map_constructor<'tcx>(cx: &LateContext<'tcx>, call: &'tcx Expr<'tcx>) -> bool {
+/// `Default::default()` (via the `default_fn` diagnostic item) or a
+/// `new`/`with_capacity` associated fn of the map type itself (`map_did`).
+///
+/// The impl-parent check matters: a user fn like `Registry::new() ->
+/// HashMap<..>` may return a pre-populated map, so inserts after it are not
+/// equivalent to `HashMap::from([..])`.
+fn is_map_constructor<'tcx>(
+    cx: &LateContext<'tcx>,
+    call: &'tcx Expr<'tcx>,
+    map_did: DefId,
+) -> bool {
     if is_expr_default(cx, call) {
         return true;
     }
@@ -89,7 +97,17 @@ fn is_map_constructor<'tcx>(cx: &LateContext<'tcx>, call: &'tcx Expr<'tcx>) -> b
         return false;
     };
 
-    matches!(cx.tcx.item_name(def_id).as_str(), "new" | "with_capacity")
+    if !matches!(cx.tcx.item_name(def_id).as_str(), "new" | "with_capacity") {
+        return false;
+    }
+
+    let Some(impl_did) = cx.tcx.impl_of_assoc(def_id) else {
+        return false;
+    };
+    matches!(
+        cx.tcx.type_of(impl_did).instantiate_identity().kind(),
+        ty::Adt(adt, _) if adt.did() == map_did
+    )
 }
 
 /// Minimum number of consecutive `.insert()` calls required to fire the lint.
@@ -174,8 +192,11 @@ impl MapInitThenInsert {
 
         let ty = cx.typeck_results().expr_ty(init);
         let fallback_name = self.recognized_map_type(cx, ty)?;
+        let ty::Adt(adt, _) = ty.kind() else {
+            return None;
+        };
 
-        if !is_map_constructor(cx, init) {
+        if !is_map_constructor(cx, init, adt.did()) {
             return None;
         }
 
@@ -207,8 +228,7 @@ impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
         let mut i = 0;
 
         while i < stmts.len() {
-            let Some((binding_id, callee, fallback_name)) =
-                self.map_init_binding(cx, &stmts[i])
+            let Some((binding_id, callee, fallback_name)) = self.map_init_binding(cx, &stmts[i])
             else {
                 i += 1;
                 continue;

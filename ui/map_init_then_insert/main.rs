@@ -166,4 +166,22 @@ fn insert_into_indexed_value() {
     m[1].insert(0, 2);
 }
 
+// Should NOT trigger: `Registry::new` returns a HashMap but is not the map's
+// own constructor — is_map_constructor requires the callee's impl parent to be
+// the map ADT itself. A factory may pre-populate entries, so rewriting to
+// `HashMap::from([..])` would silently drop them.
+struct Registry;
+
+impl Registry {
+    fn new() -> HashMap<&'static str, i32> {
+        HashMap::from([("seed", 0)])
+    }
+}
+
+fn factory_new_two_inserts() {
+    let mut m = Registry::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+}
+
 fn main() {}
