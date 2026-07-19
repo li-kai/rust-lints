@@ -1,7 +1,10 @@
 use clippy_utils::diagnostics::span_lint_and_then;
 use clippy_utils::is_trait_impl_item;
 use rustc_hir::intravisit::{self, Visitor};
-use rustc_hir::{Expr, ExprKind, ImplItem, ImplItemKind};
+use rustc_hir::{
+    ClosureKind, CoroutineDesugaring, CoroutineKind, CoroutineSource, Expr, ExprKind, ImplItem,
+    ImplItemKind, Node,
+};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
@@ -22,11 +25,44 @@ rustc_session::declare_lint! {
 fn returns_result<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
     let def_id = impl_item.owner_id.to_def_id();
     let fn_sig = cx.tcx.fn_sig(def_id).instantiate_identity();
-    let ret_ty = fn_sig.output().skip_binder();
+    // `async fn new` returns an opaque future; peel to its `Output` so a
+    // `-> Result<..>` async constructor is still recognized as fallible.
+    let ret_ty = hir_refs::peel_async_fn_return_ty(cx.tcx, fn_sig.output().skip_binder());
     if let ty::Adt(adt, _) = ret_ty.kind() {
         return cx.tcx.is_diagnostic_item(sym::Result, adt.did());
     }
     false
+}
+
+/// Returns `true` for the coroutine closure that *is* the body of an
+/// `async fn` — that closure is the constructor's own code, not a callback.
+fn is_async_fn_body(closure: &rustc_hir::Closure<'_>) -> bool {
+    matches!(
+        closure.kind,
+        ClosureKind::Coroutine(CoroutineKind::Desugared(
+            CoroutineDesugaring::Async,
+            CoroutineSource::Fn,
+        ))
+    )
+}
+
+/// Returns `true` if `expr` is a closure argument to an `Option`/`Result`
+/// method. Those adapters invoke the closure during the call (or on one
+/// branch of it), so panics inside are construction-time. Iterator / future /
+/// unknown adapters are left alone — they may only store the callback.
+fn is_option_or_result_adapter_arg<'tcx>(
+    cx: &LateContext<'tcx>,
+    typeck: &ty::TypeckResults<'tcx>,
+    expr: &Expr<'tcx>,
+) -> bool {
+    matches!(
+        cx.tcx.parent_hir_node(expr.hir_id),
+        Node::Expr(Expr {
+            kind: ExprKind::MethodCall(_, receiver, args, _),
+            ..
+        }) if args.iter().any(|arg| arg.hir_id == expr.hir_id)
+            && hir_refs::receiver_is_option_or_result(cx, typeck, receiver)
+    )
 }
 
 struct PanicFinder<'a, 'tcx> {
@@ -35,12 +71,24 @@ struct PanicFinder<'a, 'tcx> {
     findings: Vec<(Span, &'static str)>,
 }
 
-// No NestedFilter — stored/returned closures don't run during construction;
-// only immediately-invoked ones (IIFEs) do, and those are handled explicitly.
+// No NestedFilter — stored/returned closures don't run during construction.
+// Closures are walked only when they run as part of `new` itself: IIFEs,
+// the desugared body of an `async fn new`, and Option/Result adapter args.
 impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        if matches!(expr.kind, ExprKind::Closure(_)) {
-            if let Some(body) = hir_refs::iife_closure_body(self.cx.tcx, expr) {
+        if let ExprKind::Closure(closure) = expr.kind {
+            // Cheap kind check first; then IIFE (returns the body) or
+            // Option/Result adapter (needs a parent + typeck look).
+            let body = if is_async_fn_body(closure) {
+                Some(self.cx.tcx.hir_body(closure.body))
+            } else if let Some(body) = hir_refs::iife_closure_body(self.cx.tcx, expr) {
+                Some(body)
+            } else if is_option_or_result_adapter_arg(self.cx, self.typeck, expr) {
+                Some(self.cx.tcx.hir_body(closure.body))
+            } else {
+                None
+            };
+            if let Some(body) = body {
                 intravisit::walk_body(self, body);
             }
             return;
@@ -54,7 +102,10 @@ impl<'tcx> Visitor<'tcx> for PanicFinder<'_, 'tcx> {
         // are still caught but the assert itself is not reported.
         if expr.span.from_expansion()
             && let Some((call_site, kind)) = hir_refs::find_panic_macro(expr.span)
-            && matches!(kind, hir_refs::PanicMacro::Panic | hir_refs::PanicMacro::Unreachable)
+            && matches!(
+                kind,
+                hir_refs::PanicMacro::Panic | hir_refs::PanicMacro::Unreachable
+            )
         {
             self.findings.push((call_site, kind.desc()));
             return;

@@ -114,6 +114,31 @@ mod triggers {
             Self
         }
     }
+
+    // Option/Result adapter closures run during construction
+    struct AdapterClosure {
+        port: u16,
+    }
+
+    impl AdapterClosure {
+        pub fn new(port_str: Option<&str>) -> Self {
+            //~^ ERROR: constructor `new` can panic
+            let port = port_str.map(|s| s.parse::<u16>().unwrap()).unwrap_or(0);
+            Self { port }
+        }
+    }
+
+    // async fn new — the desugared coroutine body is the constructor's own
+    // code, so panics inside it still fire during construction
+    struct AsyncClient;
+
+    impl AsyncClient {
+        pub async fn new(url: &str) -> Self {
+            //~^ ERROR: constructor `new` can panic
+            let _port = url.parse::<u16>().unwrap();
+            Self
+        }
+    }
 }
 
 // SHOULD NOT TRIGGER
@@ -249,6 +274,55 @@ mod no_trigger {
         pub fn new(w: Wrapper) -> Self {
             let _val = w.unwrap();
             Self
+        }
+    }
+
+    // async fn new returning Result — the opaque `impl Future` return type is
+    // peeled to its `Output`, so fallibility is already expressed
+    struct AsyncFallible;
+
+    impl AsyncFallible {
+        pub async fn new(url: &str) -> Result<Self, std::num::ParseIntError> {
+            let _port = url.parse::<u16>()?;
+            Ok(Self)
+        }
+    }
+
+    // todo!/unimplemented! are intentional development placeholders — the
+    // compiler already surfaces them, so the lint never reports them
+    struct Unfinished;
+
+    impl Unfinished {
+        pub fn new() -> Self {
+            todo!()
+        }
+    }
+
+    struct NotDone;
+
+    impl NotDone {
+        pub fn new() -> Self {
+            unimplemented!()
+        }
+    }
+
+    // The with-args forms expand *through* `panic!`, so the exemption must
+    // clear the whole expansion backtrace, not just the innermost frame
+    struct UnfinishedWithArgs;
+
+    impl UnfinishedWithArgs {
+        pub fn new(name: &str) -> Self {
+            todo!("wire up {name}")
+        }
+    }
+
+    // Iterator adapters store the closure — panics fire on consumption, not
+    // during `new`, so they must not be treated as construction-time
+    struct LazyMap;
+
+    impl LazyMap {
+        pub fn new() -> impl Iterator<Item = u32> {
+            [1u32].into_iter().map(|_| "x".parse::<u32>().unwrap())
         }
     }
 }

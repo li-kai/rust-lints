@@ -50,6 +50,13 @@ mod triggers {
             todo!()
         }
     }
+
+    // async fn — the opaque `impl Future` return type is peeled to its
+    // `Output`, so the nested Result is still detected
+    async fn load_async(path: &str) -> Result<Result<String, DecodeError>, io::Error> {
+        //~^ WARNING: nested `Result<Result<_, _>, _>`
+        todo!()
+    }
 }
 
 // SHOULD NOT TRIGGER
@@ -101,4 +108,9 @@ mod no_trigger {
 
     // Type alias that is not nested
     type SimpleResult = Result<String, io::Error>;
+
+    // async fn with a flat Result — the peeled `Output` is not nested
+    async fn fetch_async(url: &str) -> Result<String, io::Error> {
+        todo!()
+    }
 }

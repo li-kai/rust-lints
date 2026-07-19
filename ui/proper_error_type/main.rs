@@ -43,6 +43,12 @@ pub(crate) fn pub_crate_string_err(_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+// Should trigger: async fn — the opaque `impl Future` return type is peeled
+// to its `Output`, so `Result<_, String>` is still detected
+pub async fn parse_string_async(_input: &str) -> Result<(), String> {
+    Ok(())
+}
+
 // Should NOT trigger: private function
 fn private_parse(_input: &str) -> Result<(), String> {
     Ok(())
@@ -155,6 +161,28 @@ impl std::error::Error for DupSourceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
+        }
+    }
+}
+
+// Should NOT trigger step 3: Display matches on `*self` — deref/ref
+// wrappings of `self` still spell the error value itself, not a rendered
+// source field. (Step 4 still fires for the manual Error + Display pair.)
+#[derive(Debug)]
+pub enum DerefMatchError {
+    Io(std::io::Error),
+}
+impl fmt::Display for DerefMatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Io(ref _e) => write!(f, "deref-match io error"),
+        }
+    }
+}
+impl std::error::Error for DerefMatchError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match *self {
+            Self::Io(ref e) => Some(e),
         }
     }
 }

@@ -6,6 +6,8 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
 
+use super::hir_refs;
+
 rustc_session::declare_lint! {
     /// Flags `Result<Result<T, E1>, E2>` in function signatures and type aliases.
     /// Almost always a mistake (`.map()` instead of `.and_then()`) or simplifiable.
@@ -66,7 +68,8 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
             return;
         }
 
-        let ret_ty = return_ty(cx, rustc_hir::OwnerId { def_id });
+        let ret_ty =
+            hir_refs::peel_async_fn_return_ty(cx.tcx, return_ty(cx, rustc_hir::OwnerId { def_id }));
 
         if is_nested_result(cx, ret_ty) {
             span_lint_and_help(cx, RESULT_RESULT, decl.output.span(), MSG, None, HELP);

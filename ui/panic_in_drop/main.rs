@@ -187,6 +187,34 @@ impl Drop for Deferred {
     }
 }
 
+// todo!/unimplemented! are intentional development placeholders — the
+// compiler already surfaces them, so the lint never reports them
+struct UnfinishedDrop;
+
+impl Drop for UnfinishedDrop {
+    fn drop(&mut self) {
+        todo!()
+    }
+}
+
+struct NotDoneDrop;
+
+impl Drop for NotDoneDrop {
+    fn drop(&mut self) {
+        unimplemented!()
+    }
+}
+
+// The with-args forms expand *through* `panic!`, so the exemption must clear
+// the whole expansion backtrace, not just the innermost frame
+struct UnfinishedWithArgsDrop;
+
+impl Drop for UnfinishedWithArgsDrop {
+    fn drop(&mut self) {
+        todo!("cleanup for {:?}", "resource")
+    }
+}
+
 // Macro-generated Drop impl should be skipped (not easily testable in UI,
 // but noted for completeness)
 

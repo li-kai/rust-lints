@@ -31,5 +31,13 @@ LL |         pub fn load(&self) -> Result<Result<String, DecodeError>, io::Error
    |
    = help: use `.and_then()` to chain fallible operations, or unify the error types into a single enum
 
-warning: 4 warnings emitted
+warning: nested `Result<Result<_, _>, _>` — consider flattening into a single Result
+  --> $DIR/main.rs:56:40
+   |
+LL |     async fn load_async(path: &str) -> Result<Result<String, DecodeError>, io::Error> {
+   |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `.and_then()` to chain fallible operations, or unify the error types into a single enum
+
+warning: 5 warnings emitted
 

@@ -47,8 +47,16 @@ LL | pub(crate) fn pub_crate_string_err(_path: &str) -> Result<(), String> {
    |
    = help: define an error enum with `#[derive(thiserror::Error)]`
 
+warning: public function returns `Result<_, String>` — use a type that implements `Error`
+  --> $DIR/main.rs:48:50
+   |
+LL | pub async fn parse_string_async(_input: &str) -> Result<(), String> {
+   |                                                  ^^^^^^^^^^^^^^^^^^
+   |
+   = help: define an error enum with `#[derive(thiserror::Error)]`
+
 warning: `ConfigError` wraps error types but does not implement `source()`
-  --> $DIR/main.rs:88:1
+  --> $DIR/main.rs:94:1
    |
 LL | impl std::error::Error for ConfigError {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -56,7 +64,7 @@ LL | impl std::error::Error for ConfigError {}
    = help: use `#[derive(thiserror::Error)]` with `#[source]` / `#[from]`
 
 warning: `PubCrateConfigError` wraps error types but does not implement `source()`
-  --> $DIR/main.rs:137:1
+  --> $DIR/main.rs:143:1
    |
 LL | impl std::error::Error for PubCrateConfigError {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -64,7 +72,7 @@ LL | impl std::error::Error for PubCrateConfigError {}
    = help: use `#[derive(thiserror::Error)]` with `#[source]` / `#[from]`
 
 warning: `ParseError` is named as an error type but does not implement `std::error::Error`
-  --> $DIR/main.rs:168:1
+  --> $DIR/main.rs:196:1
    |
 LL | / pub enum ParseError {
 LL | |     InvalidSyntax,
@@ -75,7 +83,7 @@ LL | | }
    = help: add `#[derive(thiserror::Error, Debug)]`
 
 warning: `ConnectionErr` is named as an error type but does not implement `std::error::Error`
-  --> $DIR/main.rs:174:1
+  --> $DIR/main.rs:202:1
    |
 LL | / pub struct ConnectionErr {
 LL | |     pub message: String,
@@ -85,7 +93,7 @@ LL | | }
    = help: add `#[derive(thiserror::Error, Debug)]`
 
 warning: `PubCrateParseError` is named as an error type but does not implement `std::error::Error`
-  --> $DIR/main.rs:186:1
+  --> $DIR/main.rs:214:1
    |
 LL | / pub(crate) enum PubCrateParseError {
 LL | |     InvalidSyntax,
@@ -95,23 +103,15 @@ LL | | }
    = help: add `#[derive(thiserror::Error, Debug)]`
 
 warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
-  --> $DIR/main.rs:72:1
+  --> $DIR/main.rs:94:1
    |
-LL | impl std::error::Error for MyTypedError {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = help: thiserror eliminates boilerplate and keeps Display in sync with variants
-
-warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
-  --> $DIR/main.rs:137:1
-   |
-LL | impl std::error::Error for PubCrateConfigError {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL | impl std::error::Error for ConfigError {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: thiserror eliminates boilerplate and keeps Display in sync with variants
 
 warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
-  --> $DIR/main.rs:154:1
+  --> $DIR/main.rs:160:1
    |
 LL | / impl std::error::Error for DupSourceError {
 LL | |     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
@@ -124,7 +124,7 @@ LL | | }
    = help: thiserror eliminates boilerplate and keeps Display in sync with variants
 
 warning: `Display` renders inner error that is also returned by `source()`
-  --> $DIR/main.rs:147:1
+  --> $DIR/main.rs:153:1
    |
 LL | / impl fmt::Display for DupSourceError {
 LL | |     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -137,7 +137,23 @@ LL | | }
    = help: describe only what went wrong at this level — the source chain handles the rest
 
 warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
-  --> $DIR/main.rs:123:1
+  --> $DIR/main.rs:78:1
+   |
+LL | impl std::error::Error for MyTypedError {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: thiserror eliminates boilerplate and keeps Display in sync with variants
+
+warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
+  --> $DIR/main.rs:143:1
+   |
+LL | impl std::error::Error for PubCrateConfigError {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: thiserror eliminates boilerplate and keeps Display in sync with variants
+
+warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
+  --> $DIR/main.rs:129:1
    |
 LL | impl std::error::Error for SimpleError {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -145,7 +161,7 @@ LL | impl std::error::Error for SimpleError {}
    = help: thiserror eliminates boilerplate and keeps Display in sync with variants
 
 warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
-  --> $DIR/main.rs:103:1
+  --> $DIR/main.rs:109:1
    |
 LL | / impl std::error::Error for ConfigErrorWithSource {
 LL | |     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
@@ -158,12 +174,17 @@ LL | | }
    = help: thiserror eliminates boilerplate and keeps Display in sync with variants
 
 warning: manual `Error` + `Display` impl — use `#[derive(thiserror::Error)]`
-  --> $DIR/main.rs:88:1
+  --> $DIR/main.rs:182:1
    |
-LL | impl std::error::Error for ConfigError {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL | / impl std::error::Error for DerefMatchError {
+LL | |     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+LL | |         match *self {
+LL | |             Self::Io(ref e) => Some(e),
+...  |
+LL | | }
+   | |_^
    |
    = help: thiserror eliminates boilerplate and keeps Display in sync with variants
 
-warning: 18 warnings emitted
+warning: 20 warnings emitted
 

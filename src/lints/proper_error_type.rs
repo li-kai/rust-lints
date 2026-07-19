@@ -12,6 +12,8 @@ use rustc_middle::ty::{self, ExistentialPredicate, Ty};
 use rustc_span::def_id::CRATE_DEF_ID;
 use rustc_span::{Span, Symbol, sym};
 
+use super::hir_refs;
+
 struct ErrorImplInfo {
     span: Span,
     has_source: bool,
@@ -126,9 +128,15 @@ impl ProperErrorType {
                 let crate_name = cx.tcx.crate_name(did.krate);
                 let item_name = cx.tcx.item_name(did);
                 if crate_name == self.sym_anyhow && item_name == sym::Error {
-                    Some(UnstructuredKind::ErasedCrate { crate_name: "anyhow", type_name: "Error" })
+                    Some(UnstructuredKind::ErasedCrate {
+                        crate_name: "anyhow",
+                        type_name: "Error",
+                    })
                 } else if crate_name == self.sym_miette && item_name == self.sym_miette_report {
-                    Some(UnstructuredKind::ErasedCrate { crate_name: "miette", type_name: "Report" })
+                    Some(UnstructuredKind::ErasedCrate {
+                        crate_name: "miette",
+                        type_name: "Report",
+                    })
                 } else {
                     None
                 }
@@ -260,6 +268,27 @@ impl ProperErrorType {
         }
     }
 
+    /// Returns `true` for `self` and reference/deref wrappings of it
+    /// (`*self`, `&*self`, …). A `match *self { … }` scrutinee has the error
+    /// type itself, so a bare path check would flag every such `Display` impl
+    /// even when nothing from the source chain is rendered.
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "only deref/ref wrappings and paths can spell `self`"
+    )]
+    fn is_self_expr(expr: &rustc_hir::Expr<'_>) -> bool {
+        match expr.kind {
+            ExprKind::Unary(rustc_hir::UnOp::Deref, inner) | ExprKind::AddrOf(_, _, inner) => {
+                Self::is_self_expr(inner)
+            }
+            ExprKind::Path(rustc_hir::QPath::Resolved(_, path)) => path
+                .segments
+                .last()
+                .is_some_and(|s| s.ident.name == rustc_span::symbol::kw::SelfLower),
+            _ => false,
+        }
+    }
+
     fn check_duplicated_source(
         cx: &LateContext<'_>,
         fmt_def_id: rustc_hir::def_id::LocalDefId,
@@ -282,8 +311,7 @@ impl ProperErrorType {
             // (e.g. `Self::Io(e) => write!(f, "{e}")`) — not accessible by name.
             if let Some(expr_ty) = typeck.node_type_opt(expr.hir_id)
                 && implements_trait(cx, expr_ty.peel_refs(), error_trait_id, &[])
-                && !matches!(expr.kind, ExprKind::Path(rustc_hir::QPath::Resolved(_, path))
-                    if path.segments.last().is_some_and(|s| s.ident.name == rustc_span::symbol::kw::SelfLower))
+                && !Self::is_self_expr(expr)
             {
                 return ControlFlow::Break(());
             }
@@ -328,7 +356,8 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
             return;
         };
 
-        let ret_ty = return_ty(cx, rustc_hir::OwnerId { def_id });
+        let ret_ty =
+            hir_refs::peel_async_fn_return_ty(cx.tcx, return_ty(cx, rustc_hir::OwnerId { def_id }));
         let ty::Adt(adt, args) = ret_ty.kind() else {
             return;
         };
@@ -361,7 +390,10 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
                     "define an error enum with `#[derive(thiserror::Error)]`",
                 );
             }
-            UnstructuredKind::ErasedCrate { crate_name, type_name } => {
+            UnstructuredKind::ErasedCrate {
+                crate_name,
+                type_name,
+            } => {
                 if !cx.tcx.effective_visibilities(()).is_reachable(def_id) {
                     return;
                 }

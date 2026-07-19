@@ -145,21 +145,69 @@ impl PanicMacro {
 /// Checks if a span originates from a panic-related macro, walking up the
 /// expansion chain to handle cases like `panic!` expanding through internal
 /// macros (`panic_fmt`, `panic_2021`, etc.).
+///
+/// `todo!()` and `unimplemented!()` are deliberately never reported: they mark
+/// intentional development placeholders and the compiler already surfaces
+/// them. Their with-args forms expand *through* `panic!`, so the whole
+/// backtrace is cleared of those frames before any frame is matched —
+/// otherwise the inner `panic!` frame would be reported anyway.
 pub fn find_panic_macro(span: Span) -> Option<(Span, PanicMacro)> {
-    expn_backtrace(span).find_map(|(_, data)| {
-        let ExpnKind::Macro(_, name) = data.kind else {
-            return None;
+    let macro_name = |data: &rustc_span::ExpnData| match data.kind {
+        ExpnKind::Macro(_, name) => Some(name),
+        _ => None,
+    };
+    // One pass: `todo!`/`unimplemented!` (incl. with-args forms that expand
+    // through `panic!`) suppress the whole chain; otherwise take the first
+    // panic-family frame.
+    let mut found = None;
+    for (_, data) in expn_backtrace(span) {
+        let Some(name) = macro_name(&data) else {
+            continue;
         };
-        let kind = match name.as_str() {
-            "panic" => PanicMacro::Panic,
-            "unreachable" => PanicMacro::Unreachable,
-            "assert" => PanicMacro::Assert,
-            "assert_eq" => PanicMacro::AssertEq,
-            "assert_ne" => PanicMacro::AssertNe,
-            _ => return None,
-        };
-        Some((data.call_site, kind))
-    })
+        match name.as_str() {
+            "todo" | "unimplemented" => return None,
+            name if found.is_none() => {
+                let kind = match name {
+                    "panic" => PanicMacro::Panic,
+                    "unreachable" => PanicMacro::Unreachable,
+                    "assert" => PanicMacro::Assert,
+                    "assert_eq" => PanicMacro::AssertEq,
+                    "assert_ne" => PanicMacro::AssertNe,
+                    _ => continue,
+                };
+                found = Some((data.call_site, kind));
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
+/// If `ty` is the opaque `impl Future<Output = T>` that an `async fn`
+/// returns, extracts `T`. Returns `ty` unchanged otherwise.
+///
+/// Lints that inspect function return types must peel this, or `async fn`
+/// signatures are invisible to them: `clippy_utils::return_ty` yields the
+/// opaque future type, never the `Output` the source code spells out.
+pub fn peel_async_fn_return_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> ty::Ty<'tcx> {
+    let ty::Alias(ty::Opaque, alias) = ty.kind() else {
+        return ty;
+    };
+    let Some(future_output) = tcx.lang_items().future_output() else {
+        return ty;
+    };
+    tcx.explicit_item_bounds(alias.def_id)
+        .iter_instantiated_copied(tcx, alias.args)
+        .find_map(|(clause, _)| {
+            if let ty::ClauseKind::Projection(proj) = clause.kind().skip_binder()
+                && proj.projection_term.def_id == future_output
+            {
+                proj.term.as_type()
+            } else {
+                None
+            }
+        })
+        .unwrap_or(ty)
 }
 
 /// Returns the named module path components for a definition (e.g. `[payments, checkout]`).

@@ -137,5 +137,37 @@ note: `panic!()` can panic — use `?` with a `Result` return type instead
 LL |             (|| panic!("boom"))();
    |                 ^^^^^^^^^^^^^^
 
-error: aborting due to 8 previous errors
+error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
+  --> $DIR/main.rs:124:9
+   |
+LL | /         pub fn new(port_str: Option<&str>) -> Self {
+LL | |             //~^ ERROR: constructor `new` can panic
+LL | |             let port = port_str.map(|s| s.parse::<u16>().unwrap()).unwrap_or(0);
+LL | |             Self { port }
+LL | |         }
+   | |_________^
+   |
+note: `.unwrap()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:126:58
+   |
+LL |             let port = port_str.map(|s| s.parse::<u16>().unwrap()).unwrap_or(0);
+   |                                                          ^^^^^^^^
+
+error: constructor `new` can panic — consider returning `Result` or renaming to `try_new`
+  --> $DIR/main.rs:136:9
+   |
+LL | /         pub async fn new(url: &str) -> Self {
+LL | |             //~^ ERROR: constructor `new` can panic
+LL | |             let _port = url.parse::<u16>().unwrap();
+LL | |             Self
+LL | |         }
+   | |_________^
+   |
+note: `.unwrap()` can panic — use `?` with a `Result` return type instead
+  --> $DIR/main.rs:138:44
+   |
+LL |             let _port = url.parse::<u16>().unwrap();
+   |                                            ^^^^^^^^
+
+error: aborting due to 10 previous errors
 
