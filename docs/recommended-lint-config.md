@@ -569,14 +569,14 @@ Only promote to deny when violations are genuinely always wrong. Most warn-level
 map_err_ignore = "deny"
 ```
 
-```toml
-# dylint.toml — safe to deny
-[result_result]
-level = "deny"
-[proper_error_type]
-level = "deny"
-[map_init_then_insert]
-level = "deny"
-[unstructured_log_fields]
-level = "deny"
+Dylint lint levels are not set in `dylint.toml` (its sections only carry
+per-lint options, and unknown keys like `level` are silently ignored). Use
+the normal lint-control attributes at the crate root instead:
+
+```rust
+// lib.rs / main.rs — safe to deny
+#![deny(result_result)]
+#![deny(proper_error_type)]
+#![deny(map_init_then_insert)]
+#![deny(unstructured_log_fields)]
 ```

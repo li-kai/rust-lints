@@ -185,11 +185,11 @@ additional_paths = [
 
 ## Relation to other lints
 
-This lint complements `await_holding_lock` (Clippy), `global_side_effect::time`, and `realtime_in_async_test`:
+This lint complements `await_holding_lock` (Clippy), `global_side_effect_time`, and `realtime_in_async_test`:
 
 | Lint | Catches |
 |---|---|
 | `blocking_in_async` | Blocking operations starving the executor |
 | `await_holding_lock` (Clippy) | `std::sync::Mutex` held across `.await` |
-| `global_side_effect::time` | Non-testable direct time dependencies in production code |
+| `global_side_effect_time` | Non-testable direct time dependencies in production code |
 | `realtime_in_async_test` | Tokio timer misuse and `std::time::Instant` mismatches in async tests |

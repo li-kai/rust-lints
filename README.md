@@ -11,10 +11,10 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | [`blocking_in_async`](#blocking_in_async) | deny | Blocking operations inside `async fn` or `async {}` blocks |
 | [`debug_remnants`](#debug_remnants) | warn | Debug macros (`println!`, `eprintln!`, `dbg!`) in non-test code |
 | [`fallible_new`](#fallible_new) | deny | `fn new()` constructors that can panic |
-| [`global_side_effect::env`](#global_side_effect) | warn | Direct calls to `std::env::var` and similar outside `main()` |
-| [`global_side_effect::logging_init`](#global_side_effect) | deny | Global tracing subscriber initialization outside `main()` |
-| [`global_side_effect::randomness`](#global_side_effect) | warn | Direct calls to random number generators outside `main()` and tests |
-| [`global_side_effect::time`](#global_side_effect) | warn | Direct calls to wall-clock or monotonic time outside `main()` and tests |
+| [`global_side_effect_env`](#global_side_effect) | warn | Direct calls to `std::env::var` and similar outside `main()` |
+| [`global_side_effect_logging_init`](#global_side_effect) | deny | Global tracing subscriber initialization outside `main()` |
+| [`global_side_effect_randomness`](#global_side_effect) | warn | Direct calls to random number generators outside `main()` and tests |
+| [`global_side_effect_time`](#global_side_effect) | warn | Direct calls to wall-clock or monotonic time outside `main()` and tests |
 | [`map_init_then_insert`](#map_init_then_insert) | warn | `HashMap`/`BTreeMap`/`IndexMap` created empty then immediately populated with `insert()` |
 | [`module_dependencies`](#module_dependencies) | deny | Cross-module dependencies not declared in the allowlist |
 | [`needless_builder`](#needless_builder) | warn | Structs with ≤ 2 named fields that unnecessarily derive `bon::Builder` |
@@ -136,7 +136,7 @@ Does not fire when the return type is already `Result` or inside trait impls. Fo
 Four lints that flag direct calls to non-deterministic or environment-coupled functions. The fix for `time`, `randomness`, and `env` is to accept the dependency as a parameter. `logging_init` is `deny` by default because it mutates process-global state; the fix is to move initialization to `main()`.
 
 ```
-warning[global_side_effect.time]: direct call to `chrono::Utc::now()`
+warning: direct call to `chrono::Utc::now()`
   --> src/billing.rs:42:15
    |
 42 |     let now = Utc::now();
@@ -144,17 +144,18 @@ warning[global_side_effect.time]: direct call to `chrono::Utc::now()`
    |
    = help: accept a time parameter or use a clock trait so callers can
            control the time source in tests
+   = note: `#[warn(global_side_effect_time)]` on by default
 ```
 
 None of the four lints fire inside `#[test]` functions, `#[cfg(test)]` modules, or `fn main()`.
 
-**`global_side_effect::time`** — flags: `std::time::SystemTime::now`, `std::time::Instant::now`, `chrono::Utc::now`, `chrono::Local::now`, `time::OffsetDateTime::now_utc`, `jiff::Zoned::now`, `tokio::time::Instant::now`, and more.
+**`global_side_effect_time`** — flags: `std::time::SystemTime::now`, `std::time::Instant::now`, `chrono::Utc::now`, `chrono::Local::now`, `time::OffsetDateTime::now_utc`, `jiff::Zoned::now`, `tokio::time::Instant::now`, and more.
 
-**`global_side_effect::randomness`** — flags: `rand::thread_rng`, `rand::random`, `rand::rngs::OsRng::new`, `fastrand::Rng::new`, and more.
+**`global_side_effect_randomness`** — flags: `rand::thread_rng`, `rand::random`, `rand::rngs::OsRng::new`, `fastrand::Rng::new`, and more.
 
-**`global_side_effect::env`** — flags: `std::env::var`, `std::env::vars`, `std::env::args`, `dotenvy::var`, `dotenvy::vars`, `dotenv::var`.
+**`global_side_effect_env`** — flags: `std::env::var`, `std::env::vars`, `std::env::args`, `dotenvy::var`, `dotenvy::vars`, `dotenv::var`.
 
-**`global_side_effect::logging_init`** — `deny` by default; flags: `tracing_subscriber::fmt::init`, `tracing_subscriber::fmt::try_init`, `tracing_subscriber::fmt::SubscriberBuilder::{init, try_init}`, `tracing_subscriber::util::SubscriberInitExt::{init, try_init}`, and `tracing::subscriber::set_global_default`.
+**`global_side_effect_logging_init`** — `deny` by default; flags: `tracing_subscriber::fmt::init`, `tracing_subscriber::fmt::try_init`, `tracing_subscriber::fmt::SubscriberBuilder::{init, try_init}`, `tracing_subscriber::util::SubscriberInitExt::{init, try_init}`, and `tracing::subscriber::set_global_default`.
 
 ### `map_init_then_insert`
 
@@ -476,9 +477,7 @@ threshold = 2
 check_new_variants = true
 
 [debug_remnants]
-suggested_strategy = "tracing"  # or "log" for libraries
-allow_in_tests = true
-allow_in_test_modules = true
+suggested_framework = "tracing"  # or "log" for libraries
 
 [unbounded_channel]
 # additional_paths = ["my_app::channels::create_unbounded"]
@@ -512,7 +511,9 @@ exhaustive = true
 # payments = ["types", "errors", "utils"]
 
 [realtime_in_async_test]
-# allowed_paths = ["my_crate::time::sleep"]
+# Extra call paths treated as real-time waits (merged with the defaults);
+# use `paths = [..]` instead to replace the default list entirely.
+# additional_paths = ["my_crate::time::sleep"]
 ```
 
 ## Editor Setup

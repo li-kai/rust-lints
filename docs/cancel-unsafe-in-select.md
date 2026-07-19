@@ -1,5 +1,8 @@
 # `cancel_unsafe_in_select`
 
+> **Status: not implemented.** This is a design document for a planned lint;
+> it is not registered in this crate yet.
+
 **Level:** `warn`
 
 Flags cancel-unsafe async calls inside `tokio::select!`, `futures::select!`, and `futures::select_biased!` arms. Losing branches are dropped mid-poll; a cancel-unsafe call in a losing branch loses progress.

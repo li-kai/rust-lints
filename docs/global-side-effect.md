@@ -1,6 +1,6 @@
 # Global Side-Effect Lints
 
-**Lints:** `global_side_effect::time`, `global_side_effect::randomness`, `global_side_effect::env`, `global_side_effect::logging_init`
+**Lints:** `global_side_effect_time`, `global_side_effect_randomness`, `global_side_effect_env`, `global_side_effect_logging_init`
 **Levels:** `warn` for `time`, `randomness`, and `env`; `deny` for `logging_init`
 
 Four lints that flag direct calls to non-deterministic or environment-coupled functions. The first three target runtime dependencies — wall-clock time, random number generation, and environment variables — fix: **accept the dependency as a parameter**. The fourth targets global logger initialization — fix: **move it to `main()`**.
@@ -15,7 +15,7 @@ Global tracing subscriber initialization (`tracing_subscriber::fmt::init()`, etc
 
 Built-in flagged paths by lint:
 
-### `global_side_effect::time`
+### `global_side_effect_time`
 
 | Path | Notes |
 |---|---|
@@ -32,7 +32,7 @@ Built-in flagged paths by lint:
 | `jiff::Timestamp::now` | |
 | `tokio::time::Instant::now` | |
 
-### `global_side_effect::randomness`
+### `global_side_effect_randomness`
 
 | Path | Notes |
 |---|---|
@@ -53,7 +53,7 @@ Built-in flagged paths by lint:
 | `fastrand::char` | Random char |
 | `fastrand::Rng::new` | RNG from OS seed |
 
-### `global_side_effect::env`
+### `global_side_effect_env`
 
 | Path | Notes |
 |---|---|
@@ -72,7 +72,7 @@ Built-in flagged paths by lint:
 | `dotenv::var` | Read from `.env` file (unmaintained) |
 | `dotenv::vars` | Iterate `.env` vars (unmaintained) |
 
-### `global_side_effect::logging_init`
+### `global_side_effect_logging_init`
 
 | Path | Notes |
 |---|---|
@@ -88,7 +88,7 @@ Built-in flagged paths by lint:
 
 ### `time`, `randomness`, `env`
 
-The first three lints follow the same pattern. These examples use `global_side_effect::time`; substitute the relevant function for the other two.
+The first three lints follow the same pattern. These examples use `global_side_effect_time`; substitute the relevant function for the other two.
 
 #### Triggers
 
