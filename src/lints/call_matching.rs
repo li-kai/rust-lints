@@ -8,6 +8,8 @@ use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
 use rustc_hir::{Expr, ExprKind};
 use rustc_lint::LateContext;
+use rustc_middle::ty::TyCtxt;
+use rustc_span::Symbol;
 
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
@@ -96,41 +98,90 @@ fn strip_generic_args(path: &str) -> Cow<'_, str> {
     Cow::Owned(normalized)
 }
 
-/// Checks if `callee_path` (from `def_path_str`) matches any configured path.
-/// Returns the matched path string for use in the diagnostic message.
-pub fn find_matching_path<'a>(callee_path: &str, paths: &'a FxHashSet<String>) -> Option<&'a str> {
-    let normalized = strip_generic_args(callee_path);
-    paths.get(normalized.as_ref()).map(String::as_str)
+/// Interns the final `::`-separated segment of a def path (e.g. `spawn_blocking`
+/// from `tokio::task::spawn_blocking`). Shared by [`PathSet`] and type-name
+/// prefilters that are not full path sets.
+pub fn path_final_segment(path: &str) -> Symbol {
+    Symbol::intern(path.rsplit("::").next().unwrap_or(path))
+}
+
+/// A configured path set with a cheap `Symbol`-based prefilter.
+///
+/// `def_path_str` allocates a `String` and walks the whole def path, so it
+/// must only run for callees that could plausibly match. `final_segments`
+/// holds the last segment of every entry, interned once at build time;
+/// `item_name` is a cheap interned-symbol lookup, and a callee whose own name
+/// is not in that set can never match any entry.
+pub struct PathSet {
+    paths: FxHashSet<String>,
+    final_segments: FxHashSet<Symbol>,
+}
+
+impl PathSet {
+    pub fn new(paths: FxHashSet<String>) -> Self {
+        let final_segments = paths.iter().map(|p| path_final_segment(p)).collect();
+        Self {
+            paths,
+            final_segments,
+        }
+    }
+
+    /// Cheap prefilter: `true` if the definition's own name matches the final
+    /// segment of some entry, so the full `def_path_str` check is worth
+    /// running. Unnamed defs (tuple-struct/variant constructors) return
+    /// `true` — they fall through to the full check rather than being
+    /// silently unmatched.
+    pub fn may_match(&self, tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+        tcx.opt_item_name(def_id)
+            .is_none_or(|name| self.final_segments.contains(&name))
+    }
+
+    /// Checks if `callee_path` (from `def_path_str`) matches any entry.
+    /// Returns the matched path string for use in the diagnostic message.
+    pub fn find<'a>(&'a self, callee_path: &str) -> Option<&'a str> {
+        let normalized = strip_generic_args(callee_path);
+        self.paths.get(normalized.as_ref()).map(String::as_str)
+    }
+
+    /// Like [`Self::find`], but only whether a match exists.
+    pub fn contains(&self, callee_path: &str) -> bool {
+        self.find(callee_path).is_some()
+    }
 }
 
 /// Resolves the callee of `expr` and returns the matching configured path,
-/// if any. Combines [`fn_def_id`], [`LateContext::tcx.def_path_str`], and
-/// [`find_matching_path`] into a single helper for single-set lints.
+/// if any. Combines [`fn_def_id`], the [`PathSet::may_match`] prefilter,
+/// `def_path_str`, and [`PathSet::find`] into a single helper for
+/// single-set lints.
 ///
-/// For lints that check a call against *multiple* path sets, call
-/// `cx.tcx.def_path_str` once and then invoke [`find_matching_path`] directly
-/// for each set to avoid recomputing the callee path.
+/// For lints that check a call against *multiple* path sets, run
+/// [`PathSet::may_match`] for each set first, then call
+/// `cx.tcx.def_path_str` once and invoke [`PathSet::find`] per set.
 pub fn match_call_path<'a>(
     cx: &LateContext<'_>,
     expr: &Expr<'_>,
-    paths: &'a FxHashSet<String>,
+    paths: &'a PathSet,
 ) -> Option<&'a str> {
     let def_id = fn_def_id(cx, expr)?;
+    if !paths.may_match(cx.tcx, def_id) {
+        return None;
+    }
     let callee_path = cx.tcx.def_path_str(def_id);
-    find_matching_path(&callee_path, paths)
+    paths.find(&callee_path)
 }
 
 /// Builds the effective path set from defaults and config overrides.
 /// If `config.paths` is `Some`, it replaces defaults entirely.
 /// Otherwise, defaults are merged with `config.additional_paths`.
-pub fn build_path_list(defaults: &[&str], config: &SubLintConfig) -> FxHashSet<String> {
-    if let Some(ref overrides) = config.paths {
+pub fn build_path_list(defaults: &[&str], config: &SubLintConfig) -> PathSet {
+    let paths: FxHashSet<String> = if let Some(ref overrides) = config.paths {
         overrides.iter().cloned().collect()
     } else {
         let mut merged: FxHashSet<String> = defaults.iter().map(|&s| s.to_owned()).collect();
         merged.extend(config.additional_paths.iter().cloned());
         merged
-    }
+    };
+    PathSet::new(paths)
 }
 
 #[cfg(test)]

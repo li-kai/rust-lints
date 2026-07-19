@@ -1,11 +1,8 @@
 use clippy_utils::diagnostics::span_lint_and_help;
-use clippy_utils::fn_def_id;
 use rustc_hir::{ClosureKind, CoroutineDesugaring, CoroutineKind, Expr, ExprKind, HirId, Node};
 use rustc_lint::{LateContext, LateLintPass};
 
-use rustc_data_structures::fx::FxHashSet;
-
-use super::call_matching::{build_path_list, match_call_path};
+use super::call_matching::{PathSet, build_path_list, match_call_path};
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
 
@@ -37,9 +34,11 @@ const DEFAULT_PATHS: &[&str] = &[
     "std::net::UdpSocket::bind",
     // std::thread
     "std::thread::sleep",
-    // std::io — stdin methods are MethodCall, matched by path
+    // std::io — stdin methods are MethodCall, matched by path.
+    // `stdin().read(..)` resolves to the `Read` trait method
+    // (`std::io::Read::read`), which is deliberately not listed: flagging the
+    // trait path would hit every reader, including non-blocking ones.
     "std::io::Stdin::read_line",
-    "std::io::Stdin::read",
     // std::sync
     "std::sync::Mutex::lock",
     "std::sync::RwLock::read",
@@ -55,11 +54,20 @@ const DEFAULT_PATHS: &[&str] = &[
     "tokio::task::block_in_place",
 ];
 
-/// Paths that act as "escape hatches" — if the blocking call is inside a
-/// closure passed to one of these, it's intentional.
+/// Paths whose closure argument does not run on the executor — either an
+/// intentional escape hatch (`spawn_blocking`) or a closure handed to a
+/// dedicated thread. Blocking inside these closures is fine.
+///
+/// Includes the method forms: `is_synchronously_invoked` treats every
+/// method-call closure as running in place, so spawning *methods* must be
+/// rescued here or correctly-offloaded blocking work gets flagged.
 const SPAWN_BLOCKING_PATHS: &[&str] = &[
     "tokio::task::spawn_blocking",
+    "tokio::runtime::Handle::spawn_blocking",
+    "tokio::runtime::Runtime::spawn_blocking",
     "async_std::task::spawn_blocking",
+    "std::thread::Builder::spawn",
+    "std::thread::Scope::spawn",
 ];
 
 const HELP: &str = "use an async-aware alternative, or wrap the blocking call \
@@ -70,11 +78,11 @@ const HELP: &str = "use an async-aware alternative, or wrap the blocking call \
 /// execution context rather than being deferred to another thread/task.
 ///
 /// Two shapes qualify: an immediately-invoked closure (`(|| …)()`, where the
-/// closure is the call target) and a closure passed as an argument to a method
-/// call (`recv.for_each(|…| …)`, `opt.map(|…| …)`, …), which iterator / `Option`
-/// / `Result` adapters drive on the spot. A closure passed to a *free function*
-/// (e.g. `std::thread::spawn(|| …)`, `spawn_blocking(|| …)`) is the call target's
-/// argument but not synchronously invoked, so it is correctly treated as opaque.
+/// closure is the call target) and a closure passed as an argument to any
+/// method call (`recv.for_each(|…| …)`, `opt.map(|…| …)`, …). Method adapters
+/// are treated as sync-invoked by default; free-function callbacks
+/// (`spawn_blocking(|| …)`, `thread::spawn(|| …)`) are not — those are opaque
+/// unless rescued by [`is_inside_spawn_blocking`].
 #[expect(
     clippy::wildcard_enum_match_arm,
     reason = "ExprKind has many variants; only call/method-call parents matter"
@@ -86,8 +94,8 @@ fn is_synchronously_invoked(cx: &LateContext<'_>, closure_hir_id: HirId) -> bool
     match parent.kind {
         // IIFE: the closure is the thing being called.
         ExprKind::Call(callee, _) => callee.hir_id == closure_hir_id,
-        // Iterator / `Option` / `Result` adapter: `recv.method(|…| …)` drives
-        // the closure synchronously on the current thread.
+        // Method-call arg: treat as sync-invoked on the current thread.
+        // (Spawn *methods* are rescued by `is_inside_spawn_blocking`.)
         ExprKind::MethodCall(..) => true,
         _ => false,
     }
@@ -109,20 +117,18 @@ fn is_in_async_context(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
                 // An async coroutine closure puts us directly on the executor.
                 if matches!(
                     c.kind,
-                    ClosureKind::Coroutine(CoroutineKind::Desugared(
-                        CoroutineDesugaring::Async,
-                        _,
-                    ))
+                    ClosureKind::Coroutine(
+                        CoroutineKind::Desugared(CoroutineDesugaring::Async, _,)
+                    )
                 ) {
                     return true;
                 }
                 // A sync closure normally breaks the chain — its body runs
                 // wherever it is later invoked, not necessarily on the executor.
                 // But a closure that is invoked *synchronously in place* still
-                // runs on the executor: an IIFE (`(|| …)()`) or one handed to an
-                // iterator / `Option` / `Result` adapter (`.for_each`, `.map`,
-                // …). Treat those as transparent and keep walking outward;
-                // otherwise the chain is genuinely broken.
+                // runs on the executor: an IIFE (`(|| …)()`) or a method-call
+                // arg (`.for_each`, `.map`, …). Treat those as transparent and
+                // keep walking outward; otherwise the chain is genuinely broken.
                 if !is_synchronously_invoked(cx, hir_id) {
                     return false;
                 }
@@ -140,7 +146,7 @@ fn is_in_async_context(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     clippy::wildcard_enum_match_arm,
     reason = "we only care about closures and function boundaries"
 )]
-fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
+fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>, spawn_paths: &PathSet) -> bool {
     for (hir_id, node) in cx.tcx.hir_parent_iter(expr.hir_id) {
         match node {
             Node::Expr(Expr {
@@ -148,12 +154,9 @@ fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
                 ..
             }) => {
                 if let Node::Expr(parent) = cx.tcx.hir_node(cx.tcx.parent_hir_id(hir_id))
-                    && let Some(def_id) = fn_def_id(cx, parent)
+                    && match_call_path(cx, parent, spawn_paths).is_some()
                 {
-                    let path = cx.tcx.def_path_str(def_id);
-                    if SPAWN_BLOCKING_PATHS.iter().any(|&p| p == path) {
-                        return true;
-                    }
+                    return true;
                 }
             }
             Node::Item(_) | Node::ImplItem(_) | Node::TraitItem(_) => break,
@@ -164,7 +167,8 @@ fn is_inside_spawn_blocking(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 }
 
 pub struct BlockingInAsync {
-    paths: FxHashSet<String>,
+    paths: PathSet,
+    spawn_blocking_paths: PathSet,
 }
 
 impl BlockingInAsync {
@@ -173,6 +177,9 @@ impl BlockingInAsync {
 
         Self {
             paths: build_path_list(DEFAULT_PATHS, &config),
+            spawn_blocking_paths: PathSet::new(
+                SPAWN_BLOCKING_PATHS.iter().map(|&s| s.to_owned()).collect(),
+            ),
         }
     }
 }
@@ -192,7 +199,7 @@ impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
         // Ordered cheap-first: attribute-based test check before HIR parent walks.
         if is_in_test_zone(cx, expr)
             || !is_in_async_context(cx, expr)
-            || is_inside_spawn_blocking(cx, expr)
+            || is_inside_spawn_blocking(cx, expr, &self.spawn_blocking_paths)
         {
             return;
         }

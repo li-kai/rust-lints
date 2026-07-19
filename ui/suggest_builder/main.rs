@@ -19,7 +19,12 @@ struct Config {
 }
 impl Config {
     fn new(host: String, port: u16, timeout: u32, retries: u8) -> Self {
-        Self { host, port, timeout, retries }
+        Self {
+            host,
+            port,
+            timeout,
+            retries,
+        }
     }
 }
 
@@ -33,7 +38,13 @@ struct LargerConfig {
 }
 impl LargerConfig {
     fn new(host: String, port: u16, timeout: u32, retries: u8, verbose: bool) -> Self {
-        Self { host, port, timeout, retries, verbose }
+        Self {
+            host,
+            port,
+            timeout,
+            retries,
+            verbose,
+        }
     }
 }
 
@@ -144,7 +155,14 @@ struct TypedContainer<T, U> {
 }
 impl<T, U> TypedContainer<T, U> {
     fn new(name: String, capacity: usize, items: Vec<u8>, label: String) -> Self {
-        Self { name, capacity, items, label, _t: PhantomData, _u: PhantomData }
+        Self {
+            name,
+            capacity,
+            items,
+            label,
+            _t: PhantomData,
+            _u: PhantomData,
+        }
     }
 }
 

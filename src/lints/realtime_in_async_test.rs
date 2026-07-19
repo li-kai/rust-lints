@@ -36,18 +36,16 @@
 use std::ops::ControlFlow;
 
 use clippy_utils::diagnostics::span_lint_and_help;
-use clippy_utils::fn_def_id;
-use clippy_utils::is_test_function;
 use clippy_utils::visitors::for_each_expr;
+use clippy_utils::{fn_def_id, is_test_function};
+use rustc_data_structures::fx::FxHashSet;
 use rustc_hir::def_id::LocalDefId;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{Body, Expr, ExprKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::hir::nested_filter;
 
-use rustc_data_structures::fx::FxHashSet;
-
-use super::call_matching::{build_path_list, find_matching_path, resolve_callee_def_id_with_typeck};
+use super::call_matching::{PathSet, build_path_list, resolve_callee_def_id_with_typeck};
 use crate::config::SubLintConfig;
 
 rustc_session::declare_lint! {
@@ -95,7 +93,10 @@ fn is_start_paused_true(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 /// Collects local callees so the caller can check them transitively.
 struct TimeCallVisitor<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
-    time_paths: &'a FxHashSet<String>,
+    time_paths: &'a PathSet,
+    /// Single-entry set for `std::time::Instant::now` so the same `Symbol`
+    /// prefilter covers the Case 2 check.
+    instant_now: &'a PathSet,
     /// Span of the first tokio time call found (for diagnostic pointing).
     first_time_call_span: Option<rustc_span::Span>,
     /// Span of the first `std::time::Instant::now()` call found.
@@ -128,17 +129,23 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
         if (needs_time_check || needs_instant_check)
             && let Some(def_id) = fn_def_id(self.cx, expr)
         {
-            let callee_path = self.cx.tcx.def_path_str(def_id);
+            // Symbol prefilters keep the allocating `def_path_str` off the
+            // hot path — most calls in a test body are not time-related.
+            let plausible_time = needs_time_check && self.time_paths.may_match(self.cx.tcx, def_id);
+            let plausible_instant =
+                needs_instant_check && self.instant_now.may_match(self.cx.tcx, def_id);
 
-            if needs_time_check && find_matching_path(&callee_path, self.time_paths).is_some() {
-                self.first_time_call_span = Some(expr.span);
+            if plausible_time || plausible_instant {
+                let callee_path = self.cx.tcx.def_path_str(def_id);
+
+                if plausible_time && self.time_paths.contains(&callee_path) {
+                    self.first_time_call_span = Some(expr.span);
+                }
+                if plausible_instant && self.instant_now.contains(&callee_path) {
+                    self.std_instant_now_span = Some(expr.span);
+                }
             }
-            if needs_instant_check && callee_path == STD_INSTANT_NOW {
-                self.std_instant_now_span = Some(expr.span);
-            }
-            if needs_time_check
-                && let Some(local_id) = def_id.as_local()
-            {
+            if needs_time_check && let Some(local_id) = def_id.as_local() {
                 self.local_callees.push((local_id, expr.span));
             }
         }
@@ -159,7 +166,7 @@ impl<'tcx> Visitor<'tcx> for TimeCallVisitor<'_, 'tcx> {
 fn has_transitive_time_call(
     cx: &LateContext<'_>,
     local_id: LocalDefId,
-    time_paths: &FxHashSet<String>,
+    time_paths: &PathSet,
     visited: &mut FxHashSet<LocalDefId>,
 ) -> bool {
     if !visited.insert(local_id) {
@@ -180,9 +187,9 @@ fn has_transitive_time_call(
                 if has_transitive_time_call(cx, callee_local, time_paths, visited) {
                     return ControlFlow::Break(());
                 }
-            } else {
+            } else if time_paths.may_match(cx.tcx, def_id) {
                 let callee_path = cx.tcx.def_path_str(def_id);
-                if find_matching_path(&callee_path, time_paths).is_some() {
+                if time_paths.contains(&callee_path) {
                     return ControlFlow::Break(());
                 }
             }
@@ -193,7 +200,8 @@ fn has_transitive_time_call(
 }
 
 pub struct RealtimeInAsyncTest {
-    time_paths: FxHashSet<String>,
+    time_paths: PathSet,
+    instant_now: PathSet,
 }
 
 impl RealtimeInAsyncTest {
@@ -201,6 +209,7 @@ impl RealtimeInAsyncTest {
         let config: SubLintConfig = dylint_linting::config_or_default("realtime_in_async_test");
         Self {
             time_paths: build_path_list(DEFAULT_TIME_PATHS, &config),
+            instant_now: PathSet::new(std::iter::once(STD_INSTANT_NOW.to_owned()).collect()),
         }
     }
 }
@@ -233,6 +242,7 @@ impl<'tcx> LateLintPass<'tcx> for RealtimeInAsyncTest {
         let mut visitor = TimeCallVisitor {
             cx,
             time_paths: &self.time_paths,
+            instant_now: &self.instant_now,
             first_time_call_span: None,
             std_instant_now_span: None,
             has_start_paused_true: false,

@@ -2,9 +2,7 @@ use clippy_utils::diagnostics::span_lint_and_help;
 use rustc_hir::Expr;
 use rustc_lint::{LateContext, LateLintPass};
 
-use rustc_data_structures::fx::FxHashSet;
-
-use super::call_matching::{build_path_list, is_in_suppression_zone, match_call_path};
+use super::call_matching::{PathSet, build_path_list, is_in_suppression_zone, match_call_path};
 use crate::config::SubLintConfig;
 
 rustc_session::declare_lint! {
@@ -31,7 +29,7 @@ const HELP: &str = "use a bounded channel with an explicit capacity to enable ba
                      (e.g., `mpsc::channel(1000)`)";
 
 pub struct UnboundedChannel {
-    paths: FxHashSet<String>,
+    paths: PathSet,
 }
 
 impl UnboundedChannel {

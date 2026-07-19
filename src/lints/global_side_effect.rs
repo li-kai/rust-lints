@@ -1,10 +1,9 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::fn_def_id;
-use rustc_data_structures::fx::FxHashSet;
 use rustc_hir::Expr;
 use rustc_lint::{LateContext, LateLintPass, Lint};
 
-use super::call_matching::{build_path_list, find_matching_path, is_in_suppression_zone};
+use super::call_matching::{PathSet, build_path_list, is_in_suppression_zone};
 use crate::config::{GlobalSideEffectConfig, SubLintConfig};
 
 rustc_session::declare_lint! {
@@ -122,7 +121,7 @@ const HELP_LOGGING_INIT: &str = "move global tracing subscriber initialization t
 /// One category's rule: lint to emit, path set to match against, help text.
 struct Sublint {
     lint: &'static Lint,
-    paths: FxHashSet<String>,
+    paths: PathSet,
     help: &'static str,
 }
 
@@ -200,11 +199,22 @@ impl<'tcx> LateLintPass<'tcx> for GlobalSideEffect {
             return;
         };
 
+        // Symbol prefilter before `def_path_str` — the vast majority of
+        // callees match none of the four sets, and rendering the path
+        // allocates.
+        if !self
+            .sublints
+            .iter()
+            .any(|s| s.paths.may_match(cx.tcx, def_id))
+        {
+            return;
+        }
+
         let callee_path = cx.tcx.def_path_str(def_id);
         let Some((sublint, matched_path)) = self
             .sublints
             .iter()
-            .find_map(|s| find_matching_path(&callee_path, &s.paths).map(|p| (s, p)))
+            .find_map(|s| s.paths.find(&callee_path).map(|p| (s, p)))
         else {
             return;
         };

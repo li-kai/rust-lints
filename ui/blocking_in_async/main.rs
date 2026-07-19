@@ -66,6 +66,15 @@ async fn ok_spawn_blocking() {
     });
 }
 
+// A closure handed to `std::thread::Builder::spawn` runs on the freshly
+// spawned OS thread, never on the executor — spawn-method receivers are
+// escape hatches just like `spawn_blocking`.
+async fn ok_thread_builder_spawn() {
+    let _ = std::thread::Builder::new().name("worker".into()).spawn(|| {
+        let _ = std::fs::read_to_string("foo.txt");
+    });
+}
+
 // Inside a regular (non-async) closure — not in async context.
 fn ok_closure() {
     let _f = || {
