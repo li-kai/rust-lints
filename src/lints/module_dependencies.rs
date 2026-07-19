@@ -1,8 +1,8 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-use rustc_hir::definitions::DefPathData;
+use rustc_hir::def::DefKind;
 use rustc_hir::{Expr, HirId, Item};
-use rustc_lint::{LateContext, LateLintPass};
+use rustc_lint::{LateContext, LateLintPass, LintContext as _};
 use rustc_middle::ty::TyCtxt;
 use rustc_span::def_id::DefId;
 use rustc_span::{Span, Symbol};
@@ -39,20 +39,21 @@ rustc_session::declare_lint! {
 /// Extracts the top-level module name for a local `DefId`.
 ///
 /// Returns `None` for items at the crate root or external crate items.
+/// The topmost ancestor under the crate root must itself be a module —
+/// a def-path scan for the first `TypeNs` segment would misclassify a
+/// crate-root struct/enum/trait as a "module" named after the type.
 fn top_level_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Symbol> {
     if !def_id.is_local() {
         return None;
     }
-    tcx.def_path(def_id).data.iter().find_map(|d| {
-        #[expect(
-            clippy::wildcard_enum_match_arm,
-            reason = "only the TypeNs variant names a module"
-        )]
-        match d.data {
-            DefPathData::TypeNs(sym) => Some(sym),
-            _ => None,
+    let mut current = def_id;
+    loop {
+        let parent = tcx.opt_parent(current)?;
+        if parent.is_crate_root() {
+            return (tcx.def_kind(current) == DefKind::Mod).then(|| tcx.item_name(current));
         }
-    })
+        current = parent;
+    }
 }
 
 pub struct ModuleDependencies {
@@ -195,7 +196,10 @@ impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
     }
 
     fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
-        if !self.is_configured() {
+        // In test crates `should_skip_ref` drops every reference, so
+        // `used_edges` stays empty and every declared edge would be
+        // spuriously reported dead.
+        if !self.is_configured() || cx.sess().is_test_crate() {
             return;
         }
 
