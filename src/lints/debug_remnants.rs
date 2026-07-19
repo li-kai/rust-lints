@@ -53,6 +53,16 @@ impl<'tcx> LateLintPass<'tcx> for DebugRemnants {
             _ => return,
         };
 
+        // Only the std/core macros count — a user-defined `println!`-alike
+        // (e.g. a test-support or codegen macro that happens to share the
+        // name) is not a debugging remnant. Checked after the name match so
+        // the `crate_name` query only runs for candidate macros.
+        if !expn_data.macro_def_id.is_some_and(|def_id| {
+            matches!(cx.tcx.crate_name(def_id.krate).as_str(), "std" | "core")
+        }) {
+            return;
+        }
+
         let call_site = expn_data.call_site;
         if !self.seen_callsites.insert(call_site) {
             return;

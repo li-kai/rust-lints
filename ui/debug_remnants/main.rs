@@ -59,3 +59,17 @@ mod tests {
 fn cli_entrypoint() {
     println!("Usage: tool <command>"); // OK: explicitly suppressed
 }
+
+// Should NOT trigger: user-defined `println!` — the lint anchors on the
+// defining crate (std/core), not just the macro name. Defined last so the
+// textual shadowing does not affect the cases above.
+
+macro_rules! println {
+    ($($arg:tt)*) => {{
+        let _ = format!($($arg)*);
+    }};
+}
+
+fn custom_println_macro() {
+    println!("shadowed, not std"); // OK: not the std macro
+}
