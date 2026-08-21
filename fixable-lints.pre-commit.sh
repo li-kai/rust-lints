@@ -48,6 +48,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::doc_lazy_continuation \
   -W clippy::double_comparisons \
   -W clippy::double_ended_iterator_last \
+  -W clippy::double_must_use \
   -W clippy::double_parens \
   -W clippy::duration_suboptimal_units \
   -W clippy::duration_subsec \
@@ -59,7 +60,6 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::explicit_into_iter_loop \
   -W clippy::explicit_write \
   -W clippy::extend_with_drain \
-  -W clippy::extra_unused_type_parameters \
   -W clippy::filter_map_bool_then \
   -W clippy::filter_map_identity \
   -W clippy::filter_map_next \
@@ -132,6 +132,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::manual_is_multiple_of \
   -W clippy::manual_is_power_of_two \
   -W clippy::manual_is_variant_and \
+  -W clippy::manual_isolate_lowest_one \
   -W clippy::manual_main_separator_str \
   -W clippy::manual_map \
   -W clippy::manual_midpoint \
@@ -160,6 +161,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::map_collect_result_unit \
   -W clippy::map_flatten \
   -W clippy::map_identity \
+  -W clippy::map_or_identity \
   -W clippy::match_as_ref \
   -W clippy::match_bool \
   -W clippy::match_ref_pats \
@@ -312,6 +314,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::useless_vec \
   -W clippy::waker_clone_wake \
   -W clippy::while_let_on_iterator \
+  -W clippy::with_capacity_zero \
   -W clippy::write_literal \
   -W clippy::write_with_newline \
   -W clippy::writeln_empty_string \
