@@ -274,10 +274,11 @@ fn find_ordering_violations(
         }
 
         if from < to {
-            violation_map
-                .entry(from)
-                .or_default()
-                .push((items[to].display_name.clone(), ref_span, items[to].ident_span));
+            violation_map.entry(from).or_default().push((
+                items[to].display_name.clone(),
+                ref_span,
+                items[to].ident_span,
+            ));
         }
     }
 
@@ -363,10 +364,7 @@ fn emit_module_diagnostic(
                             ),
                         );
                         if seen_defs.insert(*def_span) {
-                            diag.span_label(
-                                *def_span,
-                                format!("`{name}` defined here"),
-                            );
+                            diag.span_label(*def_span, format!("`{name}` defined here"));
                         }
                     }
                 }
@@ -487,13 +485,16 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
             .def_ident_span(item_def_id.to_def_id())
             .map_or(item.span, |id_sp| item.span.with_hi(id_sp.hi()));
 
-        self.modules.entry(parent_local).or_default().push(ModuleItem {
-            def_id: item_def_id,
-            span: item.span,
-            ident_span,
-            display_name,
-            impl_self_ty,
-        });
+        self.modules
+            .entry(parent_local)
+            .or_default()
+            .push(ModuleItem {
+                def_id: item_def_id,
+                span: item.span,
+                ident_span,
+                display_name,
+                impl_self_ty,
+            });
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
@@ -573,8 +574,7 @@ impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
             let adj = build_adj_list(&remapped_refs, n);
             let item_to_scc = compute_sccs(&adj, n);
 
-            let ordering_violations =
-                find_ordering_violations(items, &remapped_refs, &item_to_scc);
+            let ordering_violations = find_ordering_violations(items, &remapped_refs, &item_to_scc);
 
             let grouping_violations = check_impl_grouping(items, &item_def_id_to_idx);
 

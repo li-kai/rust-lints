@@ -175,7 +175,11 @@ fn format_only_call(snippet: &str) -> Option<bool> {
     let (before_fmt, fmt_str) = split_at_format_string(snippet)?;
     let (after_directives, has_directive) = strip_leading_directives(before_fmt);
     if has_format_placeholders(fmt_str)
-        && after_directives.trim().trim_end_matches(',').trim().is_empty()
+        && after_directives
+            .trim()
+            .trim_end_matches(',')
+            .trim()
+            .is_empty()
     {
         Some(has_directive)
     } else {
@@ -186,10 +190,7 @@ fn format_only_call(snippet: &str) -> Option<bool> {
 /// Walk up the macro expansion chain to find a tracing level macro defined in
 /// the `tracing` crate. Returns the display label (e.g. `"tracing::info"`) and
 /// the call site span.
-fn find_tracing_macro_callsite(
-    cx: &LateContext<'_>,
-    span: Span,
-) -> Option<(&'static str, Span)> {
+fn find_tracing_macro_callsite(cx: &LateContext<'_>, span: Span) -> Option<(&'static str, Span)> {
     let mut current = span;
     while current.from_expansion() {
         let expn = current.ctxt().outer_expn_data();
