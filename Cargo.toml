@@ -78,6 +78,10 @@ name = "realtime_in_async_test"
 path = "ui/realtime_in_async_test/main.rs"
 
 [[example]]
+name = "redundant_enum_variant_wrapper"
+path = "ui/redundant_enum_variant_wrapper/main.rs"
+
+[[example]]
 name = "result_result"
 path = "ui/result_result/main.rs"
 

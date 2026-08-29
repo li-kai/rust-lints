@@ -53,6 +53,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::unclear_exports::UNCLEAR_EXPORTS,
         lints::result_result::RESULT_RESULT,
         lints::realtime_in_async_test::REALTIME_IN_ASYNC_TEST,
+        lints::redundant_enum_variant_wrapper::REDUNDANT_ENUM_VARIANT_WRAPPER,
         lints::unstructured_log_fields::UNSTRUCTURED_LOG_FIELDS,
         lints::module_dependencies::MODULE_DEPENDENCIES,
         lints::module_dependencies::MODULE_DEPENDENCIES_UNLISTED,
@@ -84,6 +85,9 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store.register_late_pass(|_| {
         Box::new(lints::realtime_in_async_test::RealtimeInAsyncTest::new())
     });
+    lint_store.register_late_pass(|_| {
+        Box::new(lints::redundant_enum_variant_wrapper::RedundantEnumVariantWrapper::new())
+    });
     lint_store
         .register_late_pass(|_| Box::new(lints::module_dependencies::ModuleDependencies::new()));
     lint_store.register_late_pass(|_| Box::new(lints::acyclic_modules::AcyclicModules::new()));
@@ -92,6 +96,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store.register_late_pass(|_| {
         Box::new(lints::unsafe_send_missing_drop::UnsafeSendMissingDrop::new())
     });
-    lint_store
-        .register_late_pass(|_| Box::new(lints::await_holding_unsendable::AwaitHoldingUnsendable::new()));
+    lint_store.register_late_pass(|_| {
+        Box::new(lints::await_holding_unsendable::AwaitHoldingUnsendable::new())
+    });
 }

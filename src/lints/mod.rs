@@ -1,18 +1,20 @@
 pub mod acyclic_modules;
+pub mod await_holding_unsendable;
 pub mod blocking_in_async;
 pub mod bon_builder_collector;
 pub mod call_matching;
+mod constructor;
 pub mod debug_remnants;
 pub mod fallible_new;
 pub mod global_side_effect;
 mod hir_refs;
 pub mod map_init_then_insert;
 pub mod module_dependencies;
-pub mod await_holding_unsendable;
 pub mod needless_builder;
 pub mod panic_in_drop;
 pub mod proper_error_type;
 pub mod realtime_in_async_test;
+pub mod redundant_enum_variant_wrapper;
 pub mod result_result;
 pub mod suggest_builder;
 mod suppression;
@@ -56,10 +58,9 @@ thread_local! {
 /// `#[derive(Default)]` and `#[derive(std::default::Default)]`.
 pub fn has_any_derive(name: Symbol, derives: &[Symbol]) -> bool {
     STRUCT_DERIVES.with(|map| {
-        map.borrow().get(&name).is_some_and(|set| {
-            set.iter()
-                .any(|info| derives.contains(&info.last_segment))
-        })
+        map.borrow()
+            .get(&name)
+            .is_some_and(|set| set.iter().any(|info| derives.contains(&info.last_segment)))
     })
 }
 

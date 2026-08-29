@@ -21,6 +21,7 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | [`panic_in_drop`](#panic_in_drop) | deny | Panic-able expressions inside `Drop` implementations |
 | [`proper_error_type`](#proper_error_type) | warn | Incomplete or unstructured error types in `pub`/`pub(crate)` APIs |
 | [`realtime_in_async_test`](#realtime_in_async_test) | warn | Tokio time calls in async tests without `start_paused = true` |
+| [`redundant_enum_variant_wrapper`](#redundant_enum_variant_wrapper) | deny | Direct variant wrappers on enums with no nontrivial constructors |
 | [`result_result`](#result_result) | warn | Nested `Result<Result<T, E1>, E2>` in function signatures |
 | [`suggest_builder`](#suggest_builder) | warn | Structs with ≥ 6 named fields that could use a `#[builder]` constructor |
 | [`topological_ordering`](#topological_ordering) | warn | Items within a module not ordered by their dependency graph |
@@ -274,6 +275,24 @@ warning: real-time wait in async test without paused clock
 ```
 
 Walks local helper functions transitively, so tokio time calls hidden inside a helper called from the test are still flagged. Does not fire outside test functions or on `tokio::time::advance` (the correct tool for stepping a paused clock).
+
+### `redundant_enum_variant_wrapper`
+
+Flags inherent associated functions whose entire body forwards every parameter unchanged to one variant of the enum being implemented—but only when every constructor on that enum is equally trivial. Variants already have direct construction syntax, so an all-wrapper API adds extra names and API surface without adding behavior.
+
+```rust
+enum Message {
+    Text(String),
+}
+
+impl Message {
+    fn text(value: String) -> Self {
+        Self::Text(value)
+    }
+}
+```
+
+Use `Message::Text(value)` directly. Tuple, struct, and unit variants are covered. If any associated constructor for the enum converts or validates inputs, supplies defaults, or returns `Result<Self, _>`/`Box<Self>`, direct wrappers on the same enum are allowed to preserve a consistent API. Trait-required constructors are ignored. See [docs/redundant-enum-variant-wrapper.md](docs/redundant-enum-variant-wrapper.md) for exact matching rules.
 
 ### `suggest_builder`
 

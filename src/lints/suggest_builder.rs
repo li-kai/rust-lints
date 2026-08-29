@@ -3,8 +3,9 @@ use clippy_utils::ty::implements_trait;
 use rustc_hir::{GenericParamKind, Item, ItemKind, LangItem, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
-use rustc_span::{Symbol, sym};
+use rustc_span::Symbol;
 
+use super::constructor;
 use crate::config::SuggestBuilderConfig;
 
 rustc_session::declare_lint! {
@@ -96,9 +97,9 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
         {
             return;
         }
-        // Skip structs with no inherent constructors (associated fns whose
-        // return type contains Self). Without a constructor the struct is
-        // built via literals — a builder suggestion is noise.
+        // Skip structs with no inherent constructors (associated fns returning
+        // Self directly or through Result/Box). Without a constructor the
+        // struct is built via literals — a builder suggestion is noise.
         let struct_def_id = item.owner_id.to_def_id();
         let has_ctor = cx.tcx.inherent_impls(struct_def_id).iter().any(|impl_id| {
             cx.tcx
@@ -106,34 +107,12 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
                 .in_definition_order()
                 .filter(|assoc| matches!(assoc.kind, ty::AssocKind::Fn { .. }))
                 .any(|assoc| {
-                    let ret_ty = cx
-                        .tcx
-                        .fn_sig(assoc.def_id)
-                        .instantiate_identity()
-                        .output()
-                        .skip_binder();
                     // Peel only the allowed constructor wrappers — `Result<_, _>`
                     // (taking the `Ok` arg) and `Box<_>` (taking the inner arg) —
                     // then require an exact match to the struct's `Self` type.
                     // A return type that merely *contains* `Self` as a nested or
                     // generic arg (e.g. `Option<&Self>`) is NOT a constructor.
-                    #[expect(
-                        clippy::wildcard_enum_match_arm,
-                        reason = "TyKind has many variants; only Result and Box are unwrapped"
-                    )]
-                    let inner_ty = match ret_ty.kind() {
-                        // `Result<_, _>` (the `Ok` arg) and `Box<_>` (the inner
-                        // arg) both carry the constructed type at generic arg 0.
-                        ty::Adt(adt, args)
-                            if cx.tcx.is_diagnostic_item(sym::Result, adt.did())
-                                || cx.tcx.is_lang_item(adt.did(), LangItem::OwnedBox) =>
-                        {
-                            args.type_at(0)
-                        }
-                        _ => ret_ty,
-                    };
-                    inner_ty
-                        .ty_adt_def()
+                    constructor::return_adt(cx.tcx, assoc.def_id)
                         .is_some_and(|adt| adt.did() == struct_def_id)
                 })
         });

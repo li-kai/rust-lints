@@ -1,0 +1,58 @@
+error: associated function `text` only wraps enum variant `Text`
+  --> $DIR/main.rs:23:9
+   |
+LL | /         fn text(value: String) -> Self {
+LL | |             //~^ ERROR: associated function `text` only wraps enum variant `Text`
+LL | |             Self::Text(value)
+LL | |         }
+   | |_________^
+   |
+   = help: construct `Message::Text` directly
+   = note: `#[deny(redundant_enum_variant_wrapper)]` on by default
+
+error: associated function `pair` only wraps enum variant `Pair`
+  --> $DIR/main.rs:28:9
+   |
+LL | /         pub fn pair(value: T, index: usize) -> Self {
+LL | |             //~^ ERROR: associated function `pair` only wraps enum variant `Pair`
+LL | |             Self::Pair(value, index)
+LL | |         }
+   | |_________^
+   |
+   = help: construct `Message::Pair` directly
+
+error: associated function `error` only wraps enum variant `Error`
+  --> $DIR/main.rs:33:9
+   |
+LL | /         pub fn error(detail: String, code: u16) -> Self {
+LL | |             //~^ ERROR: associated function `error` only wraps enum variant `Error`
+LL | |             Self::Error { code, detail }
+LL | |         }
+   | |_________^
+   |
+   = help: construct `Message::Error` directly
+
+error: associated function `quit` only wraps enum variant `Quit`
+  --> $DIR/main.rs:38:9
+   |
+LL | /         pub fn quit() -> Self {
+LL | |             //~^ ERROR: associated function `quit` only wraps enum variant `Quit`
+LL | |             { return Self::Quit }
+LL | |         }
+   | |_________^
+   |
+   = help: construct `Message::Quit` directly
+
+error: associated function `wrapped` only wraps enum variant `Wrapped`
+  --> $DIR/main.rs:62:9
+   |
+LL | /         fn wrapped(value: String) -> Self {
+LL | |             //~^ ERROR: associated function `wrapped` only wraps enum variant `Wrapped`
+LL | |             Self::Wrapped(value)
+LL | |         }
+   | |_________^
+   |
+   = help: construct `Partial::Wrapped` directly
+
+error: aborting due to 5 previous errors
+
