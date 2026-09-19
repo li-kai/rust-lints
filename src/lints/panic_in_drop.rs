@@ -1,13 +1,14 @@
 use clippy_utils::diagnostics::span_lint_and_then;
 use clippy_utils::is_trait_impl_item;
+use rustc_hir::attrs::lang_items::LangItem;
 use rustc_hir::intravisit::{self, Visitor};
-use rustc_hir::{Expr, ExprKind, ImplItem, ImplItemKind, LangItem, Node};
+use rustc_hir::{Expr, ExprKind, ImplItem, ImplItemKind, Node};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::Span;
 
 use super::hir_refs;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Warns when a `Drop::drop` implementation contains operations that can
     /// panic, since panicking during unwinding causes an immediate process abort.
     pub PANIC_IN_DROP,
@@ -120,7 +121,7 @@ impl PanicInDrop {
     }
 }
 
-rustc_session::impl_lint_pass!(PanicInDrop => [PANIC_IN_DROP]);
+rustc_lint::impl_lint_pass!(PanicInDrop => [PANIC_IN_DROP]);
 
 impl<'tcx> LateLintPass<'tcx> for PanicInDrop {
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) {

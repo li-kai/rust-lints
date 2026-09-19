@@ -56,7 +56,7 @@ Dylint runtime environment instead of asking downstream repos to reconstruct it.
 
 ### The rustup problem (for nix)
 
-Normally, when dylint encounters a library tagged `@nightly-2026-01-22-<triple>`
+Normally, when dylint encounters a library tagged `@nightly-2026-09-01-<triple>`
 and has no matching driver, it uses **rustup** to:
 
 1. Install that nightly toolchain (if missing)
@@ -87,9 +87,9 @@ artifacts:
 ```
 $out/
   lib/
-    librust_lints@nightly-2026-01-22-x86_64-unknown-linux-gnu.so
+    librust_lints@nightly-2026-09-01-x86_64-unknown-linux-gnu.so
   drivers/
-    nightly-2026-01-22-x86_64-unknown-linux-gnu/
+    nightly-2026-09-01-x86_64-unknown-linux-gnu/
       dylint-driver
 ```
 
@@ -142,8 +142,8 @@ Dylint discovers libraries and drivers by filename/directory convention:
 
 | Artifact | Convention | Example |
 |---|---|---|
-| Library | `<DLL_PREFIX><name>@<toolchain><DLL_SUFFIX>` | `librust_lints@nightly-2026-01-22-x86_64-unknown-linux-gnu.so` |
-| Driver | `<toolchain>/dylint-driver` | `nightly-2026-01-22-x86_64-unknown-linux-gnu/dylint-driver` |
+| Library | `<DLL_PREFIX><name>@<toolchain><DLL_SUFFIX>` | `librust_lints@nightly-2026-09-01-x86_64-unknown-linux-gnu.so` |
+| Driver | `<toolchain>/dylint-driver` | `nightly-2026-09-01-x86_64-unknown-linux-gnu/dylint-driver` |
 
 The `@toolchain` tag in the library filename is how dylint knows which driver to
 pair it with. `dylint-link` (our custom linker) produces this tag automatically
@@ -178,7 +178,7 @@ The `packages.default` derivation must produce two things:
 
 | Dependency | Why | Source |
 |---|---|---|
-| Rust nightly (`nightly-2026-01-22`) | Compile the cdylib and driver against `rustc_private` APIs | fenix (already in our flake) |
+| Rust nightly (`nightly-2026-09-01`) | Compile the cdylib and driver against `rustc_private` APIs | fenix (already in our flake) |
 | `rustc-dev` | Provide `rustc_driver` and compiler internals for linking | fenix toolchain components |
 | `dylint-link` | Custom linker that produces `@toolchain`-tagged output | Built from crates.io |
 | `rustup` shim | `dylint-link` calls `rustup which rustc` internally | Already in our flake |
@@ -190,6 +190,12 @@ The `packages.default` derivation must produce two things:
 See `flake.nix` for the full implementation using `crane` with the fenix
 toolchain. The key derivations are `dylintLink`, `dylintDriver`, `rustLintsLib`,
 and the final `rustLints` symlinkJoin.
+
+Cargo 1.100 links libraries under `target/<profile>/build/<crate>/<hash>/out`.
+The `dylint-link` wrapper promotes toolchain-tagged libraries back to the profile
+directory so Dylint can discover them. It leaves untagged proc-macro dependencies
+alone. Dylint is pinned exactly to 6.0.2 because later patch releases pass
+`--env-set`, which the September monthly compiler does not support.
 
 ### Runtime linking: the `-rpath` detail
 
@@ -231,4 +237,3 @@ artifacts.
 - **Pure Nix packaging of `cargo-dylint`.** The supported consumer interface is
   the shell helper. Packaging `cargo-dylint` itself as a standalone derivation is
   a separate concern.
-

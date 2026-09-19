@@ -5,7 +5,7 @@
 
 //! Shared classification of conventional constructor return types.
 
-use rustc_hir::LangItem;
+use rustc_hir::attrs::lang_items::LangItem;
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::def_id::DefId;
 use rustc_span::sym;
@@ -16,6 +16,7 @@ pub fn return_adt(tcx: TyCtxt<'_>, function_def_id: DefId) -> Option<ty::AdtDef<
     let ret_ty = tcx
         .fn_sig(function_def_id)
         .instantiate_identity()
+        .skip_norm_wip()
         .output()
         .skip_binder();
     let inner_ty = match ret_ty.kind() {

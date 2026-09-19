@@ -8,7 +8,7 @@ use rustc_span::{Span, sym};
 
 use super::hir_refs;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags `Result<Result<T, E1>, E2>` in function signatures and type aliases.
     /// Almost always a mistake (`.map()` instead of `.and_then()`) or simplifiable.
     pub RESULT_RESULT,
@@ -48,7 +48,7 @@ impl ResultResult {
     }
 }
 
-rustc_session::impl_lint_pass!(ResultResult => [RESULT_RESULT]);
+rustc_lint::impl_lint_pass!(ResultResult => [RESULT_RESULT]);
 
 impl<'tcx> LateLintPass<'tcx> for ResultResult {
     fn check_fn(
@@ -85,7 +85,11 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
             return;
         };
 
-        let ty = cx.tcx.type_of(item.owner_id.def_id).instantiate_identity();
+        let ty = cx
+            .tcx
+            .type_of(item.owner_id.def_id)
+            .instantiate_identity()
+            .skip_norm_wip();
 
         if is_nested_result(cx, ty) {
             span_lint_and_help(cx, RESULT_RESULT, item.span, MSG, None, HELP);

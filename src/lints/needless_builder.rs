@@ -1,10 +1,11 @@
 use clippy_utils::diagnostics::span_lint_and_help;
-use rustc_hir::{Item, ItemKind, LangItem, VariantData};
+use rustc_hir::attrs::lang_items::LangItem;
+use rustc_hir::{Item, ItemKind, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
 
 use crate::config::NeedlessBuilderConfig;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Warns when `bon::Builder` is derived on a struct with very few fields.
     pub NEEDLESS_BUILDER,
     Warn,
@@ -24,7 +25,7 @@ impl NeedlessBuilder {
     }
 }
 
-rustc_session::impl_lint_pass!(NeedlessBuilder => [NEEDLESS_BUILDER]);
+rustc_lint::impl_lint_pass!(NeedlessBuilder => [NEEDLESS_BUILDER]);
 
 impl<'tcx> LateLintPass<'tcx> for NeedlessBuilder {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
@@ -48,7 +49,11 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessBuilder {
         let field_count = fields
             .iter()
             .filter(|f| {
-                let ty = cx.tcx.type_of(f.def_id).instantiate_identity();
+                let ty = cx
+                    .tcx
+                    .type_of(f.def_id)
+                    .instantiate_identity()
+                    .skip_norm_wip();
                 !ty.ty_adt_def()
                     .is_some_and(|adt| cx.tcx.is_lang_item(adt.did(), LangItem::PhantomData))
             })

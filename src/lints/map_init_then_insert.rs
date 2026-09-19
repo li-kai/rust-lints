@@ -7,7 +7,7 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
 use rustc_span::{Symbol, sym};
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Warns when a `HashMap`, `BTreeMap`, `IndexMap`, `FxHashMap`, `AHashMap`,
     /// or similar map is created empty and then immediately populated with
     /// sequential `.insert()` calls.
@@ -105,7 +105,7 @@ fn is_map_constructor<'tcx>(
         return false;
     };
     matches!(
-        cx.tcx.type_of(impl_did).instantiate_identity().kind(),
+        cx.tcx.type_of(impl_did).instantiate_identity().skip_norm_wip().kind(),
         ty::Adt(adt, _) if adt.did() == map_did
     )
 }
@@ -216,7 +216,7 @@ impl MapInitThenInsert {
     }
 }
 
-rustc_session::impl_lint_pass!(MapInitThenInsert => [MAP_INIT_THEN_INSERT]);
+rustc_lint::impl_lint_pass!(MapInitThenInsert => [MAP_INIT_THEN_INSERT]);
 
 impl<'tcx> LateLintPass<'tcx> for MapInitThenInsert {
     #[expect(

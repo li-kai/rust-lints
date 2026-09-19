@@ -5,11 +5,12 @@ use clippy_utils::ty::implements_trait;
 use clippy_utils::visitors::for_each_expr_without_closures;
 use clippy_utils::{is_def_id_trait_method, is_entrypoint_fn, is_in_cfg_test, return_ty};
 use rustc_data_structures::fx::FxHashMap;
+use rustc_hir::attrs::lang_items::LangItem;
+use rustc_hir::def_id::{CRATE_DEF_ID, ModId};
 use rustc_hir::intravisit::FnKind;
-use rustc_hir::{Body, ExprKind, FnDecl, Item, ItemKind, LangItem};
+use rustc_hir::{Body, ExprKind, FnDecl, Item, ItemKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, ExistentialPredicate, Ty};
-use rustc_span::def_id::CRATE_DEF_ID;
 use rustc_span::{Span, Symbol, sym};
 
 use super::hir_refs;
@@ -33,7 +34,7 @@ enum UnstructuredKind {
     },
 }
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags error types in public APIs that are incomplete, unstructured,
     /// or missing error chain information.
     pub PROPER_ERROR_TYPE,
@@ -46,6 +47,7 @@ pub struct ProperErrorType {
     display_impls: FxHashMap<rustc_hir::def_id::DefId, DisplayImplInfo>,
     sym_source: Symbol,
     sym_anyhow: Symbol,
+    sym_error: Symbol,
     sym_miette: Symbol,
     sym_miette_report: Symbol,
 }
@@ -57,6 +59,7 @@ impl Default for ProperErrorType {
             display_impls: FxHashMap::default(),
             sym_source: Symbol::intern("source"),
             sym_anyhow: Symbol::intern("anyhow"),
+            sym_error: Symbol::intern("Error"),
             sym_miette: Symbol::intern("miette"),
             sym_miette_report: Symbol::intern("Report"),
         }
@@ -73,12 +76,12 @@ impl ProperErrorType {
     fn vis_if_at_least_pub_crate(
         cx: &LateContext<'_>,
         def_id: rustc_hir::def_id::DefId,
-    ) -> Option<ty::Visibility<rustc_hir::def_id::DefId>> {
+    ) -> Option<ty::Visibility<ModId>> {
         let vis = cx.tcx.visibility(def_id);
         if vis.is_public() {
             return Some(vis);
         }
-        if vis != ty::Visibility::Restricted(CRATE_DEF_ID.to_def_id()) {
+        if vis != ty::Visibility::Restricted(ModId::new_unchecked(CRATE_DEF_ID.to_def_id())) {
             return None;
         }
         // Semantic visibility is pub(crate) — verify an explicit keyword exists.
@@ -118,7 +121,7 @@ impl ProperErrorType {
                 }
                 if cx.tcx.is_lang_item(did, LangItem::OwnedBox)
                     && let ty::Dynamic(preds, ..) = args.type_at(0).kind()
-                    && let Some(error_trait_id) = cx.tcx.get_diagnostic_item(sym::Error)
+                    && let Some(error_trait_id) = cx.tcx.get_diagnostic_item(self.sym_error)
                     && preds.iter().any(|pred| {
                         matches!(pred.skip_binder(), ExistentialPredicate::Trait(t) if t.def_id == error_trait_id)
                     })
@@ -127,7 +130,7 @@ impl ProperErrorType {
                 }
                 let crate_name = cx.tcx.crate_name(did.krate);
                 let item_name = cx.tcx.item_name(did);
-                if crate_name == self.sym_anyhow && item_name == sym::Error {
+                if crate_name == self.sym_anyhow && item_name == self.sym_error {
                     Some(UnstructuredKind::ErasedCrate {
                         crate_name: "anyhow",
                         type_name: "Error",
@@ -168,8 +171,12 @@ impl ProperErrorType {
             return;
         }
 
-        let ty = cx.tcx.type_of(item.owner_id.def_id).instantiate_identity();
-        let Some(error_trait_id) = cx.tcx.get_diagnostic_item(sym::Error) else {
+        let ty = cx
+            .tcx
+            .type_of(item.owner_id.def_id)
+            .instantiate_identity()
+            .skip_norm_wip();
+        let Some(error_trait_id) = cx.tcx.get_diagnostic_item(Symbol::intern("Error")) else {
             return;
         };
         if !implements_trait(cx, ty, error_trait_id, &[]) {
@@ -200,13 +207,17 @@ impl ProperErrorType {
             return;
         };
 
-        let self_ty = cx.tcx.type_of(item.owner_id.def_id).instantiate_identity();
+        let self_ty = cx
+            .tcx
+            .type_of(item.owner_id.def_id)
+            .instantiate_identity()
+            .skip_norm_wip();
         let Some(adt_def) = self_ty.ty_adt_def() else {
             return;
         };
         let adt_did = adt_def.did();
 
-        let error_trait_id = cx.tcx.get_diagnostic_item(sym::Error);
+        let error_trait_id = cx.tcx.get_diagnostic_item(self.sym_error);
         let display_trait_id = cx.tcx.get_diagnostic_item(sym::Display);
 
         if Some(trait_def_id) == error_trait_id {
@@ -219,7 +230,7 @@ impl ProperErrorType {
             if let (Some(error_tid), ty::Adt(_, args)) = (error_trait_id, self_ty.kind()) {
                 for variant in adt_def.variants() {
                     for field in &variant.fields {
-                        let field_ty = field.ty(cx.tcx, args);
+                        let field_ty = field.ty(cx.tcx, args).skip_norm_wip();
                         if implements_trait(cx, field_ty, error_tid, &[]) {
                             source_field_names.push(field.name);
                         }
@@ -295,7 +306,7 @@ impl ProperErrorType {
         source_field_names: &[Symbol],
         display_span: Span,
     ) {
-        let Some(error_trait_id) = cx.tcx.get_diagnostic_item(sym::Error) else {
+        let Some(error_trait_id) = cx.tcx.get_diagnostic_item(Symbol::intern("Error")) else {
             return;
         };
         let body = cx.tcx.hir_body_owned_by(fmt_def_id);
@@ -331,7 +342,7 @@ impl ProperErrorType {
     }
 }
 
-rustc_session::impl_lint_pass!(ProperErrorType => [PROPER_ERROR_TYPE]);
+rustc_lint::impl_lint_pass!(ProperErrorType => [PROPER_ERROR_TYPE]);
 
 impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
     fn check_fn(

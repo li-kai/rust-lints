@@ -12,7 +12,7 @@ use rustc_span::{Span, sym};
 use super::hir_refs;
 use crate::config::FallibleNewConfig;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Warns when a `fn new()` constructor contains operations that can panic,
     /// suggesting it return `Result` or be renamed to convey fallibility.
     pub FALLIBLE_NEW,
@@ -24,7 +24,7 @@ rustc_session::declare_lint! {
 /// (after resolving type aliases).
 fn returns_result<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
     let def_id = impl_item.owner_id.to_def_id();
-    let fn_sig = cx.tcx.fn_sig(def_id).instantiate_identity();
+    let fn_sig = cx.tcx.fn_sig(def_id).instantiate_identity().skip_norm_wip();
     // `async fn new` returns an opaque future; peel to its `Output` so a
     // `-> Result<..>` async constructor is still recognized as fallible.
     let ret_ty = hir_refs::peel_async_fn_return_ty(cx.tcx, fn_sig.output().skip_binder());
@@ -128,7 +128,7 @@ impl FallibleNew {
     }
 }
 
-rustc_session::impl_lint_pass!(FallibleNew => [FALLIBLE_NEW]);
+rustc_lint::impl_lint_pass!(FallibleNew => [FALLIBLE_NEW]);
 
 impl<'tcx> LateLintPass<'tcx> for FallibleNew {
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) {

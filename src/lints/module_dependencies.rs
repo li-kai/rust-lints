@@ -10,7 +10,7 @@ use rustc_span::{Span, Symbol};
 use super::hir_refs;
 use crate::config::{DeadEdgeCoverage, ModuleDependenciesConfig};
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags cross-module dependencies not declared in the allowlist.
     ///
     /// Each top-level module declares which other top-level modules it may
@@ -21,14 +21,14 @@ rustc_session::declare_lint! {
     "cross-module dependency not declared in allowlist"
 }
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags modules not listed in the config when exhaustive mode is enabled.
     pub MODULE_DEPENDENCIES_UNLISTED,
     Deny,
     "module not listed in module_dependencies config (exhaustive mode)"
 }
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags edges declared in the allowlist that have no corresponding
     /// dependency in code. Stale edges make the config lie.
     pub MODULE_DEPENDENCIES_DEAD_EDGE,
@@ -176,7 +176,7 @@ impl ModuleDependencies {
     }
 }
 
-rustc_session::impl_lint_pass!(ModuleDependencies => [MODULE_DEPENDENCIES, MODULE_DEPENDENCIES_UNLISTED, MODULE_DEPENDENCIES_DEAD_EDGE]);
+rustc_lint::impl_lint_pass!(ModuleDependencies => [MODULE_DEPENDENCIES, MODULE_DEPENDENCIES_UNLISTED, MODULE_DEPENDENCIES_DEAD_EDGE]);
 
 impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {

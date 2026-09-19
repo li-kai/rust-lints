@@ -3,7 +3,7 @@ use rustc_hir::{Item, ItemKind, UseKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::kw;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Forbids glob imports (`use foo::*`) and renamed imports (`use foo::Bar as Baz`).
     /// Every imported name must be listed explicitly under its original name so the
     /// module's API surface is intentional, auditable, and traceable.
@@ -29,7 +29,7 @@ impl UnclearExports {
     }
 }
 
-rustc_session::impl_lint_pass!(UnclearExports => [UNCLEAR_EXPORTS]);
+rustc_lint::impl_lint_pass!(UnclearExports => [UNCLEAR_EXPORTS]);
 
 impl<'tcx> LateLintPass<'tcx> for UnclearExports {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {

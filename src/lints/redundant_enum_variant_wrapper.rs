@@ -17,7 +17,7 @@ use rustc_span::{Span, Symbol};
 
 use super::constructor;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags associated functions that only forward parameters to an enum
     /// variant when the enum has no nontrivial constructors.
     pub REDUNDANT_ENUM_VARIANT_WRAPPER,
@@ -177,7 +177,7 @@ impl RedundantEnumVariantWrapper {
     }
 }
 
-rustc_session::impl_lint_pass!(RedundantEnumVariantWrapper => [REDUNDANT_ENUM_VARIANT_WRAPPER]);
+rustc_lint::impl_lint_pass!(RedundantEnumVariantWrapper => [REDUNDANT_ENUM_VARIANT_WRAPPER]);
 
 impl<'tcx> LateLintPass<'tcx> for RedundantEnumVariantWrapper {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {

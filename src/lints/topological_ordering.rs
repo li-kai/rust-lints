@@ -26,7 +26,7 @@ use rustc_span::def_id::LocalDefId;
 
 use super::hir_refs;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags items that appear out of topological order within a module.
     ///
     /// Callee-first: an item should appear before any item that
@@ -45,7 +45,7 @@ fn is_relevant_item_kind(kind: &hir::ItemKind<'_>) -> bool {
         hir::ItemKind::Fn { .. }
             | hir::ItemKind::Struct(..)
             | hir::ItemKind::Enum(..)
-            | hir::ItemKind::Trait(..)
+            | hir::ItemKind::Trait { .. }
             | hir::ItemKind::TyAlias(..)
             | hir::ItemKind::Const(..)
             | hir::ItemKind::Static(..)
@@ -92,7 +92,7 @@ fn item_display_name(cx: &LateContext<'_>, item: &hir::Item<'_>) -> String {
         DefKind::Enum => "enum",
         DefKind::Trait => "trait",
         DefKind::TyAlias => "type",
-        DefKind::Const => "const",
+        DefKind::Const { .. } => "const",
         DefKind::Static { .. } => "static",
         _ => "",
     };
@@ -439,7 +439,7 @@ impl TopologicalOrdering {
     }
 }
 
-rustc_session::impl_lint_pass!(TopologicalOrdering => [TOPOLOGICAL_ORDERING]);
+rustc_lint::impl_lint_pass!(TopologicalOrdering => [TOPOLOGICAL_ORDERING]);
 
 impl<'tcx> LateLintPass<'tcx> for TopologicalOrdering {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {

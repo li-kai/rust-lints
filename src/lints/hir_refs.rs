@@ -190,17 +190,26 @@ pub fn find_panic_macro(span: Span) -> Option<(Span, PanicMacro)> {
 /// signatures are invisible to them: `clippy_utils::return_ty` yields the
 /// opaque future type, never the `Output` the source code spells out.
 pub fn peel_async_fn_return_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> ty::Ty<'tcx> {
-    let ty::Alias(ty::Opaque, alias) = ty.kind() else {
+    let ty::Alias(
+        _,
+        ty::AliasTy {
+            kind: ty::Opaque { def_id },
+            args,
+            ..
+        },
+    ) = *ty.kind()
+    else {
         return ty;
     };
     let Some(future_output) = tcx.lang_items().future_output() else {
         return ty;
     };
-    tcx.explicit_item_bounds(alias.def_id)
-        .iter_instantiated_copied(tcx, alias.args)
+    tcx.explicit_item_bounds(def_id)
+        .iter_instantiated_copied(tcx, args)
+        .map(ty::Unnormalized::skip_norm_wip)
         .find_map(|(clause, _)| {
             if let ty::ClauseKind::Projection(proj) = clause.kind().skip_binder()
-                && proj.projection_term.def_id == future_output
+                && proj.def_id() == future_output
             {
                 proj.term.as_type()
             } else {

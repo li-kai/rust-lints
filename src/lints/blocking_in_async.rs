@@ -6,7 +6,7 @@ use super::call_matching::{PathSet, build_path_list, match_call_path};
 use super::suppression::is_in_test_zone;
 use crate::config::SubLintConfig;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags known-blocking operations inside `async fn` or `async {}` blocks.
     pub BLOCKING_IN_ASYNC,
     Deny,
@@ -184,7 +184,7 @@ impl BlockingInAsync {
     }
 }
 
-rustc_session::impl_lint_pass!(BlockingInAsync => [BLOCKING_IN_ASYNC]);
+rustc_lint::impl_lint_pass!(BlockingInAsync => [BLOCKING_IN_ASYNC]);
 
 impl<'tcx> LateLintPass<'tcx> for BlockingInAsync {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {

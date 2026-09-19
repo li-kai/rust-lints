@@ -6,28 +6,28 @@ use rustc_lint::{LateContext, LateLintPass, Lint};
 use super::call_matching::{PathSet, build_path_list, is_in_suppression_zone};
 use crate::config::{GlobalSideEffectConfig, SubLintConfig};
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags direct calls to wall-clock or monotonic time functions.
     pub GLOBAL_SIDE_EFFECT_TIME,
     Warn,
     "direct call to a time function \u{2014} accept a time parameter instead"
 }
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags direct calls to random number generation functions.
     pub GLOBAL_SIDE_EFFECT_RANDOMNESS,
     Warn,
     "direct call to a random function \u{2014} accept an `impl Rng` parameter instead"
 }
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags direct calls to environment variable or CLI argument functions.
     pub GLOBAL_SIDE_EFFECT_ENV,
     Warn,
     "direct call to an environment function \u{2014} pass the value as a parameter instead"
 }
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags global tracing subscriber initialization outside `main()`.
     pub GLOBAL_SIDE_EFFECT_LOGGING_INIT,
     Deny,
@@ -182,7 +182,7 @@ impl GlobalSideEffect {
     }
 }
 
-rustc_session::impl_lint_pass!(GlobalSideEffect => [
+rustc_lint::impl_lint_pass!(GlobalSideEffect => [
     GLOBAL_SIDE_EFFECT_TIME,
     GLOBAL_SIDE_EFFECT_RANDOMNESS,
     GLOBAL_SIDE_EFFECT_ENV,

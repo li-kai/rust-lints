@@ -4,7 +4,7 @@ use rustc_span::symbol::sym;
 
 use super::{DeriveInfo, STRUCT_DERIVES};
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Internal lint used to collect derive information from structs.
     ///
     /// Runs as a pre-expansion `EarlyLintPass` so it can inspect derive
@@ -111,7 +111,7 @@ fn collect_derive_names(attrs: &[rustc_ast::Attribute]) -> Vec<DeriveInfo> {
 
 pub struct BonBuilderCollector;
 
-rustc_session::impl_lint_pass!(BonBuilderCollector => [BON_BUILDER_COLLECTOR]);
+rustc_lint::impl_lint_pass!(BonBuilderCollector => [BON_BUILDER_COLLECTOR]);
 
 impl EarlyLintPass for BonBuilderCollector {
     fn check_item(&mut self, _cx: &EarlyContext<'_>, item: &Item) {

@@ -10,7 +10,7 @@ use serde::Deserialize;
 use super::call_matching::path_final_segment;
 use super::suppression::is_in_test_zone;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags values of specific types held alive across `.await` points.
     pub AWAIT_HOLDING_UNSENDABLE,
     Deny,
@@ -146,7 +146,7 @@ impl AwaitHoldingUnsendable {
     }
 }
 
-rustc_session::impl_lint_pass!(AwaitHoldingUnsendable => [AWAIT_HOLDING_UNSENDABLE]);
+rustc_lint::impl_lint_pass!(AwaitHoldingUnsendable => [AWAIT_HOLDING_UNSENDABLE]);
 
 impl<'tcx> LateLintPass<'tcx> for AwaitHoldingUnsendable {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {

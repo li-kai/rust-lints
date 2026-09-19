@@ -48,7 +48,7 @@ use rustc_middle::hir::nested_filter;
 use super::call_matching::{PathSet, build_path_list, resolve_callee_def_id_with_typeck};
 use crate::config::SubLintConfig;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags real-time waits in async tests that should use a paused clock.
     pub REALTIME_IN_ASYNC_TEST,
     Warn,
@@ -180,7 +180,7 @@ fn has_transitive_time_call(
     // `for_each_expr` walks into async blocks (which share the parent's
     // TypeckResults) and closures. For closures the typeck lookup may
     // return None — that's a harmless false negative, not a false positive.
-    for_each_expr(cx, body, |expr| {
+    for_each_expr(cx.tcx, body, |expr| {
         if let Some(def_id) = resolve_callee_def_id_with_typeck(typeck, expr) {
             // Local functions can't match external tokio paths — recurse directly.
             if let Some(callee_local) = def_id.as_local() {
@@ -214,7 +214,7 @@ impl RealtimeInAsyncTest {
     }
 }
 
-rustc_session::impl_lint_pass!(RealtimeInAsyncTest => [REALTIME_IN_ASYNC_TEST]);
+rustc_lint::impl_lint_pass!(RealtimeInAsyncTest => [REALTIME_IN_ASYNC_TEST]);
 
 impl<'tcx> LateLintPass<'tcx> for RealtimeInAsyncTest {
     fn check_fn(

@@ -5,7 +5,7 @@ use rustc_lint::{LateContext, LateLintPass};
 use super::call_matching::{PathSet, build_path_list, is_in_suppression_zone, match_call_path};
 use crate::config::SubLintConfig;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags creation of unbounded channels, which can exhaust memory
     /// under backpressure.
     pub UNBOUNDED_CHANNEL,
@@ -42,7 +42,7 @@ impl UnboundedChannel {
     }
 }
 
-rustc_session::impl_lint_pass!(UnboundedChannel => [UNBOUNDED_CHANNEL]);
+rustc_lint::impl_lint_pass!(UnboundedChannel => [UNBOUNDED_CHANNEL]);
 
 impl<'tcx> LateLintPass<'tcx> for UnboundedChannel {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {

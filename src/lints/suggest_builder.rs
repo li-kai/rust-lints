@@ -1,6 +1,7 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::ty::implements_trait;
-use rustc_hir::{GenericParamKind, Item, ItemKind, LangItem, VariantData};
+use rustc_hir::attrs::lang_items::LangItem;
+use rustc_hir::{GenericParamKind, Item, ItemKind, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::Symbol;
@@ -8,7 +9,7 @@ use rustc_span::Symbol;
 use super::constructor;
 use crate::config::SuggestBuilderConfig;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Suggests using a `#[builder]` constructor in a `#[bon] impl` for structs with many named fields.
     pub SUGGEST_BUILDER,
     Warn,
@@ -34,7 +35,7 @@ impl SuggestBuilder {
     }
 }
 
-rustc_session::impl_lint_pass!(SuggestBuilder => [SUGGEST_BUILDER]);
+rustc_lint::impl_lint_pass!(SuggestBuilder => [SUGGEST_BUILDER]);
 
 impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
@@ -69,7 +70,11 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
         let field_count = fields
             .iter()
             .filter(|f| {
-                let ty = cx.tcx.type_of(f.def_id).instantiate_identity();
+                let ty = cx
+                    .tcx
+                    .type_of(f.def_id)
+                    .instantiate_identity()
+                    .skip_norm_wip();
                 !ty.ty_adt_def()
                     .is_some_and(|adt| cx.tcx.is_lang_item(adt.did(), LangItem::PhantomData))
             })
@@ -91,7 +96,11 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
             return;
         }
         // Skip structs that implement `Default` (derived or manual).
-        let ty = cx.tcx.type_of(item.owner_id).instantiate_identity();
+        let ty = cx
+            .tcx
+            .type_of(item.owner_id)
+            .instantiate_identity()
+            .skip_norm_wip();
         if let Some(default_id) = cx.tcx.get_diagnostic_item(rustc_span::sym::Default)
             && implements_trait(cx, ty, default_id, &[])
         {

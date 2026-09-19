@@ -14,7 +14,7 @@ use rustc_span::{Span, Symbol};
 
 use super::hir_refs;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags cyclic dependencies between sibling modules at any depth.
     ///
     /// An acyclic module graph forces shared concepts into explicit, stable
@@ -300,7 +300,7 @@ impl AcyclicModules {
     }
 }
 
-rustc_session::impl_lint_pass!(AcyclicModules => [ACYCLIC_MODULES]);
+rustc_lint::impl_lint_pass!(AcyclicModules => [ACYCLIC_MODULES]);
 
 impl<'tcx> LateLintPass<'tcx> for AcyclicModules {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {

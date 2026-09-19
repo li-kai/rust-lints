@@ -7,7 +7,7 @@ use rustc_span::{ExpnKind, Span};
 use crate::config::{DebugRemnantsConfig, LogFramework};
 use crate::lints::suppression::is_in_test_zone;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags debugging macros (`println!`, `print!`, `eprintln!`, `dbg!`) and
     /// suggests structured logging replacements (`tracing` or `log`).
     pub DEBUG_REMNANTS,
@@ -31,7 +31,7 @@ impl DebugRemnants {
     }
 }
 
-rustc_session::impl_lint_pass!(DebugRemnants => [DEBUG_REMNANTS]);
+rustc_lint::impl_lint_pass!(DebugRemnants => [DEBUG_REMNANTS]);
 
 impl<'tcx> LateLintPass<'tcx> for DebugRemnants {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {

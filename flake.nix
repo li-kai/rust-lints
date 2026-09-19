@@ -35,7 +35,7 @@
       # Public compatibility metadata for downstream consumers.
       dylintVersion =
         let dep = cargoToml.dependencies.dylint_linting;
-        in if builtins.isString dep then dep else dep.version;
+        in nixpkgs.lib.removePrefix "=" (if builtins.isString dep then dep else dep.version);
       clippyRev = cargoToml.dependencies.clippy_utils.rev;
       mkSystem =
         system:
@@ -51,7 +51,7 @@
           # Parse channel from rust-toolchain to avoid duplicating the nightly date.
           toolchain = rec {
             channel = rustToolchainToml.toolchain.channel;
-            sha256 = "sha256-5XAIyRQMcynTWJvX5VkqErB0H4Oyg0AjeSefOyKSt7g=";
+            sha256 = "sha256-wBCNU5N9ftXKTMzvUW3xolIXmK5Z/93SdAxK1sMRDxQ=";
             target = pkgs.stdenv.hostPlatform.rust.rustcTarget;
             # RUSTUP_TOOLCHAIN must include the target triple for dylint's parse_toolchain()
             full = "${channel}-${target}";
@@ -124,16 +124,36 @@
             src = pkgs.fetchCrate {
               pname = "dylint-link";
               version = dylintVersion;
-              hash = "sha256-TKjadUgjZ/ZqiTBctX6MoKlKUZL80wuMpG8r8n/sXmo=";
+              hash = "sha256-evuR3zpsAuncGruj9Sg7PlCUNyYycMygH6bsEBa+nVc=";
             };
-            cargoHash = "sha256-FzpGao3jtZSLQ8iIXK8awM+BOtP32rAlJuKxwqv77Fg=";
+            cargoHash = "sha256-zRhkTdJ+rJ9TKBe3kRcNtnBCSe4FEpF3pbQQcFz7qz8=";
           };
 
           # Wrapper that injects RUSTUP_TOOLCHAIN when the nix-built dylint-link runs.
           # Used in both the cdylib package build and the dev shell.
           dylintLinkWrapper = pkgs.writeShellScriptBin "dylint-link" ''
+            set -eu
             export RUSTUP_TOOLCHAIN="''${RUSTUP_TOOLCHAIN:-${toolchain.full}}"
-            exec ${dylintLink}/bin/dylint-link "$@"
+            ${dylintLink}/bin/dylint-link "$@"
+            # Cargo 1.100 links into build/<crate>/<hash>/out. Dylint still
+            # discovers tagged libraries in the profile directory.
+            while [ "$#" -gt 1 ]; do
+              if [ "$1" = "-o" ]; then
+                output="$2"
+                case "$output" in
+                  */build/*/*/out/lib*.dylib|*/build/*/*/out/lib*.so)
+                    profile_dir="''${output%/build/*}"
+                    library_name="''${output##*/}"
+                    tagged_name="''${library_name%.*}@$RUSTUP_TOOLCHAIN.''${library_name##*.}"
+                    if [ -f "''${output%/*}/$tagged_name" ]; then
+                      cp "''${output%/*}/$tagged_name" "$profile_dir/$tagged_name"
+                    fi
+                    ;;
+                esac
+                break
+              fi
+              shift
+            done
           '';
 
           # Note: cargo-dylint is not packaged as a Nix derivation because its
@@ -157,7 +177,7 @@
             owner = "rust-lang";
             repo = "rust-clippy";
             rev = clippyRev;
-            hash = "sha256-TkpjcIp+lQcIfm93bZKMCz4+CDY2/0j7HBmsI1uEgsQ=";
+            hash = "sha256-MtsLpMPbOneI5kDFYIrtM951EAyXPm26kTJN0J14qJw=";
           };
 
           # Git wrapper that intercepts clone/checkout of rust-clippy and serves

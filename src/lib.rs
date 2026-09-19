@@ -62,41 +62,67 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::unsafe_send_thread_affine_drop::UNSAFE_SEND_THREAD_AFFINE_DROP,
         lints::await_holding_unsendable::AWAIT_HOLDING_UNSENDABLE,
     ]);
-    lint_store.register_pre_expansion_pass(|| {
+    lint_store.register_pre_expansion_lint_pass(Box::new(|| {
         Box::new(lints::bon_builder_collector::BonBuilderCollector)
-    });
-    lint_store.register_late_pass(|_| Box::new(lints::suggest_builder::SuggestBuilder::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::needless_builder::NeedlessBuilder::new()));
-    lint_store
-        .register_late_pass(|_| Box::new(lints::proper_error_type::ProperErrorType::default()));
-    lint_store.register_late_pass(|_| Box::new(lints::global_side_effect::GlobalSideEffect::new()));
-    lint_store
-        .register_late_pass(|_| Box::new(lints::map_init_then_insert::MapInitThenInsert::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::debug_remnants::DebugRemnants::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::fallible_new::FallibleNew::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::unbounded_channel::UnboundedChannel::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::blocking_in_async::BlockingInAsync::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::panic_in_drop::PanicInDrop::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::unclear_exports::UnclearExports::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::result_result::ResultResult::new()));
-    lint_store.register_late_pass(|_| {
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::suggest_builder::SuggestBuilder::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::needless_builder::NeedlessBuilder::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::proper_error_type::ProperErrorType::default())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::global_side_effect::GlobalSideEffect::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::map_init_then_insert::MapInitThenInsert::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::debug_remnants::DebugRemnants::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::fallible_new::FallibleNew::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::unbounded_channel::UnboundedChannel::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::blocking_in_async::BlockingInAsync::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::panic_in_drop::PanicInDrop::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::unclear_exports::UnclearExports::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::result_result::ResultResult::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
         Box::new(lints::unstructured_log_fields::UnstructuredLogFields::new())
-    });
-    lint_store.register_late_pass(|_| {
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
         Box::new(lints::realtime_in_async_test::RealtimeInAsyncTest::new())
-    });
-    lint_store.register_late_pass(|_| {
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
         Box::new(lints::redundant_enum_variant_wrapper::RedundantEnumVariantWrapper::new())
-    });
-    lint_store
-        .register_late_pass(|_| Box::new(lints::module_dependencies::ModuleDependencies::new()));
-    lint_store.register_late_pass(|_| Box::new(lints::acyclic_modules::AcyclicModules::new()));
-    lint_store
-        .register_late_pass(|_| Box::new(lints::topological_ordering::TopologicalOrdering::new()));
-    lint_store.register_late_pass(|_| {
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::module_dependencies::ModuleDependencies::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::acyclic_modules::AcyclicModules::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(lints::topological_ordering::TopologicalOrdering::new())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
         Box::new(lints::unsafe_send_thread_affine_drop::UnsafeSendThreadAffineDrop::new())
-    });
-    lint_store.register_late_pass(|_| {
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| {
         Box::new(lints::await_holding_unsendable::AwaitHoldingUnsendable::new())
-    });
+    }));
 }

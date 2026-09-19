@@ -97,6 +97,7 @@ mod runner {
             .expect("cargo build --verbose");
 
         let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "example build failed: {stderr}");
         parse_linking_flags(&stderr, &example.name)
     }
 
@@ -137,6 +138,24 @@ mod runner {
     }
 
     fn remove_example_artifact(metadata: &Metadata, target: &Target) {
+        // Cargo 1.100 keeps the actual artifact in its build directory; removing
+        // only the exported examples binary no longer forces a rustc invocation.
+        let build_directory = metadata
+            .build_directory
+            .as_ref()
+            .unwrap_or(&metadata.target_directory)
+            .join("debug/build")
+            .join(env!("CARGO_PKG_NAME"));
+        if let Ok(entries) = read_dir(build_directory) {
+            for entry in entries.flatten() {
+                let artifact = entry.path().join("out").join(format!(
+                    "{}{}",
+                    target.name.replace('-', "_"),
+                    consts::EXE_SUFFIX
+                ));
+                let _ = remove_file(artifact);
+            }
+        }
         let examples = metadata.target_directory.join("debug/examples");
         let Ok(entries) = read_dir(&examples) else {
             return;

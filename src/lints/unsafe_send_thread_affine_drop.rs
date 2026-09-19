@@ -2,7 +2,8 @@ use std::collections::VecDeque;
 
 use clippy_utils::diagnostics::span_lint_hir_and_then;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-use rustc_hir::{ExprKind, ImplItemKind, Item, ItemKind, LangItem, Safety};
+use rustc_hir::attrs::lang_items::LangItem;
+use rustc_hir::{ExprKind, ImplItemKind, Item, ItemKind, Safety};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
 use rustc_span::{Span, Symbol, sym};
@@ -10,7 +11,7 @@ use rustc_span::{Span, Symbol, sym};
 use super::call_matching::path_final_segment;
 use crate::config::UnsafeSendThreadAffineDropConfig;
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Warns when `unsafe impl Send` permits a declared thread-affine value
     /// to be destroyed by ordinary drop glue on another thread.
     pub UNSAFE_SEND_THREAD_AFFINE_DROP,
@@ -228,9 +229,10 @@ impl UnsafeSendThreadAffineDrop {
             ty::Adt(adt, args) if Self::is_builtin_owning_container(cx, *adt) => {
                 Box::new(args.types())
             }
-            ty::Adt(adt, args) => {
-                Box::new(adt.all_fields().map(move |field| field.ty(cx.tcx, args)))
-            }
+            ty::Adt(adt, args) => Box::new(
+                adt.all_fields()
+                    .map(move |field| field.ty(cx.tcx, args).skip_norm_wip()),
+            ),
             ty::Array(element, _) | ty::Slice(element) => Box::new(std::iter::once(*element)),
             ty::Tuple(elements) => Box::new(elements.iter()),
             _ => Box::new(std::iter::empty()),
@@ -238,7 +240,7 @@ impl UnsafeSendThreadAffineDrop {
     }
 }
 
-rustc_session::impl_lint_pass!(UnsafeSendThreadAffineDrop => [UNSAFE_SEND_THREAD_AFFINE_DROP]);
+rustc_lint::impl_lint_pass!(UnsafeSendThreadAffineDrop => [UNSAFE_SEND_THREAD_AFFINE_DROP]);
 
 impl<'tcx> LateLintPass<'tcx> for UnsafeSendThreadAffineDrop {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
@@ -264,7 +266,11 @@ impl<'tcx> LateLintPass<'tcx> for UnsafeSendThreadAffineDrop {
             return;
         }
 
-        let self_ty = cx.tcx.type_of(item.owner_id.def_id).instantiate_identity();
+        let self_ty = cx
+            .tcx
+            .type_of(item.owner_id.def_id)
+            .instantiate_identity()
+            .skip_norm_wip();
         let ty::Adt(adt, args) = self_ty.kind() else {
             return;
         };
@@ -286,7 +292,7 @@ impl<'tcx> LateLintPass<'tcx> for UnsafeSendThreadAffineDrop {
         } else {
             for variant in adt.variants() {
                 for field in &variant.fields {
-                    let field_ty = field.ty(cx.tcx, args);
+                    let field_ty = field.ty(cx.tcx, args).skip_norm_wip();
                     if let Some((contract_path, reason, ownership_path)) =
                         self.find_thread_affine_type(cx, field_ty)
                     {

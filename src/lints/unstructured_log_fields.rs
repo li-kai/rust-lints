@@ -220,7 +220,7 @@ fn find_tracing_macro_callsite(cx: &LateContext<'_>, span: Span) -> Option<(&'st
     None
 }
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// Flags `tracing` macro invocations where all captured values are positional
     /// format arguments and none are structured key-value fields.
     pub UNSTRUCTURED_LOG_FIELDS,
@@ -240,7 +240,7 @@ impl UnstructuredLogFields {
     }
 }
 
-rustc_session::impl_lint_pass!(UnstructuredLogFields => [UNSTRUCTURED_LOG_FIELDS]);
+rustc_lint::impl_lint_pass!(UnstructuredLogFields => [UNSTRUCTURED_LOG_FIELDS]);
 
 impl<'tcx> LateLintPass<'tcx> for UnstructuredLogFields {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
