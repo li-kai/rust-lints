@@ -115,3 +115,21 @@ pub struct GlobalSideEffectConfig {
     pub env: SubLintConfig,
     pub logging_init: SubLintConfig,
 }
+
+/// An external type whose value must be destroyed on a particular thread or
+/// execution context.
+#[derive(Deserialize)]
+pub struct ExternalThreadAffineTypeConfig {
+    /// Fully qualified definition path, for example `objc2::rc::Retained`.
+    pub path: String,
+    /// The contract violated by destruction on another thread.
+    pub reason: String,
+}
+
+/// Config for `unsafe_send_thread_affine_drop`.
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct UnsafeSendThreadAffineDropConfig {
+    /// Dependency types that cannot carry the source-local contract attribute.
+    pub external_types: Vec<ExternalThreadAffineTypeConfig>,
+}

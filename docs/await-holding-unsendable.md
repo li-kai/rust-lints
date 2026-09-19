@@ -186,5 +186,5 @@ Rust nightly has an experimental `#[must_not_suspend]` attribute (RFC 3014, trac
 |---|---|
 | `await_holding_unsendable` | Third-party guard types held across `.await` — complements Clippy's `await_holding_*` |
 | `blocking_in_async` | Blocking calls (not guards) that stall the executor |
-| `unsafe_send_missing_drop` | `unsafe impl Send` without `Drop` — unsound cross-thread destruction |
+| `unsafe_send_thread_affine_drop` | `unsafe impl Send` exposes declared thread-affine state to cross-thread destruction |
 | `panic_in_drop` | Panicking inside `Drop` — abort during unwinding |

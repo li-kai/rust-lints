@@ -5,6 +5,10 @@ edition = "2024"
 description = "Custom Rust lints via the dylint ecosystem"
 license = "MIT OR Apache-2.0"
 
+[workspace]
+members = ["contracts"]
+resolver = "3"
+
 [lib]
 crate-type = ["cdylib"]
 
@@ -25,6 +29,7 @@ indexmap = "2"
 parking_lot = "0.12"
 regex = "1"
 rustc-hash = "2"
+rust-lints-contracts = { path = "contracts" }
 thiserror = "2"
 tokio = { version = "1", features = ["full", "test-util"] }
 tracing = "0.1"
@@ -106,8 +111,8 @@ name = "await_holding_unsendable"
 path = "ui/await_holding_unsendable/main.rs"
 
 [[example]]
-name = "unsafe_send_missing_drop"
-path = "ui/unsafe_send_missing_drop/main.rs"
+name = "unsafe_send_thread_affine_drop"
+path = "ui/unsafe_send_thread_affine_drop/main.rs"
 
 [[example]]
 name = "unstructured_log_fields"

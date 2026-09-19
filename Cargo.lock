@@ -1159,12 +1159,22 @@ dependencies = [
  "indexmap",
  "parking_lot",
  "regex",
+ "rust-lints-contracts",
  "rustc-hash",
  "serde",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "rust-lints-contracts"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

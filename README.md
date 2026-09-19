@@ -27,7 +27,7 @@ Custom Rust lints via the [dylint](https://github.com/trailofbits/dylint) ecosys
 | [`topological_ordering`](#topological_ordering) | warn | Items within a module not ordered by their dependency graph |
 | [`unbounded_channel`](#unbounded_channel) | deny | Creation of unbounded channels that can exhaust memory |
 | [`unclear_exports`](#unclear_exports) | deny | Glob imports (`use foo::*`) and renamed imports (`use foo::Bar as Baz`) |
-| [`unsafe_send_missing_drop`](#unsafe_send_missing_drop) | warn | `unsafe impl Send` on types with `!Send` fields and no `Drop` impl |
+| [`unsafe_send_thread_affine_drop`](#unsafe_send_thread_affine_drop) | warn | `unsafe impl Send` exposes declared thread-affine values to cross-thread drop glue |
 | [`unstructured_log_fields`](#unstructured_log_fields) | warn | `tracing` macros using format args instead of structured fields |
 
 ---
@@ -372,22 +372,43 @@ error: renamed imports (`use foo::Bar as Baz`) are banned — use the original n
 
 Does not fire on underscore imports (`use foo::Bar as _`) or macro-expanded spans.
 
-### `unsafe_send_missing_drop`
+### `unsafe_send_thread_affine_drop`
 
-Warns when a type has `unsafe impl Send` but contains `!Send` fields and no `Drop` implementation. The implicit destructor will drop those `!Send` fields on whichever thread drops the owning struct, which is unsound when the fields have thread-affinity requirements (e.g. ObjC pointers that must be released on a specific dispatch queue).
+Warns when `unsafe impl Send` allows a declared thread-affine value to reach automatic drop glue on another thread. Unlike `!Send`, this contract specifically states that destruction must happen on an originating thread or execution context.
+
+Declare the contract beside each local type:
+
+```rust
+#[rust_lints_contracts::thread_affine_drop(
+    reason = "must be released on the main thread"
+)]
+struct MainThreadHandle {
+    _not_send: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+```
+
+In a monorepo, add `rust-lints-contracts` once under
+`[workspace.dependencies]`; only crates that own annotated types need the
+one-line `rust-lints-contracts.workspace = true` dependency. Configuration is
+reserved for dependency-owned types. See the
+[full rule documentation](docs/unsafe-send-thread-affine-drop.md).
 
 ```
-warning: `Handle` has `unsafe impl Send` but contains `!Send` fields and no `Drop` impl
-  --> src/handle.rs:19:1
+warning: `unsafe impl Send for Handle` permits thread-affine state to be dropped on another thread
+  --> src/handle.rs:22:1
    |
-19 | struct Handle {
-   | ^^^^^^^^^^^^^
+19 |     resource: MainThreadHandle,
+   |     -------------------------- `resource` owns `crate::MainThreadHandle`: must be released on the main thread
+...
+22 | unsafe impl Send for Handle {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: the implicit destructor drops `!Send` fields on the caller's thread;
-           implement `Drop` to ensure `!Send` fields are destroyed in the correct context
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind
+           `ManuallyDrop` and explicitly destroy it in the required context
 ```
 
-`PhantomData<T>` and `ManuallyDrop<T>` fields are excluded — the former is zero-sized, the latter opts out of the implicit destructor. Unbounded generic fields (`T` without a `T: Send` bound) count as `!Send`, since the `unsafe impl` claims `Send` for all instantiations.
+The rule follows direct fields, ordinary owning wrappers, and standard containers. References, raw pointers, `PhantomData<T>`, and `ManuallyDrop<T>` do not trigger. An outer `Drop` implementation does not exempt the type because Rust still drops its fields after `Drop::drop` returns.
 
 ### `unstructured_log_fields`
 
@@ -507,6 +528,12 @@ suggested_framework = "tracing"  # or "log" for libraries
 [await_holding_unsendable]
 # additional_types = ["my_crate::MyGuard"]
 # skip_default_types = false
+
+[unsafe_send_thread_affine_drop]
+# Only dependency-owned types belong in config. Annotate local types in source.
+# external_types = [
+#   { path = "objc2::rc::Retained", reason = "UI objects must be released on the main thread" },
+# ]
 
 [global_side_effect.time]
 # additional_paths = ["my_crate::util::current_time"]

@@ -59,7 +59,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         lints::module_dependencies::MODULE_DEPENDENCIES_UNLISTED,
         lints::module_dependencies::MODULE_DEPENDENCIES_DEAD_EDGE,
         lints::topological_ordering::TOPOLOGICAL_ORDERING,
-        lints::unsafe_send_missing_drop::UNSAFE_SEND_MISSING_DROP,
+        lints::unsafe_send_thread_affine_drop::UNSAFE_SEND_THREAD_AFFINE_DROP,
         lints::await_holding_unsendable::AWAIT_HOLDING_UNSENDABLE,
     ]);
     lint_store.register_pre_expansion_pass(|| {
@@ -94,7 +94,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store
         .register_late_pass(|_| Box::new(lints::topological_ordering::TopologicalOrdering::new()));
     lint_store.register_late_pass(|_| {
-        Box::new(lints::unsafe_send_missing_drop::UnsafeSendMissingDrop::new())
+        Box::new(lints::unsafe_send_thread_affine_drop::UnsafeSendThreadAffineDrop::new())
     });
     lint_store.register_late_pass(|_| {
         Box::new(lints::await_holding_unsendable::AwaitHoldingUnsendable::new())

@@ -1,0 +1,111 @@
+warning: `unsafe impl Send for ThreadAffineResource` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:22:1
+   |
+LL | struct ThreadAffineResource {
+   | --------------------------- declared thread-affine: must be released on its creating thread
+...
+LL | unsafe impl Send for ThreadAffineResource {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+   = note: `#[warn(unsafe_send_thread_affine_drop)]` on by default
+
+warning: `unsafe impl Send for Direct` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:29:1
+   |
+LL |     resource: ThreadAffineResource,
+   |     ------------------------------ `resource` owns `crate::ThreadAffineResource`: must be released on its creating thread
+LL | }
+LL | unsafe impl Send for Direct {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+
+warning: `unsafe impl Send for EmptyDrop` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:36:1
+   |
+LL |     resource: ThreadAffineResource,
+   |     ------------------------------ `resource` owns `crate::ThreadAffineResource`: must be released on its creating thread
+LL | }
+LL | unsafe impl Send for EmptyDrop {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+
+warning: `unsafe impl Send for Nested` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:46:1
+   |
+LL |     resource: Option<Box<ThreadAffineResource>>,
+   |     ------------------------------------------- `resource` owns `crate::ThreadAffineResource` through `Option → Box`: must be released on its creating thread
+LL | }
+LL | unsafe impl Send for Nested {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+
+warning: `unsafe impl Send for Collection` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:52:1
+   |
+LL |     resources: Vec<ThreadAffineResource>,
+   |     ------------------------------------ `resources` owns `crate::ThreadAffineResource` through `Vec`: must be released on its creating thread
+LL | }
+LL | unsafe impl Send for Collection {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+
+warning: `unsafe impl Send for ExternalConfigured` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:60:1
+   |
+LL |     resource: std::path::PathBuf,
+   |     ---------------------------- `resource` owns `std::path::PathBuf`: synthetic external contract for the UI test
+LL | }
+LL | unsafe impl Send for ExternalConfigured {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+
+warning: `unsafe impl Send for RecursiveOwner` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:114:1
+   |
+LL |     inner: RecursiveSibling<T>,
+   |     -------------------------- `inner` owns `crate::ThreadAffineResource` through `RecursiveSibling`: must be released on its creating thread
+LL | }
+LL | unsafe impl<T> Send for RecursiveOwner<T> {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+
+warning: `unsafe impl Send for RepeatedWrapper` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:121:1
+   |
+LL |     inner: Generic<Generic<ThreadAffineResource>>,
+   |     --------------------------------------------- `inner` owns `crate::ThreadAffineResource` through `Generic → Generic`: must be released on its creating thread
+LL | }
+LL | unsafe impl Send for RepeatedWrapper {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+
+warning: `unsafe impl Send for SeparateSibling` permits thread-affine state to be dropped on another thread
+  --> $DIR/main.rs:129:1
+   |
+LL |     resource: ThreadAffineResource,
+   |     ------------------------------ `resource` owns `crate::ThreadAffineResource`: must be released on its creating thread
+LL | }
+LL | unsafe impl<T> Send for SeparateSibling<T> {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: an outer `Drop` implementation does not suppress automatic field drop glue
+   = help: remove the `unsafe impl Send`, or store the thread-affine value behind `ManuallyDrop` and explicitly destroy it in the required context
+
+warning: 9 warnings emitted
+
