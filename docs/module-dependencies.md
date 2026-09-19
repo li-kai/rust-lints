@@ -101,6 +101,10 @@ The infrastructure for a proper lint exists: dylint provides `LateLintPass` with
 ```toml
 [module_dependencies]
 exhaustive = true  # Every top-level module must appear
+# A normal build observes only one cfg slice. A dedicated coverage build may
+# set this to "complete" after arranging to observe the union of all supported
+# feature/target configurations.
+dead_edge_coverage = "incomplete"
 
 [module_dependencies.allow]
 types = []
@@ -126,7 +130,7 @@ This is not required for the initial implementation, but the config format and l
 2. If the target module is not in the source module's allowlist, the lint emits an error.
 3. Modules not in the config are errors (exhaustive mode).
 4. `#[cfg(test)]` code is excluded — tests can reach anywhere. This is safe because test code doesn't run in release builds, so an agent cannot use `#[cfg(test)]` to smuggle production logic past the lint. Integration tests genuinely need cross-module access; enforcing the allowlist on tests would make them unwritable without mirroring the entire dependency graph.
-5. Edges declared in the config with no corresponding dependency in code produce a warning (dead edge detection).
+5. Edges declared in the config with no corresponding dependency in code produce a warning only when `dead_edge_coverage = "complete"`. The default is `"incomplete"`, because absence from one feature/target compilation does not prove that an edge is stale.
 
 **Diagnostic format:**
 
@@ -195,7 +199,7 @@ These conventions are recommendations, not enforced by the `module_dependencies`
 
 **Re-exports:** The lint tracks the *syntactic* dependency — the module the path resolves through, not the module that originally defines the item. If `api` re-exports `types::UserId` and `payments` uses `api::UserId`, the lint sees `payments → api`. This is correct. The alternative (tracing to the origin module) would require the config to model re-export chains, adding config bloat without meaningful architectural signal.
 
-**Feature-gated code:** `#[cfg(feature = "...")]` code is treated the same as non-gated code. A dependency that only exists under a feature flag is still a dependency. Only `#[cfg(test)]` code is excluded.
+**Feature-gated and target-gated code:** Active code is treated the same as non-gated code, but one rustc invocation cannot observe inactive `#[cfg]` branches. Consequently, ordinary builds must keep `dead_edge_coverage = "incomplete"` and do not emit dead-edge diagnostics. Set it to `"complete"` only for a dedicated coverage build whose observed dependency graph is the union of every supported feature and target configuration. Forbidden-edge enforcement remains active in every individual build regardless of this setting.
 
 **Blanket trait impls:** If `types` defines `trait Validate` with a blanket impl and `payments::Order` satisfies the bounds, the implicit dependency may or may not surface as a path the lint can intercept. This is a known potential gap. **Action:** Validate empirically during implementation with real-world trait patterns. If `TyCtxt` does not surface these as interceptable paths, document as a limitation rather than adding complexity to cover an edge case.
 

@@ -80,14 +80,41 @@ impl Default for FallibleNewConfig {
     }
 }
 
+/// Whether the current compilation observes every module dependency that can
+/// exist in any supported feature/target configuration.
+///
+/// Dead-edge diagnostics are only sound for a complete observation. A normal
+/// rustc invocation sees one cfg slice, so incomplete is the safe default.
+#[derive(Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeadEdgeCoverage {
+    #[default]
+    Incomplete,
+    Complete,
+}
+
 /// Config for the `module_dependencies` lint.
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(default)]
 pub struct ModuleDependenciesConfig {
     /// When true, every top-level module must appear in the config.
     pub exhaustive: bool,
+    /// Set to `"complete"` only when this compilation observes the union of
+    /// every supported feature/target configuration. Dead edges are not
+    /// reported for the default `"incomplete"` coverage.
+    pub dead_edge_coverage: DeadEdgeCoverage,
     /// Map of module name → list of modules it may depend on.
     pub allow: std::collections::HashMap<String, Vec<String>>,
+}
+
+impl Default for ModuleDependenciesConfig {
+    fn default() -> Self {
+        Self {
+            exhaustive: false,
+            dead_edge_coverage: DeadEdgeCoverage::Incomplete,
+            allow: std::collections::HashMap::new(),
+        }
+    }
 }
 
 /// Per-sublint configuration shared by all four `global_side_effect` lints.

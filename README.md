@@ -194,7 +194,7 @@ error[module_dependencies]: `payments` depends on `server`, which is not in its 
            is allowed to depend on (currently: types, errors, utils)
 ```
 
-Configuration is via a `[module_dependencies]` section declaring the allowed dependency edges per module. In exhaustive mode (default), every top-level module must appear in the config. Dead edges (declared but unused dependencies) produce a warning. Does not fire inside `#[cfg(test)]` code.
+Configuration is via a `[module_dependencies]` section declaring the allowed dependency edges per module. In exhaustive mode (default), every top-level module must appear in the config. Dead edges (declared but unused dependencies) produce a warning only in a dedicated build that declares its feature/target coverage complete. Does not fire inside `#[cfg(test)]` code.
 
 ### `needless_builder`
 
@@ -515,6 +515,12 @@ threshold = 2
 
 [fallible_new]
 check_new_variants = true
+
+[module_dependencies]
+# A normal build sees only one feature/target cfg slice and must leave this
+# incomplete. Set to "complete" only in a dedicated coverage build whose
+# observed graph includes every supported configuration.
+dead_edge_coverage = "incomplete"
 
 [debug_remnants]
 suggested_framework = "tracing"  # or "log" for libraries

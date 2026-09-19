@@ -8,7 +8,7 @@ use rustc_span::def_id::DefId;
 use rustc_span::{Span, Symbol};
 
 use super::hir_refs;
-use crate::config::ModuleDependenciesConfig;
+use crate::config::{DeadEdgeCoverage, ModuleDependenciesConfig};
 
 rustc_session::declare_lint! {
     /// Flags cross-module dependencies not declared in the allowlist.
@@ -56,8 +56,13 @@ fn top_level_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<Symbol> {
     }
 }
 
+#[expect(
+    suggest_builder,
+    reason = "stateful lint pass is constructed internally and has no caller-facing inputs"
+)]
 pub struct ModuleDependencies {
     exhaustive: bool,
+    dead_edge_coverage: DeadEdgeCoverage,
     allow: FxHashMap<Symbol, FxHashSet<Symbol>>,
     all_modules: FxHashSet<Symbol>,
     /// Tracks which declared edges were actually observed in code.
@@ -85,6 +90,7 @@ impl ModuleDependencies {
 
         Self {
             exhaustive: config.exhaustive,
+            dead_edge_coverage: config.dead_edge_coverage,
             allow,
             all_modules,
             used_edges: FxHashSet::default(),
@@ -196,10 +202,17 @@ impl<'tcx> LateLintPass<'tcx> for ModuleDependencies {
     }
 
     fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
-        // In test crates `should_skip_ref` drops every reference, so
-        // `used_edges` stays empty and every declared edge would be
-        // spuriously reported dead.
-        if !self.is_configured() || cx.sess().is_test_crate() {
+        // A normal compilation observes only one feature/target cfg slice.
+        // Absence in that slice is not evidence that an allowlist edge is
+        // stale. Only a dedicated coverage build may assert that its observed
+        // graph is complete.
+        //
+        // Test crates are never complete because `should_skip_ref` excludes
+        // test references by design.
+        if !self.is_configured()
+            || self.dead_edge_coverage != DeadEdgeCoverage::Complete
+            || cx.sess().is_test_crate()
+        {
             return;
         }
 
@@ -231,6 +244,7 @@ mod tests {
     const TOML: &str = "\
 [module_dependencies]\n\
 exhaustive = false\n\
+dead_edge_coverage = \"complete\"\n\
 \n\
 [module_dependencies.allow]\n\
 types = []\n\
@@ -240,8 +254,26 @@ payments = [\"types\", \"errors\", \"utils\"]\n\
 server = [\"types\", \"errors\", \"utils\"]\n\
 ";
 
+    const INCOMPLETE_COVERAGE_TOML: &str = "\
+[module_dependencies]\n\
+exhaustive = false\n\
+\n\
+[module_dependencies.allow]\n\
+source = [\"target\"]\n\
+target = []\n\
+";
+
     #[test]
     fn ui_module_dependencies() {
         crate::testing::run_ui_test("module_dependencies", Some(TOML), &[]);
+    }
+
+    #[test]
+    fn incomplete_coverage_does_not_report_dead_edges() {
+        crate::testing::run_ui_test(
+            "module_dependencies_incomplete",
+            Some(INCOMPLETE_COVERAGE_TOML),
+            &[],
+        );
     }
 }
