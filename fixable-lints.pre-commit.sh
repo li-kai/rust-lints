@@ -25,6 +25,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::chars_last_cmp \
   -W clippy::chars_next_cmp \
   -W clippy::checked_conversions \
+  -W clippy::chunks_exact_to_as_chunks \
   -W clippy::clear_with_drain \
   -W clippy::clone_on_copy \
   -W clippy::cloned_instead_of_copied \
@@ -111,6 +112,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::manual_assert \
   -W clippy::manual_assert_eq \
   -W clippy::manual_async_fn \
+  -W clippy::manual_bit_width \
   -W clippy::manual_bits \
   -W clippy::manual_c_str_literals \
   -W clippy::manual_clear \
@@ -202,6 +204,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::non_octal_unix_permissions \
   -W clippy::non_std_lazy_statics \
   -W clippy::non_zero_suggestions \
+  -W clippy::nonnull_unchecked_on_box_ptr \
   -W clippy::nonstandard_macro_braces \
   -W clippy::obfuscated_if_else \
   -W clippy::ok_expect \
@@ -244,6 +247,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::repeat_once \
   -W clippy::replace_box \
   -W clippy::rest_pat_in_fully_bound_structs \
+  -W clippy::rest_pattern_accessible_field \
   -W clippy::result_filter_map \
   -W clippy::result_map_or_into_option \
   -W clippy::result_map_unit_fn \
@@ -293,6 +297,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::unnecessary_operation \
   -W clippy::unnecessary_option_map_or_else \
   -W clippy::unnecessary_owned_empty_strings \
+  -W clippy::unnecessary_rest_pattern \
   -W clippy::unnecessary_result_map_or_else \
   -W clippy::unnecessary_safety_comment \
   -W clippy::unnecessary_semicolon \
