@@ -1,7 +1,7 @@
 # Auto-generated — do not edit manually.
 # MachineApplicable lints without Known problems/issues:
 # silent during dev, auto-fixed at commit time.
-# complexity (92 lints)
+# complexity (93 lints)
 bind_instead_of_map = "allow"
 bool_comparison = "allow"
 bytes_count_to_len = "allow"
@@ -55,6 +55,7 @@ needless_as_bytes = "allow"
 needless_bool_assign = "allow"
 needless_borrowed_reference = "allow"
 needless_match = "allow"
+needless_nonzero_get = "allow"
 needless_option_as_deref = "allow"
 needless_option_take = "allow"
 needless_question_mark = "allow"
@@ -115,7 +116,7 @@ suboptimal_flops = "allow"
 too_long_first_doc_paragraph = "allow"
 trait_duplication_in_bounds = "allow"
 unused_rounding = "allow"
-# pedantic (46 lints)
+# pedantic (45 lints)
 bool_to_int_with_if = "allow"
 borrow_as_ptr = "allow"
 cast_lossless = "allow"
@@ -135,7 +136,6 @@ inconsistent_struct_constructor = "allow"
 inefficient_to_string = "allow"
 ip_constant = "allow"
 manual_assert = "allow"
-manual_assert_eq = "allow"
 manual_bit_width = "allow"
 manual_ilog2 = "allow"
 manual_instant_elapsed = "allow"
@@ -212,7 +212,7 @@ unnecessary_rest_pattern = "allow"
 unnecessary_safety_comment = "allow"
 unseparated_literal_suffix = "allow"
 unused_trait_names = "allow"
-# style (102 lints)
+# style (103 lints)
 blocks_in_conditions = "allow"
 bool_assert_comparison = "allow"
 box_default = "allow"
@@ -249,6 +249,7 @@ iter_next_slice = "allow"
 iter_nth = "allow"
 iter_nth_zero = "allow"
 iter_skip_next = "allow"
+legacy_numeric_constants = "allow"
 len_zero = "allow"
 let_unit_value = "allow"
 manual_async_fn = "allow"

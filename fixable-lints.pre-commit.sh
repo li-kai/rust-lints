@@ -104,13 +104,13 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::iter_nth_zero \
   -W clippy::iter_skip_next \
   -W clippy::large_const_arrays \
+  -W clippy::legacy_numeric_constants \
   -W clippy::len_zero \
   -W clippy::let_unit_value \
   -W clippy::let_with_type_underscore \
   -W clippy::lossy_float_literal \
   -W clippy::manual_abs_diff \
   -W clippy::manual_assert \
-  -W clippy::manual_assert_eq \
   -W clippy::manual_async_fn \
   -W clippy::manual_bit_width \
   -W clippy::manual_bits \
@@ -186,6 +186,7 @@ cargo clippy --fix --allow-dirty --allow-staged -- \
   -W clippy::needless_else \
   -W clippy::needless_late_init \
   -W clippy::needless_match \
+  -W clippy::needless_nonzero_get \
   -W clippy::needless_option_as_deref \
   -W clippy::needless_option_take \
   -W clippy::needless_parens_on_range_literals \
