@@ -482,13 +482,17 @@ In your `flake.nix`:
 Then run:
 
 ```sh
-cargo dylint --all
+cargo dylint --all --lib-path "$RUST_LINTS_LIB"
 ```
 
+`RUST_LINTS_LIB` is the prebuilt library's path. `--all` still loads any other
+libraries named in your workspace metadata.
+
 `rust-lints.lib.mkDevShell` is the supported Nix consumer interface. It wires in
-the matching `cargo-dylint`, toolchain, `rustup` shim, `DYLINT_LIBRARY_PATH`,
-and `DYLINT_DRIVER_PATH` so downstream repos do not need to reproduce this
-repository's internal shell logic. Entering that shell means using the pinned
+the matching `cargo-dylint`, toolchain, `rustup` shim, `RUST_LINTS_LIB`, and
+`DYLINT_DRIVER_PATH` so downstream repos do not need to reproduce this
+repository's internal shell logic. Earlier versions set `DYLINT_LIBRARY_PATH`
+instead, which Dylint 6.4.0 deprecates. Entering that shell means using the pinned
 nightly Rust toolchain and matching nightly `rust-analyzer`.
 
 `extraRustComponents` adds host-toolchain components on top of the required
@@ -605,10 +609,13 @@ Then enable it in your repo's `.claude/settings.json`:
 
 ## Development
 
-Requires `dylint-link`:
+The Nix dev shell (`nix develop`, or `direnv allow`) provides everything.
+
+Without Nix, install `dylint-link` and `cargo-dylint` at the Dylint version
+pinned in `Cargo.toml`:
 
 ```sh
-cargo install dylint-link
+cargo install dylint-link@6.4.0 cargo-dylint@6.4.0
 ```
 
 Build and test:

@@ -124,36 +124,16 @@
             src = pkgs.fetchCrate {
               pname = "dylint-link";
               version = dylintVersion;
-              hash = "sha256-evuR3zpsAuncGruj9Sg7PlCUNyYycMygH6bsEBa+nVc=";
+              hash = "sha256-I2DdWEZTL+WY++OIE11Ej7liwlXzwvC+5T0vOBk+dfc=";
             };
-            cargoHash = "sha256-zRhkTdJ+rJ9TKBe3kRcNtnBCSe4FEpF3pbQQcFz7qz8=";
+            cargoHash = "sha256-5IJP3ZwCqOcyM3RKVU9Terc9LSheCcS5BMNimuLb7AE=";
           };
 
           # Wrapper that injects RUSTUP_TOOLCHAIN when the nix-built dylint-link runs.
           # Used in both the cdylib package build and the dev shell.
           dylintLinkWrapper = pkgs.writeShellScriptBin "dylint-link" ''
-            set -eu
             export RUSTUP_TOOLCHAIN="''${RUSTUP_TOOLCHAIN:-${toolchain.full}}"
-            ${dylintLink}/bin/dylint-link "$@"
-            # Cargo 1.100 links into build/<crate>/<hash>/out. Dylint still
-            # discovers tagged libraries in the profile directory.
-            while [ "$#" -gt 1 ]; do
-              if [ "$1" = "-o" ]; then
-                output="$2"
-                case "$output" in
-                  */build/*/*/out/lib*.dylib|*/build/*/*/out/lib*.so)
-                    profile_dir="''${output%/build/*}"
-                    library_name="''${output##*/}"
-                    tagged_name="''${library_name%.*}@$RUSTUP_TOOLCHAIN.''${library_name##*.}"
-                    if [ -f "''${output%/*}/$tagged_name" ]; then
-                      cp "''${output%/*}/$tagged_name" "$profile_dir/$tagged_name"
-                    fi
-                    ;;
-                esac
-                break
-              fi
-              shift
-            done
+            exec ${dylintLink}/bin/dylint-link "$@"
           '';
 
           # Note: cargo-dylint is not packaged as a Nix derivation because its
@@ -232,8 +212,7 @@
           };
 
           # Build rust-lints as a cdylib using crane + the nix-built dylint-link.
-          # .cargo/config.toml sets linker = "dylint-link" per target triple, which
-          # causes dylint-link to tag the output filename with @toolchain.
+          # .cargo/config.toml sets linker = "dylint-link" per target triple.
           #
           # Note: crane's buildDepsOnly is intentionally not used here.
           # The vendored `dylint` crate (transitive dev-dep via dylint_testing)
@@ -275,7 +254,7 @@
           };
 
           # Combined package exposing both artifacts at the paths dylint expects:
-          #   $out/lib/librust_lints@<toolchain>.<ext>    → DYLINT_LIBRARY_PATH
+          #   $out/lib/librust_lints@<toolchain>.<ext>    → cargo dylint --lib-path
           #   $out/drivers/<toolchain>/dylint-driver       → DYLINT_DRIVER_PATH
           rustLints = pkgs.symlinkJoin {
             name = "rust-lints";
@@ -285,6 +264,8 @@
               cp ${dylintDriver}/bin/dylint-driver $out/drivers/${toolchain.full}/
             '';
           };
+
+          rustLintsLibFile = "${rustLints}/lib/librust_lints@${toolchain.full}${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}";
 
           mkDevShell =
             {
@@ -308,7 +289,9 @@
                   shellRustToolchain
                   rustupShim
                 ] ++ packages;
-                DYLINT_LIBRARY_PATH = "${rustLints}/lib";
+                # Dylint 6.4.0 deprecates DYLINT_LIBRARY_PATH; consumers pass
+                # this file to `cargo dylint --lib-path`.
+                RUST_LINTS_LIB = rustLintsLibFile;
                 DYLINT_DRIVER_PATH = "${rustLints}/drivers";
                 RUSTUP_TOOLCHAIN = toolchain.full;
                 shellHook =

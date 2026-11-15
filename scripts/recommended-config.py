@@ -349,8 +349,9 @@ def emit_hook(
         dylint_lines = [
             "# 1b. Auto-fix dylint lints with MachineApplicable suggestions.",
             "#    These lints default to Allow (silent in editor); DYLINT_RUSTFLAGS",
-            "#    overrides the level for the fix pass.",
-            f'DYLINT_RUSTFLAGS="{rustflags}" cargo dylint --all --fix -- --allow-dirty --allow-staged || true',
+            "#    overrides the level for the fix pass. RUST_LINTS_LIB is set by",
+            "#    the rust-lints Nix dev shell.",
+            f'DYLINT_RUSTFLAGS="{rustflags}" cargo dylint --all ${{RUST_LINTS_LIB:+--lib-path "$RUST_LINTS_LIB"}} --fix -- --allow-dirty --allow-staged || true',
         ]
         dylint_fix_block = "\n".join(dylint_lines) + "\n\n"
     else:

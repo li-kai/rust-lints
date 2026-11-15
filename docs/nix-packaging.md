@@ -32,9 +32,9 @@ its own **driver** — a small binary linked against `rustc_driver` from the
 _library's_ toolchain. The flow:
 
 ```
-cargo dylint --all
+cargo dylint --all --lib-path <library>
   ↓
-cargo-dylint reads DYLINT_LIBRARY_PATH (or workspace.metadata.dylint)
+cargo-dylint collects --lib-path files (and builds workspace.metadata.dylint entries)
   ↓
 Groups libraries by toolchain (parsed from the @toolchain filename tag)
   ↓
@@ -67,14 +67,16 @@ In a nix environment without rustup, step 1 fails. This is the core problem.
 
 ### The solution: ship both the dylib and the driver
 
-Dylint supports two environment variables:
+Dylint can load both pieces prebuilt:
 
-- **`DYLINT_LIBRARY_PATH`** — directories containing pre-built
-  `lib<name>@<toolchain>.<ext>` files
+- **`--lib-path <file>`** — a pre-built `lib<name>@<toolchain>.<ext>` file.
+  (Dylint 6.4.0 deprecates `DYLINT_LIBRARY_PATH`, the directory-based
+  equivalent. Its suggested replacement, workspace metadata, names library
+  packages that Dylint builds from source.)
 - **`DYLINT_DRIVER_PATH`** — directory containing pre-built driver binaries,
   structured as `<toolchain>/dylint-driver`
 
-If both are set, dylint does not need rustup to discover or build a driver. It
+With both, dylint does not need rustup to discover or build a driver. It
 finds the pre-built library, matches it to the pre-built driver, and runs. In
 practice, the supported consumer interface should still provide the matching
 toolchain and `cargo-dylint` invocation environment.
@@ -119,8 +121,9 @@ The supported Nix interface is a public shell helper:
 }
 ```
 
-The consumer then runs `cargo dylint --all` as normal. The helper shell provides
-the matching `cargo-dylint`, toolchain, `rustup` shim, and Dylint env vars. The
+The consumer then runs `cargo dylint --all --lib-path "$RUST_LINTS_LIB"`. The
+helper shell provides the matching `cargo-dylint`, toolchain, `rustup` shim,
+`RUST_LINTS_LIB` (the prebuilt library's path), and `DYLINT_DRIVER_PATH`. The
 consumer project can keep its own normal Rust workflow outside that shell.
 
 Configuration via `dylint.toml` works exactly as before — it's read at lint
@@ -146,8 +149,7 @@ Dylint discovers libraries and drivers by filename/directory convention:
 | Driver | `<toolchain>/dylint-driver` | `nightly-2026-09-01-x86_64-unknown-linux-gnu/dylint-driver` |
 
 The `@toolchain` tag in the library filename is how dylint knows which driver to
-pair it with. `dylint-link` (our custom linker) produces this tag automatically
-during the build.
+pair it with. `dylint-link` applies it at link time.
 
 ## What we need to build
 
@@ -157,7 +159,7 @@ The `packages.default` derivation must produce two things:
 
 - Compile `rust-lints` as a cdylib using the pinned nightly from fenix.
 - Use `dylint-link` as the linker (required by `.cargo/config.toml`).
-- `dylint-link` produces the `@toolchain`-tagged filename automatically.
+- `dylint-link` writes a copy tagged with `@toolchain` next to the plain library.
 - Output: `$out/lib/librust_lints@<toolchain>.<ext>`
 
 ### 2. The dylint driver
@@ -180,7 +182,7 @@ The `packages.default` derivation must produce two things:
 |---|---|---|
 | Rust nightly (`nightly-2026-09-01`) | Compile the cdylib and driver against `rustc_private` APIs | fenix (already in our flake) |
 | `rustc-dev` | Provide `rustc_driver` and compiler internals for linking | fenix toolchain components |
-| `dylint-link` | Custom linker that produces `@toolchain`-tagged output | Built from crates.io |
+| `dylint-link` | Custom linker required by `.cargo/config.toml` | Built from crates.io |
 | `rustup` shim | `dylint-link` calls `rustup which rustc` internally | Already in our flake |
 | Prefetched clippy source | `dylint_driver`'s build script clones rust-clippy to extract symbols from `clippy_utils/src/sym.rs`; Nix builds have no network access | `fetchFromGitHub` at the rev from `Cargo.toml` |
 | Git clippy wrapper | Intercepts `git clone`/`checkout` of rust-clippy and serves the prefetched source | `nix/git-clippy-wrapper.sh` |
@@ -192,10 +194,15 @@ toolchain. The key derivations are `dylintLink`, `dylintDriver`, `rustLintsLib`,
 and the final `rustLints` symlinkJoin.
 
 Cargo 1.100 links libraries under `target/<profile>/build/<crate>/<hash>/out`.
-The `dylint-link` wrapper promotes toolchain-tagged libraries back to the profile
-directory so Dylint can discover them. It leaves untagged proc-macro dependencies
-alone. Dylint is pinned exactly to 6.0.2 because later patch releases pass
-`--env-set`, which the September monthly compiler does not support.
+`dylint-link` 6.4.0 and later recognize that layout and still write the tagged
+copy to `target/<profile>/`. They skip the copy when its contents are
+unchanged, so a relink that changes nothing does not bump the mtime that
+rustc's dep-info tracks and force a full re-check. Older releases leave the
+tagged copy in the hashed `out` directory, where Dylint does not look.
+
+All Dylint crates (`dylint_linting`, `dylint_driver`, the dev-dependencies,
+`dylint-link` and `cargo-dylint`) are pinned to the same exact version.
+`flake.nix` reads it from `dylint_linting` in `Cargo.toml`.
 
 ### Runtime linking: the `-rpath` detail
 

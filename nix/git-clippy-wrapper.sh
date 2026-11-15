@@ -23,7 +23,7 @@ case "$1" in
       # Create a 2-commit history: old commit with a dummy channel,
       # then HEAD with the real channel. This triggers the channel
       # change and the iterator emits the HEAD rev.
-      $REAL_GIT -C "$dest" -c init.defaultBranch=master init --quiet
+      $REAL_GIT -C "$dest" -c init.defaultBranch=main init --quiet
       # First commit: dummy channel so the iterator sees a change.
       sed -i.bak "s/$TOOLCHAIN_CHANNEL/nightly-2000-01-01/" "$dest/rust-toolchain.toml"
       $REAL_GIT -C "$dest" add .

@@ -14,8 +14,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "7a7ce1463a84f0a3a9cf01dc03c2c9186c5a109c" }
-# Dylint 6.0.3+ passes --env-set, which this monthly compiler does not support.
-dylint_linting = "=6.0.2"
+dylint_linting = "=6.4.0"
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
@@ -24,8 +23,9 @@ bon = "3"
 cargo_metadata = "0.23"
 compiletest_rs = "0.11"
 derive_builder = "0.20"
-dylint = "=6.0.2"
-dylint_testing = "=6.0.2"
+dylint = "=6.4.0"
+dylint_internal = { version = "=6.4.0", features = ["link"] }
+dylint_testing = "=6.4.0"
 indexmap = "2"
 parking_lot = "0.12"
 regex = "1"

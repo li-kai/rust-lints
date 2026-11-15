@@ -28,9 +28,10 @@ trap 'rm -f "$CLIPPY_OUT" "$DYLINT_OUT"' EXIT
 # short: diagnostics on stderr, merge into stdout.
 cargo clippy $TARGETS $FMT "$@" -- -D warnings >"$CLIPPY_OUT" 2>&1 || true &
 
-if [[ -d "$REPO_ROOT/target/debug" ]]; then
-  DYLINT_LIBRARY_PATH="$REPO_ROOT/target/debug" \
-    cargo dylint --quiet --lib rust_lints -- $TARGETS $FMT "$@" >"$DYLINT_OUT" 2>&1 || true &
+# Run dylint only once the lint library has been built (`just build`).
+LINT_LIB="$("$REPO_ROOT/scripts/lint-lib-path.sh")"
+if [[ -f "$LINT_LIB" ]]; then
+  cargo dylint --quiet --lib-path "$LINT_LIB" -- $TARGETS $FMT "$@" >"$DYLINT_OUT" 2>&1 || true &
 fi
 
 wait

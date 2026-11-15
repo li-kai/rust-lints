@@ -47,14 +47,12 @@ mod runner {
             let metadata = cargo_metadata::MetadataCommand::new()
                 .exec()
                 .expect("cargo metadata");
-            let dylint_library_path = metadata.target_directory.join("debug");
 
-            unsafe {
-                std::env::set_var("DYLINT_LIBRARY_PATH", &dylint_library_path);
-            }
-
-            let dylint_libs =
-                dylint_testing::dylint_libs(env!("CARGO_PKG_NAME")).expect("dylint_libs");
+            let dylint_libs = dylint_internal::link::dylint_libs(
+                env!("CARGO_CRATE_NAME"),
+                env!("RUSTUP_TOOLCHAIN"),
+            )
+            .expect("dylint_libs");
             unsafe {
                 std::env::set_var("CLIPPY_DISABLE_DOCS_LINKS", "true");
                 std::env::set_var("DYLINT_LIBS", &dylint_libs);
@@ -138,6 +136,10 @@ mod runner {
     }
 
     fn remove_example_artifact(metadata: &Metadata, target: &Target) {
+        let target_name = target.name.replace('-', "_");
+        let artifact_name = format!("{target_name}{}", consts::EXE_SUFFIX);
+        let hashed_prefix = format!("{target_name}-");
+
         // Cargo 1.100 keeps the actual artifact in its build directory; removing
         // only the exported examples binary no longer forces a rustc invocation.
         let build_directory = metadata
@@ -148,24 +150,16 @@ mod runner {
             .join(env!("CARGO_PKG_NAME"));
         if let Ok(entries) = read_dir(build_directory) {
             for entry in entries.flatten() {
-                let artifact = entry.path().join("out").join(format!(
-                    "{}{}",
-                    target.name.replace('-', "_"),
-                    consts::EXE_SUFFIX
-                ));
-                let _ = remove_file(artifact);
+                let _ = remove_file(entry.path().join("out").join(&artifact_name));
             }
         }
         let examples = metadata.target_directory.join("debug/examples");
         let Ok(entries) = read_dir(&examples) else {
             return;
         };
-        let target_name = target.name.replace('-', "_");
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name == format!("{target_name}{}", consts::EXE_SUFFIX)
-                || name.starts_with(&format!("{target_name}-"))
-            {
+            if name == artifact_name || name.starts_with(&hashed_prefix) {
                 let _ = remove_file(entry.path());
             }
         }
