@@ -9,7 +9,7 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
 
-use super::hir_refs;
+use super::{hir_refs, unnormalized};
 use crate::config::FallibleNewConfig;
 
 rustc_lint::declare_lint! {
@@ -24,7 +24,7 @@ rustc_lint::declare_lint! {
 /// (after resolving type aliases).
 fn returns_result<'tcx>(cx: &LateContext<'tcx>, impl_item: &'tcx ImplItem<'tcx>) -> bool {
     let def_id = impl_item.owner_id.to_def_id();
-    let fn_sig = cx.tcx.fn_sig(def_id).instantiate_identity().skip_norm_wip();
+    let fn_sig = unnormalized::fn_sig(cx.tcx, def_id);
     // `async fn new` returns an opaque future; peel to its `Output` so a
     // `-> Result<..>` async constructor is still recognized as fallible.
     let ret_ty = hir_refs::peel_async_fn_return_ty(cx.tcx, fn_sig.output().skip_binder());

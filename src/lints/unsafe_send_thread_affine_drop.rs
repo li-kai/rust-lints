@@ -9,6 +9,7 @@ use rustc_middle::ty::{self, Ty};
 use rustc_span::{Span, Symbol, sym};
 
 use super::call_matching::path_final_segment;
+use super::unnormalized;
 use crate::config::UnsafeSendThreadAffineDropConfig;
 
 rustc_lint::declare_lint! {
@@ -231,7 +232,7 @@ impl UnsafeSendThreadAffineDrop {
             }
             ty::Adt(adt, args) => Box::new(
                 adt.all_fields()
-                    .map(move |field| field.ty(cx.tcx, args).skip_norm_wip()),
+                    .map(move |field| unnormalized::field_ty(cx.tcx, field, args)),
             ),
             ty::Array(element, _) | ty::Slice(element) => Box::new(std::iter::once(*element)),
             ty::Tuple(elements) => Box::new(elements.iter()),
@@ -266,11 +267,7 @@ impl<'tcx> LateLintPass<'tcx> for UnsafeSendThreadAffineDrop {
             return;
         }
 
-        let self_ty = cx
-            .tcx
-            .type_of(item.owner_id.def_id)
-            .instantiate_identity()
-            .skip_norm_wip();
+        let self_ty = unnormalized::type_of(cx.tcx, item.owner_id.def_id);
         let ty::Adt(adt, args) = self_ty.kind() else {
             return;
         };
@@ -292,7 +289,7 @@ impl<'tcx> LateLintPass<'tcx> for UnsafeSendThreadAffineDrop {
         } else {
             for variant in adt.variants() {
                 for field in &variant.fields {
-                    let field_ty = field.ty(cx.tcx, args).skip_norm_wip();
+                    let field_ty = unnormalized::field_ty(cx.tcx, field, args);
                     if let Some((contract_path, reason, ownership_path)) =
                         self.find_thread_affine_type(cx, field_ty)
                     {

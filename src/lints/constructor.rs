@@ -10,13 +10,12 @@ use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::def_id::DefId;
 use rustc_span::sym;
 
+use super::unnormalized;
+
 /// Returns the function's return ADT after peeling one supported constructor
 /// wrapper: `Result<_, _>` or `Box<_>`.
 pub fn return_adt(tcx: TyCtxt<'_>, function_def_id: DefId) -> Option<ty::AdtDef<'_>> {
-    let ret_ty = tcx
-        .fn_sig(function_def_id)
-        .instantiate_identity()
-        .skip_norm_wip()
+    let ret_ty = unnormalized::fn_sig(tcx, function_def_id)
         .output()
         .skip_binder();
     let inner_ty = match ret_ty.kind() {

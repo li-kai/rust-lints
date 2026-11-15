@@ -6,14 +6,14 @@ use clippy_utils::visitors::for_each_expr_without_closures;
 use clippy_utils::{is_def_id_trait_method, is_entrypoint_fn, is_in_cfg_test, return_ty};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::attrs::lang_items::LangItem;
-use rustc_hir::def_id::{CRATE_DEF_ID, ModId};
+use rustc_hir::def_id::ModId;
 use rustc_hir::intravisit::FnKind;
 use rustc_hir::{Body, ExprKind, FnDecl, Item, ItemKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, ExistentialPredicate, Ty};
 use rustc_span::{Span, Symbol, sym};
 
-use super::hir_refs;
+use super::{hir_refs, unnormalized};
 
 struct ErrorImplInfo {
     span: Span,
@@ -81,7 +81,7 @@ impl ProperErrorType {
         if vis.is_public() {
             return Some(vis);
         }
-        if vis != ty::Visibility::Restricted(ModId::new_unchecked(CRATE_DEF_ID.to_def_id())) {
+        if !matches!(vis, ty::Visibility::Restricted(id) if id.is_top_level_module()) {
             return None;
         }
         // Semantic visibility is pub(crate) — verify an explicit keyword exists.
@@ -148,7 +148,7 @@ impl ProperErrorType {
         }
     }
 
-    fn check_error_named_type<'tcx>(cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
+    fn check_error_named_type<'tcx>(&self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
         #[expect(
             clippy::wildcard_enum_match_arm,
             reason = "ItemKind has many variants; all non-ADT kinds are correctly skipped"
@@ -171,12 +171,8 @@ impl ProperErrorType {
             return;
         }
 
-        let ty = cx
-            .tcx
-            .type_of(item.owner_id.def_id)
-            .instantiate_identity()
-            .skip_norm_wip();
-        let Some(error_trait_id) = cx.tcx.get_diagnostic_item(Symbol::intern("Error")) else {
+        let ty = unnormalized::type_of(cx.tcx, item.owner_id.def_id);
+        let Some(error_trait_id) = cx.tcx.get_diagnostic_item(self.sym_error) else {
             return;
         };
         if !implements_trait(cx, ty, error_trait_id, &[]) {
@@ -207,11 +203,7 @@ impl ProperErrorType {
             return;
         };
 
-        let self_ty = cx
-            .tcx
-            .type_of(item.owner_id.def_id)
-            .instantiate_identity()
-            .skip_norm_wip();
+        let self_ty = unnormalized::type_of(cx.tcx, item.owner_id.def_id);
         let Some(adt_def) = self_ty.ty_adt_def() else {
             return;
         };
@@ -230,7 +222,7 @@ impl ProperErrorType {
             if let (Some(error_tid), ty::Adt(_, args)) = (error_trait_id, self_ty.kind()) {
                 for variant in adt_def.variants() {
                     for field in &variant.fields {
-                        let field_ty = field.ty(cx.tcx, args).skip_norm_wip();
+                        let field_ty = unnormalized::field_ty(cx.tcx, field, args);
                         if implements_trait(cx, field_ty, error_tid, &[]) {
                             source_field_names.push(field.name);
                         }
@@ -301,12 +293,13 @@ impl ProperErrorType {
     }
 
     fn check_duplicated_source(
+        &self,
         cx: &LateContext<'_>,
         fmt_def_id: rustc_hir::def_id::LocalDefId,
         source_field_names: &[Symbol],
         display_span: Span,
     ) {
-        let Some(error_trait_id) = cx.tcx.get_diagnostic_item(Symbol::intern("Error")) else {
+        let Some(error_trait_id) = cx.tcx.get_diagnostic_item(self.sym_error) else {
             return;
         };
         let body = cx.tcx.hir_body_owned_by(fmt_def_id);
@@ -423,7 +416,7 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx Item<'tcx>) {
-        Self::check_error_named_type(cx, item);
+        self.check_error_named_type(cx, item);
         self.collect_trait_impls(cx, item);
     }
 
@@ -443,7 +436,7 @@ impl<'tcx> LateLintPass<'tcx> for ProperErrorType {
                     && !error_info.source_field_names.is_empty()
                     && let Some(fmt_def_id) = display_info.fmt_def_id
                 {
-                    Self::check_duplicated_source(
+                    self.check_duplicated_source(
                         cx,
                         fmt_def_id,
                         &error_info.source_field_names,

@@ -4,11 +4,15 @@ description: Reference for clippy_utils and rustc internals used in this repo's 
 user-invocable: false
 ---
 
-# clippy_utils 0.1.95 (nightly 1.95) — lint-writing reference
+# clippy_utils 0.1.100 (nightly 1.100) — lint-writing reference
 
-This repo pins `clippy_utils 0.1.95` on `rustc 1.95.0-nightly`. Many APIs from
+This repo pins `clippy_utils 0.1.100` on `rustc 1.100.0-nightly`
+(`nightly-2026-09-01`, see `rust-toolchain` and `Cargo.toml`). Many APIs from
 older clippy_utils versions have been removed. **Verify availability before
 suggesting an import** — check `src/lints/` for a working example first.
+
+Examples below are cited by file and symbol name, not line number. Search for
+the symbol.
 
 ## Confirmed imports
 
@@ -35,8 +39,7 @@ Other:
 | `diagnostics::span_lint_and_then` | Emit lint with structured sub-diagnostics (multi-span, notes) | `panic_in_drop.rs`, `acyclic_modules.rs` |
 | `fn_def_id` | Resolve a call expression to the callee's `DefId` | `map_init_then_insert.rs`, `blocking_in_async.rs` |
 | `return_ty` | Get the return type of a function | `proper_error_type.rs` |
-| `path_to_local_with_projections` | Resolve a path to a local with field projections | `map_init_then_insert.rs` |
-| `visitors::for_each_expr` | Walk expressions, descending into closures | `realtime_in_async_test.rs` |
+| `visitors::for_each_expr` | Walk expressions, descending into closures. Takes `cx.tcx` first: `for_each_expr(cx.tcx, body, …)` | `realtime_in_async_test.rs` |
 | `visitors::for_each_expr_without_closures` | Walk expressions, skipping closures | `proper_error_type.rs` |
 
 ### Shared helper modules (read these first)
@@ -49,6 +52,23 @@ Other:
   `build_path_list`, `resolve_callee_def_id_with_typeck`,
   `is_in_suppression_zone`.
 - `src/lints/suppression.rs` — `is_in_test_zone`.
+- `src/lints/unnormalized.rs` — `type_of`, `fn_sig`, `field_ty`. Use these
+  instead of calling `skip_norm_wip` directly.
+- `src/lints/constructor.rs` — `return_adt`.
+
+## Compiler API shapes on this toolchain
+
+These changed between nightly 1.95 and 1.100. Code written from memory of the
+older shapes will not compile.
+
+| Area | Shape on 1.100 |
+|---|---|
+| Declaring a lint | `rustc_lint::declare_lint!` and `rustc_lint::impl_lint_pass!` (see `debug_remnants.rs`) |
+| Registering a pass | Add the constructor to the `register_late_passes!` list in `src/lib.rs`. It expands to `lint_store.register_late_lint_pass(Box::new(\|_\| Box::new(pass)))` |
+| `LangItem` | `rustc_hir::attrs::lang_items::LangItem` |
+| `type_of` / `fn_sig` / `FieldDef::ty` | Return `ty::Unnormalized` (`type_of` and `fn_sig` after `instantiate_identity()`); go through `unnormalized::{type_of, fn_sig, field_ty}` |
+| Visibility | `tcx.visibility` returns `ty::Visibility<ModId>`; test the crate root with `ModId::is_top_level_module` (see `vis_if_at_least_pub_crate` in `proper_error_type.rs`) |
+| Struct-like HIR and def kinds | `ItemKind::Trait { .. }`, `DefKind::Const { .. }` (see `topological_ordering.rs`) |
 
 ## Removed / unavailable APIs
 
@@ -57,36 +77,36 @@ Other:
 | `clippy_utils::match_def_path` | `cx.tcx.is_diagnostic_item(sym::Name, def_id)`, `cx.tcx.is_lang_item(def_id, LangItem::Name)`, or `cx.tcx.def_path_str(def_id) == "…"` as last resort |
 | `clippy_utils::ty::is_type_diagnostic_item` | Inline: `ty.peel_refs()`, match `ty::Adt(adt, _)`, then `is_diagnostic_item(sym::Name, adt.did())` |
 | `clippy_utils::ty::is_type_lang_item` | Same shape with `is_lang_item(adt.did(), LangItem::Name)` |
-| `TyCtxt::trait_of_item` | Walk HIR parents — see `panic_in_drop.rs:99` (`is_drop_impl`) |
+| `TyCtxt::trait_of_item` | Walk HIR parents — see `is_drop_impl` in `panic_in_drop.rs` |
 
 ## Task → file
 
 | Task | Where to look |
 |---|---|
 | Check a type by diagnostic item (`Option`/`Result`) | `hir_refs::receiver_is_option_or_result` |
-| Check a type by `LangItem` | `unsafe_send_missing_drop.rs:21` (`is_manually_drop`, `is_phantom_data`) |
-| Match a third-party type with no diagnostic item | `map_init_then_insert.rs:109` (`recognized_map_type`) |
-| Check `ty: Trait` | `unsafe_send_missing_drop.rs` (`implements_trait`) |
+| Check a type by `LangItem` | `find_thread_affine_type` in `unsafe_send_thread_affine_drop.rs` (`ManuallyDrop`, `PhantomData`) |
+| Match a third-party type with no diagnostic item | `recognized_map_type` in `map_init_then_insert.rs` |
+| Check `ty: Trait` | `implements_trait` calls in `proper_error_type.rs` |
 | Match a call against a configurable path list | `blocking_in_async.rs` (single set), `global_side_effect.rs` (multi-set) |
-| Walk a body, simple | `proper_error_type.rs:295` (`for_each_expr_without_closures`) |
-| Walk a body, incl. closures + transitive callees | `realtime_in_async_test.rs:174` (`has_transitive_time_call`) |
-| Stateful body visitor | `panic_in_drop.rs:40` (`DropPanicFinder` toggles on `panicking()` guard) |
-| Visitor with nested body descent (`NestedFilter::OnlyBodies`) | `realtime_in_async_test.rs:117` |
+| Walk a body, simple | `check_duplicated_source` in `proper_error_type.rs` (`for_each_expr_without_closures`) |
+| Walk a body, incl. closures + transitive callees | `has_transitive_time_call` in `realtime_in_async_test.rs` |
+| Stateful body visitor | `DropPanicFinder` in `panic_in_drop.rs` (toggles on `panicking()` guard) |
+| Visitor with nested body descent (`NestedFilter::OnlyBodies`) | `TimeCallVisitor` in `realtime_in_async_test.rs` |
 | IIFE-only closure descent | `hir_refs::iife_closure_body`, used from `panic_in_drop.rs` / `fallible_new.rs` |
-| Detect `impl Drop for T` (parent HIR walk) | `panic_in_drop.rs:99` (`is_drop_impl`) |
-| Detect `unsafe impl Send for T` (safety on `TraitImplHeader`) | `unsafe_send_missing_drop.rs:49` |
+| Detect `impl Drop for T` (parent HIR walk) | `is_drop_impl` in `panic_in_drop.rs` |
+| Detect `unsafe impl Send for T` (safety on `TraitImplHeader`) | `check_item` in `unsafe_send_thread_affine_drop.rs` |
 | Detect a macro expansion, dedup by call site | `debug_remnants.rs`, `unstructured_log_fields.rs` |
 | Walk expansion chain through internal panic helpers | `hir_refs::find_panic_macro` |
-| Identify macro crate origin via `macro_def_id` | `unstructured_log_fields.rs:131` |
-| Walk HIR parents until item boundary | `blocking_in_async.rs:77` (`is_in_async_context`), `blocking_in_async.rs:111` (`is_inside_spawn_blocking`) |
+| Identify macro crate origin via `macro_def_id` | `find_tracing_macro_callsite` in `unstructured_log_fields.rs` |
+| Walk HIR parents until item boundary | `is_in_async_context` and `is_inside_spawn_blocking` in `blocking_in_async.rs` |
 | Resolve expr/ty/use to `DefId` for cross-module lints | `acyclic_modules.rs` (built entirely on `hir_refs::*`) |
-| Inspect coroutine layout for await-held types | `await_holding_unsendable.rs:107` |
-| Detect `async fn` / `async {}` via desugared `Closure` | `blocking_in_async.rs:77`, `await_holding_unsendable.rs:95` |
+| Inspect coroutine layout for await-held types | `check_interior_types` in `await_holding_unsendable.rs` |
+| Detect `async fn` / `async {}` via desugared `Closure` | `is_in_async_context` in `blocking_in_async.rs`, `check_expr` in `await_holding_unsendable.rs` |
 | One lint pass declaring multiple lints | `global_side_effect.rs` |
-| Suppress in tests / `main` | `is_in_test_zone` / `is_in_suppression_zone` — ordered cheapest-first per `blocking_in_async.rs:164` |
+| Suppress in tests / `main` | `is_in_test_zone` / `is_in_suppression_zone` — ordered cheapest-first per `check_expr` in `blocking_in_async.rs` |
 | Pre-expansion AST pass (name-only collection) | `bon_builder_collector.rs` + `lints/mod.rs` thread-locals |
 | UI test harness | `testing.rs` + `crate::testing::run_ui_test`. Bless with `DYLINT_BLESS=1 cargo test <name>` |
-| Register a new lint | `src/lib.rs` (`register_lints` + `register_late_pass`) |
+| Register a new lint | `src/lib.rs`: add the lint to `register_lints` and the pass to the `register_late_passes!` list |
 
 ## Non-obvious gotchas
 
@@ -94,16 +114,17 @@ Other:
   `check_item`, fetch via `cx.tcx.typeck(def_id)` and pass `&TypeckResults`
   down. `clippy_utils::fn_def_id` panics for the same reason in those
   contexts — use `call_matching::resolve_callee_def_id_with_typeck` or
-  `cx.qpath_res(...).opt_def_id()` instead. See the comment at
-  `panic_in_drop.rs:22` and the helpers in `hir_refs.rs` that take an
-  explicit `TypeckResults`.
+  `cx.qpath_res(...).opt_def_id()` instead. See the doc comment on
+  `is_panicking_guard` in `panic_in_drop.rs` and the helpers in `hir_refs.rs`
+  that take an explicit `TypeckResults`.
 
 - When recursing into another body's expressions, use *that* body's typeck
-  results, not the caller's. See `realtime_in_async_test.rs:186`.
+  results, not the caller's. See `has_transitive_time_call` in
+  `realtime_in_async_test.rs`.
 
-- `implements_trait` returns `false` for unbounded generics. Treat that as
-  "impl is unsound", not "type might not be Send" — an `unsafe impl Send for
-  T` promises Send for *all* `T`. See `unsafe_send_missing_drop.rs:106`.
+- `implements_trait` returns `false` for unbounded generics. A `false` on a
+  generic parameter means "not provable for every `T`", not "does not
+  implement".
 
 - Path strings are normalized to strip turbofish `::<T>` segments before
   matching against configured paths — configure
@@ -111,7 +132,7 @@ Other:
   form. See `strip_generic_args` in `call_matching.rs` (private helper).
 
 - `impl_block.of_trait` carries `safety` and `trait_ref`, not `Impl` itself.
-  See `unsafe_send_missing_drop.rs:57`.
+  See `check_item` in `unsafe_send_thread_affine_drop.rs`.
 
 - `#[tokio::test(start_paused = true)]` attribute tokens are consumed before
   HIR exists. Detect by finding the generated `.start_paused(true)` call
@@ -124,15 +145,17 @@ Match these in new code.
 1. Prefilter syntactically (`method.ident.as_str() == "…"`) before calling
    `def_path_str`, which allocates.
 2. Intern `Symbol`s once in `new()`, cache on the lint-pass struct. Never
-   `Symbol::intern` on a hot path. Example: `map_init_then_insert.rs:97`.
+   `Symbol::intern` on a hot path. Example: `MapInitThenInsert::new` in
+   `map_init_then_insert.rs`.
 3. Run suppression-zone checks *after* the cheap match, not before.
-   Example: `global_side_effect.rs:182`, `blocking_in_async.rs:164`.
+   Example: `check_expr` in `global_side_effect.rs` and `blocking_in_async.rs`.
 4. Dedup macro findings by call-site `Span` via `FxHashSet<Span>` on the
-   pass struct. Example: `debug_remnants.rs:25`.
+   pass struct. Example: `seen_callsites` in `debug_remnants.rs`.
 5. Short-circuit visitors once all signals are collected.
-   Example: `realtime_in_async_test.rs:126`.
+   Example: `TimeCallVisitor::visit_expr` in `realtime_in_async_test.rs`.
 6. In module-level lints, short-circuit intra-module references by `DefId`
-   before allocating path segments. Example: `acyclic_modules.rs:291`.
+   before allocating path segments. Example: `record_edge` in
+   `acyclic_modules.rs`.
 
 ## Diagnostic item / LangItem cheat sheet
 
@@ -145,5 +168,6 @@ Reach for these before `def_path_str`.
 `ManuallyDrop`, `PhantomData`.
 
 When neither exists: `crate_name` + `item_name` matching
-(`map_init_then_insert.rs:109`), or `def_path_str` string comparison as a
-last resort — fragile across compiler versions, so cover with a UI test.
+(`recognized_map_type` in `map_init_then_insert.rs`), or `def_path_str`
+string comparison as a last resort — fragile across compiler versions, so
+cover with a UI test.

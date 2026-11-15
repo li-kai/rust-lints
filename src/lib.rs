@@ -23,6 +23,14 @@ use rustc_session::Session;
 
 dylint_linting::dylint_library!();
 
+/// Registers each expression as a late lint pass. rustc takes a boxed factory
+/// that returns a boxed pass, built once per compilation session.
+macro_rules! register_late_passes {
+    ($lint_store:expr, [$($pass:expr),* $(,)?]) => {
+        $( $lint_store.register_late_lint_pass(Box::new(|_| Box::new($pass))); )*
+    };
+}
+
 #[expect(
     clippy::no_mangle_with_rust_abi,
     reason = "dylint requires extern fn signature"
@@ -65,64 +73,29 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store.register_pre_expansion_lint_pass(Box::new(|| {
         Box::new(lints::bon_builder_collector::BonBuilderCollector)
     }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::suggest_builder::SuggestBuilder::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::needless_builder::NeedlessBuilder::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::proper_error_type::ProperErrorType::default())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::global_side_effect::GlobalSideEffect::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::map_init_then_insert::MapInitThenInsert::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::debug_remnants::DebugRemnants::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::fallible_new::FallibleNew::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::unbounded_channel::UnboundedChannel::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::blocking_in_async::BlockingInAsync::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::panic_in_drop::PanicInDrop::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::unclear_exports::UnclearExports::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::result_result::ResultResult::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::unstructured_log_fields::UnstructuredLogFields::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::realtime_in_async_test::RealtimeInAsyncTest::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::redundant_enum_variant_wrapper::RedundantEnumVariantWrapper::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::module_dependencies::ModuleDependencies::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::acyclic_modules::AcyclicModules::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::topological_ordering::TopologicalOrdering::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::unsafe_send_thread_affine_drop::UnsafeSendThreadAffineDrop::new())
-    }));
-    lint_store.register_late_lint_pass(Box::new(|_| {
-        Box::new(lints::await_holding_unsendable::AwaitHoldingUnsendable::new())
-    }));
+    register_late_passes!(
+        lint_store,
+        [
+            lints::suggest_builder::SuggestBuilder::new(),
+            lints::needless_builder::NeedlessBuilder::new(),
+            lints::proper_error_type::ProperErrorType::default(),
+            lints::global_side_effect::GlobalSideEffect::new(),
+            lints::map_init_then_insert::MapInitThenInsert::new(),
+            lints::debug_remnants::DebugRemnants::new(),
+            lints::fallible_new::FallibleNew::new(),
+            lints::unbounded_channel::UnboundedChannel::new(),
+            lints::blocking_in_async::BlockingInAsync::new(),
+            lints::panic_in_drop::PanicInDrop::new(),
+            lints::unclear_exports::UnclearExports::new(),
+            lints::result_result::ResultResult::new(),
+            lints::unstructured_log_fields::UnstructuredLogFields::new(),
+            lints::realtime_in_async_test::RealtimeInAsyncTest::new(),
+            lints::redundant_enum_variant_wrapper::RedundantEnumVariantWrapper::new(),
+            lints::module_dependencies::ModuleDependencies::new(),
+            lints::acyclic_modules::AcyclicModules::new(),
+            lints::topological_ordering::TopologicalOrdering::new(),
+            lints::unsafe_send_thread_affine_drop::UnsafeSendThreadAffineDrop::new(),
+            lints::await_holding_unsendable::AwaitHoldingUnsendable::new(),
+        ]
+    );
 }

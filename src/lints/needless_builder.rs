@@ -3,6 +3,7 @@ use rustc_hir::attrs::lang_items::LangItem;
 use rustc_hir::{Item, ItemKind, VariantData};
 use rustc_lint::{LateContext, LateLintPass};
 
+use super::unnormalized;
 use crate::config::NeedlessBuilderConfig;
 
 rustc_lint::declare_lint! {
@@ -49,11 +50,7 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessBuilder {
         let field_count = fields
             .iter()
             .filter(|f| {
-                let ty = cx
-                    .tcx
-                    .type_of(f.def_id)
-                    .instantiate_identity()
-                    .skip_norm_wip();
+                let ty = unnormalized::type_of(cx.tcx, f.def_id);
                 !ty.ty_adt_def()
                     .is_some_and(|adt| cx.tcx.is_lang_item(adt.did(), LangItem::PhantomData))
             })

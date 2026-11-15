@@ -186,7 +186,7 @@ ui/topological_ordering/
 
 Registration in `src/lib.rs`:
 - Add `lints::topological_ordering::TOPOLOGICAL_ORDERING` to `register_lints`
-- Add `register_late_pass` for `TopologicalOrdering`
+- Add `TopologicalOrdering::new()` to the `register_late_passes!` list
 
 Registration in `src/lints/mod.rs`:
 - Add `pub mod topological_ordering;`

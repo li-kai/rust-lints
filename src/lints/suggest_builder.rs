@@ -6,7 +6,7 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::Symbol;
 
-use super::constructor;
+use super::{constructor, unnormalized};
 use crate::config::SuggestBuilderConfig;
 
 rustc_lint::declare_lint! {
@@ -70,11 +70,7 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
         let field_count = fields
             .iter()
             .filter(|f| {
-                let ty = cx
-                    .tcx
-                    .type_of(f.def_id)
-                    .instantiate_identity()
-                    .skip_norm_wip();
+                let ty = unnormalized::type_of(cx.tcx, f.def_id);
                 !ty.ty_adt_def()
                     .is_some_and(|adt| cx.tcx.is_lang_item(adt.did(), LangItem::PhantomData))
             })
@@ -96,11 +92,7 @@ impl<'tcx> LateLintPass<'tcx> for SuggestBuilder {
             return;
         }
         // Skip structs that implement `Default` (derived or manual).
-        let ty = cx
-            .tcx
-            .type_of(item.owner_id)
-            .instantiate_identity()
-            .skip_norm_wip();
+        let ty = unnormalized::type_of(cx.tcx, item.owner_id);
         if let Some(default_id) = cx.tcx.get_diagnostic_item(rustc_span::sym::Default)
             && implements_trait(cx, ty, default_id, &[])
         {

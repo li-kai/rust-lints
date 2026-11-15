@@ -21,6 +21,7 @@ mod suppression;
 pub mod topological_ordering;
 pub mod unbounded_channel;
 pub mod unclear_exports;
+mod unnormalized;
 pub mod unsafe_send_thread_affine_drop;
 pub mod unstructured_log_fields;
 

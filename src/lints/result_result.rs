@@ -6,7 +6,7 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
 
-use super::hir_refs;
+use super::{hir_refs, unnormalized};
 
 rustc_lint::declare_lint! {
     /// Flags `Result<Result<T, E1>, E2>` in function signatures and type aliases.
@@ -85,11 +85,7 @@ impl<'tcx> LateLintPass<'tcx> for ResultResult {
             return;
         };
 
-        let ty = cx
-            .tcx
-            .type_of(item.owner_id.def_id)
-            .instantiate_identity()
-            .skip_norm_wip();
+        let ty = unnormalized::type_of(cx.tcx, item.owner_id.def_id);
 
         if is_nested_result(cx, ty) {
             span_lint_and_help(cx, RESULT_RESULT, item.span, MSG, None, HELP);
